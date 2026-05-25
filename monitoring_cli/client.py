@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import time
 from pathlib import PurePosixPath
+from typing import Any
 
 import httpx
 
@@ -18,22 +19,43 @@ class MonitoringClient:
         token = get_access_token(self._profile)
         return {"Authorization": f"Bearer {token}"}
 
-    def _get(self, path: str, _timeout: float | None = 30.0, **params: object) -> object:
-        resp = httpx.get(f"{self._base}{path}", headers=self._headers(), params=params, timeout=_timeout)
+    def _get(self, path: str, _timeout: float | None = 30.0, **params: Any) -> Any:
+        resp = httpx.get(
+            f"{self._base}{path}",
+            headers=self._headers(),
+            params=params,
+            timeout=_timeout,
+        )
         _raise_for_status(resp, path)
         return resp.json()
 
-    def _post(self, path: str, json: object = None, params: dict | None = None, timeout: float | None = None) -> object:
-        resp = httpx.post(f"{self._base}{path}", headers=self._headers(), json=json, params=params, timeout=timeout)
+    def _post(
+        self,
+        path: str,
+        json: Any = None,
+        params: dict | None = None,
+        timeout: float | None = None,
+    ) -> Any:
+        resp = httpx.post(
+            f"{self._base}{path}",
+            headers=self._headers(),
+            json=json,
+            params=params,
+            timeout=timeout,
+        )
         _raise_for_status(resp, path)
         return resp.json()
 
     def _put(self, path: str, json: object = None, params: dict | None = None) -> None:
-        resp = httpx.put(f"{self._base}{path}", headers=self._headers(), json=json, params=params)
+        resp = httpx.put(
+            f"{self._base}{path}", headers=self._headers(), json=json, params=params
+        )
         _raise_for_status(resp, path)
 
     def _delete(self, path: str, params: dict | None = None) -> None:
-        resp = httpx.delete(f"{self._base}{path}", headers=self._headers(), params=params)
+        resp = httpx.delete(
+            f"{self._base}{path}", headers=self._headers(), params=params
+        )
         _raise_for_status(resp, path)
 
     # --- auth ---
@@ -47,10 +69,18 @@ class MonitoringClient:
         return self._get("/api/folder/entity/{entity_id: int}", entity_id=entity_id)
 
     def create_folder(self, entity_id: int, path: str) -> list[dict]:
-        return self._post("/api/folder/entity/{entity_id: int}", json=path, params={"entity_id": entity_id})
+        return self._post(
+            "/api/folder/entity/{entity_id: int}",
+            json=path,
+            params={"entity_id": entity_id},
+        )
 
     def rename_folder(self, folder_id: int, new_path: str) -> None:
-        self._put("/api/folder/{folder_id: int}", json=new_path, params={"folder_id": folder_id})
+        self._put(
+            "/api/folder/{folder_id: int}",
+            json=new_path,
+            params={"folder_id": folder_id},
+        )
 
     def delete_folder(self, folder_id: int) -> None:
         self._delete("/api/folder/{folder_id: int}", params={"folder_id": folder_id})
@@ -58,7 +88,7 @@ class MonitoringClient:
     # --- queries ---
 
     def get_queries(self, entity_id: int | None = None) -> list[dict]:
-        params: dict[str, object] = {}
+        params: dict[str, Any] = {}
         if entity_id is not None:
             params["entity_id"] = entity_id
         return self._get("/api/profile/tsql/query", **params)
@@ -78,7 +108,7 @@ class MonitoringClient:
                 "is_unlisted": False,
                 "is_template": False,
             },
-            params={"entity_id": entity_id}
+            params={"entity_id": entity_id},
         )
 
     def update_query_text(self, query_id: int, query_text: str) -> None:
@@ -98,7 +128,6 @@ class MonitoringClient:
             current["unique_key"] = unique_key
         self._put(f"/api/profile/tsql/query/{query_id}", json=current)
 
-
     def reset_materialization(self, query_id: int) -> None:
         self._put(f"/api/profile/tsql/query/{query_id}", params={"reset_table": "true"})
 
@@ -116,7 +145,7 @@ class MonitoringClient:
                 "query_id": query_id,
                 "query_entity_id": entity_id,
                 "network": network,
-            }
+            },
         )
 
     def explain_query(
@@ -133,7 +162,7 @@ class MonitoringClient:
                 "query_id": query_id,
                 "query_entity_id": entity_id,
                 "network": network,
-            }
+            },
         )
 
     def execute_query(
@@ -207,7 +236,7 @@ class MonitoringClient:
         time_end: float | None = None,
         limit: int = 25,
     ) -> list[dict]:
-        params: dict[str, object] = {"limit": limit}
+        params: dict[str, Any] = {"limit": limit}
         if query_ids:
             params["query_ids"] = query_ids
         if status:
@@ -226,7 +255,7 @@ class MonitoringClient:
         after_id: int | None = None,
         limit: int = 25,
     ) -> list[dict]:
-        params: dict[str, object] = {"limit": limit}
+        params: dict[str, Any] = {"limit": limit}
         if query_ids:
             params["query_ids"] = query_ids
         if time_start is not None:

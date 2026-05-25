@@ -69,8 +69,18 @@ def test_format_query_text_prints_sql():
 
 def test_format_logs_shows_status_and_query():
     logs = [
-        {"status": "SUCCESS", "query": {"query_name": "MyQuery"}, "start_ts": "2026-05-07T10:00:00Z", "message": None},
-        {"status": "FAIL", "query": {"query_name": "OtherQuery"}, "start_ts": "2026-05-07T09:00:00Z", "message": "column not found"},
+        {
+            "status": "SUCCESS",
+            "query": {"query_name": "MyQuery"},
+            "start_ts": "2026-05-07T10:00:00Z",
+            "message": None,
+        },
+        {
+            "status": "FAIL",
+            "query": {"query_name": "OtherQuery"},
+            "start_ts": "2026-05-07T09:00:00Z",
+            "message": "column not found",
+        },
     ]
     out = _capture(format_logs, logs)
     assert "SUCCESS" in out
@@ -80,7 +90,14 @@ def test_format_logs_shows_status_and_query():
 
 
 def test_format_logs_shows_next_page_hint():
-    logs = [{"status": "SUCCESS", "query": {"query_name": "Q"}, "start_ts": "2026-05-07T10:00:00Z", "message": None}]
+    logs = [
+        {
+            "status": "SUCCESS",
+            "query": {"query_name": "Q"},
+            "start_ts": "2026-05-07T10:00:00Z",
+            "message": None,
+        }
+    ]
     out = _capture(format_logs, logs)
     assert "--before" in out
     assert "2026-05-07T10:00:00Z" in out
@@ -93,7 +110,12 @@ def test_format_logs_empty():
 
 def test_format_fired_alerts_shows_entries():
     alerts = [
-        {"alert_id": 42, "query": {"query_name": "Alert1"}, "_ts": "2026-05-07T10:00:00Z", "query_message": "suspicious tx detected"},
+        {
+            "alert_id": 42,
+            "query": {"query_name": "Alert1"},
+            "_ts": "2026-05-07T10:00:00Z",
+            "query_message": "suspicious tx detected",
+        },
     ]
     out = _capture(format_fired_alerts, alerts)
     assert "42" in out
@@ -102,7 +124,14 @@ def test_format_fired_alerts_shows_entries():
 
 
 def test_format_fired_alerts_shows_next_page_hint():
-    alerts = [{"alert_id": 42, "query": {"query_name": "Q"}, "_ts": "2026-05-07T10:00:00Z", "query_message": "msg"}]
+    alerts = [
+        {
+            "alert_id": 42,
+            "query": {"query_name": "Q"},
+            "_ts": "2026-05-07T10:00:00Z",
+            "query_message": "msg",
+        }
+    ]
     out = _capture(format_fired_alerts, alerts)
     assert "--after-id 42" in out
 
@@ -113,7 +142,10 @@ def test_format_fired_alerts_empty():
 
 
 def test_format_query_results_shows_rows():
-    results = [{"address": "0x123", "balance": "1000"}, {"address": "0x456", "balance": "2000"}]
+    results = [
+        {"address": "0x123", "balance": "1000"},
+        {"address": "0x456", "balance": "2000"},
+    ]
     out = _capture(format_query_results, results)
     assert "0x123" in out
     assert "1000" in out

@@ -178,11 +178,22 @@ def test_execute_query_returns_rows():
     )
     respx.get(f"{BASE}/api/tsql/query/execute_async/{task_id}").mock(
         return_value=httpx.Response(
-            200, json={"status": "SUCCESS", "result": [{"address": "0x123", "balance": "1000"}], "error": None}
+            200,
+            json={
+                "status": "SUCCESS",
+                "result": [{"address": "0x123", "balance": "1000"}],
+                "error": None,
+            },
         )
     )
     client = MonitoringClient(PROFILE)
-    results = client.execute_query("select 1", query_id=99, entity_id=45, network="ethereum", default_duration="24h")
+    results = client.execute_query(
+        "select 1",
+        query_id=99,
+        entity_id=45,
+        network="ethereum",
+        default_duration="24h",
+    )
     assert len(results) == 1
     assert results[0]["address"] == "0x123"
 
@@ -195,10 +206,19 @@ def test_execute_query_sends_correct_body():
         return_value=httpx.Response(200, json=task_id)
     )
     respx.get(f"{BASE}/api/tsql/query/execute_async/{task_id}").mock(
-        return_value=httpx.Response(200, json={"status": "SUCCESS", "result": [], "error": None})
+        return_value=httpx.Response(
+            200, json={"status": "SUCCESS", "result": [], "error": None}
+        )
     )
     client = MonitoringClient(PROFILE)
-    client.execute_query("select 1", query_id=99, entity_id=45, network="ethereum", default_duration="7d", limit=10)
+    client.execute_query(
+        "select 1",
+        query_id=99,
+        entity_id=45,
+        network="ethereum",
+        default_duration="7d",
+        limit=10,
+    )
     body = json.loads(route.calls[0].request.content)
     assert body["query"] == "select 1"
     assert body["query_id"] == 99
@@ -215,7 +235,9 @@ def test_execute_query_raises_on_failure():
         return_value=httpx.Response(200, json=task_id)
     )
     respx.get(f"{BASE}/api/tsql/query/execute_async/{task_id}").mock(
-        return_value=httpx.Response(200, json={"status": "FAILURE", "result": None, "error": "column not found"})
+        return_value=httpx.Response(
+            200, json={"status": "FAILURE", "result": None, "error": "column not found"}
+        )
     )
     client = MonitoringClient(PROFILE)
     with pytest.raises(RuntimeError, match="column not found"):
@@ -228,7 +250,15 @@ def test_get_logs():
     respx.get(f"{BASE}/api/profile/tsql/logs").mock(
         return_value=httpx.Response(
             200,
-            json=[{"run_id": "abc", "query_id": 99, "status": "SUCCESS", "start_ts": "2026-05-07T10:00:00Z", "message": None}],
+            json=[
+                {
+                    "run_id": "abc",
+                    "query_id": 99,
+                    "status": "SUCCESS",
+                    "start_ts": "2026-05-07T10:00:00Z",
+                    "message": None,
+                }
+            ],
         )
     )
     client = MonitoringClient(PROFILE)
@@ -243,7 +273,14 @@ def test_get_fired_alerts():
     respx.get(f"{BASE}/api/profile/tsql/alerts").mock(
         return_value=httpx.Response(
             200,
-            json=[{"alert_id": 1, "query_id": 99, "_ts": "2026-05-07T10:00:00Z", "query_message": "suspicious tx"}],
+            json=[
+                {
+                    "alert_id": 1,
+                    "query_id": 99,
+                    "_ts": "2026-05-07T10:00:00Z",
+                    "query_message": "suspicious tx",
+                }
+            ],
         )
     )
     client = MonitoringClient(PROFILE)
@@ -257,7 +294,12 @@ def test_get_run_config():
     mock_token(respx)
     respx.get(f"{BASE}/api/profile/tsql/query/99/ethereum/config").mock(
         return_value=httpx.Response(
-            200, json={"materialize": "INCREMENTAL", "frequency": 3600, "incrementalization": "IGNORE"}
+            200,
+            json={
+                "materialize": "INCREMENTAL",
+                "frequency": 3600,
+                "incrementalization": "IGNORE",
+            },
         )
     )
     client = MonitoringClient(PROFILE)
@@ -299,7 +341,9 @@ def test_set_notify_config():
         return_value=httpx.Response(200)
     )
     client = MonitoringClient(PROFILE)
-    client.set_notify_config(99, "ethereum", {"notify": True, "alert_email": False, "webhook_id": None})
+    client.set_notify_config(
+        99, "ethereum", {"notify": True, "alert_email": False, "webhook_id": None}
+    )
     assert route.called
     body = json.loads(route.calls[0].request.content)
     assert body["notify"] is True
@@ -311,7 +355,13 @@ def test_update_query_alert_settings():
     respx.get(f"{BASE}/api/profile/tsql/query/99").mock(
         return_value=httpx.Response(
             200,
-            json={"query_id": 99, "query_name": "MyQuery", "query_text": "select 1", "alert_template": "", "unique_key": None},
+            json={
+                "query_id": 99,
+                "query_name": "MyQuery",
+                "query_text": "select 1",
+                "alert_template": "",
+                "unique_key": None,
+            },
         )
     )
     route = respx.put(f"{BASE}/api/profile/tsql/query/99").mock(

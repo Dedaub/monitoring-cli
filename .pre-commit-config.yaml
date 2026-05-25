@@ -1,0 +1,19 @@
+repos:
+  - repo: local
+    hooks:
+      - id: ruff-check
+        name: ruff check
+        language: system
+        entry: uv run ruff check --fix
+        types: [python]
+      - id: ruff-format
+        name: ruff format
+        language: system
+        entry: uv run ruff format
+        types: [python]
+      - id: ty
+        name: ty
+        language: system
+        entry: uv run ty check monitoring_cli
+        pass_filenames: false
+        files: '^monitoring_cli/.*\.py$'

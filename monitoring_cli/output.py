@@ -110,15 +110,23 @@ def format_schema(
     for net, tables in sorted(schema.items()):
         if network and net != network:
             continue
-        matching = [t for t in tables if not table_filter or table_filter.lower() in t["name"].lower()]
+        matching = [
+            t
+            for t in tables
+            if not table_filter or table_filter.lower() in t["name"].lower()
+        ]
         if not matching:
             continue
         c.print(f"\n[bold]{net}[/bold]")
         for t in sorted(matching, key=lambda x: x["name"]):
-            cols = ", ".join(f"{col['column_name']} {col['column_type']}" for col in t["columns"])
+            cols = ", ".join(
+                f"{col['column_name']} {col['column_type']}" for col in t["columns"]
+            )
             c.print(f"  [cyan]{t['name']}[/cyan]  ({cols})")
             for idx in t.get("indices") or []:
-                c.print(f"    [dim]index {idx['index_name']}: {idx['index_definition']}[/dim]")
+                c.print(
+                    f"    [dim]index {idx['index_name']}: {idx['index_definition']}[/dim]"
+                )
 
 
 def format_macros(

@@ -46,7 +46,9 @@ def test_query_metadata_by_id():
     query_id = os.environ.get("DEDAUB_TEST_QUERY_ID")
     if not query_id:
         pytest.skip("Set DEDAUB_TEST_QUERY_ID to run this test")
-    result = runner.invoke(app, ["query-metadata", "--id", query_id, "--profile", "prod"])
+    result = runner.invoke(
+        app, ["query-metadata", "--id", query_id, "--profile", "prod"]
+    )
     assert result.exit_code == 0, result.output
     assert "query_id" in result.output
 
@@ -62,13 +64,17 @@ def test_get_logs_filtered_by_id():
     query_id = os.environ.get("DEDAUB_TEST_QUERY_ID")
     if not query_id:
         pytest.skip("Set DEDAUB_TEST_QUERY_ID to run this test")
-    result = runner.invoke(app, ["get-logs", "--profile", "prod", "--id", query_id, "--limit", "5"])
+    result = runner.invoke(
+        app, ["get-logs", "--profile", "prod", "--id", query_id, "--limit", "5"]
+    )
     assert result.exit_code == 0, result.output
 
 
 @requires_integration
 def test_get_logs_filtered_by_status():
-    result = runner.invoke(app, ["get-logs", "--profile", "prod", "--status", "FAIL", "--limit", "5"])
+    result = runner.invoke(
+        app, ["get-logs", "--profile", "prod", "--status", "FAIL", "--limit", "5"]
+    )
     assert result.exit_code == 0, result.output
 
 
@@ -98,5 +104,18 @@ def test_run_query_by_id():
     query_id = os.environ.get("DEDAUB_TEST_QUERY_ID")
     if not query_id:
         pytest.skip("Set DEDAUB_TEST_QUERY_ID to run this test")
-    result = runner.invoke(app, ["run-query", "--id", query_id, "--profile", "prod", "--duration", "5m", "--limit", "5"])
+    result = runner.invoke(
+        app,
+        [
+            "run-query",
+            "--id",
+            query_id,
+            "--profile",
+            "prod",
+            "--duration",
+            "5m",
+            "--limit",
+            "5",
+        ],
+    )
     assert result.exit_code == 0, result.output
