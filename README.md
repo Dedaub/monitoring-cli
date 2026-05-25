@@ -4,12 +4,12 @@ Command-line interface for the [Dedaub](https://app.dedaub.com) monitoring platf
 
 ## Installation
 
-Requires Python 3.13. Install from source:
+Requires Python 3.13. Install from source (recommended via [uv](https://docs.astral.sh/uv/)):
 
 ```bash
 git clone https://github.com/Dedaub/monitoring-cli.git
 cd monitoring-cli
-pipx install . # or uv tool install . if using uv.
+uv tool install . # or: pipx install .
 ```
 
 ## Authentication
