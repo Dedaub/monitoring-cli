@@ -1,66 +1,19 @@
-# Fluid (Instadapp) — Lending protocol & Liquidity Layer — Topics, Selectors, Addresses
+# Fluid (Instadapp) — Lending (fTokens) — Topics, Selectors, Addresses
 
-**Status:** verified against the canonical `Instadapp/fluid-contracts-public` (branch `main`) source and live RPC on every listed chain on 2026-05-29. All topic0/selector hashes computed locally with keccak; all addresses confirmed via `eth_getCode`; proxy slots & per-selector dispatch confirmed via `eth_getStorageAt` / `eth_call`.
-**Scope:** Fluid **Lending** ("Lend & Earn": fTokens, the ERC-4626 deposit side) and the **Liquidity Layer** it sits on, on **Ethereum (1), Base (8453), Arbitrum One (42161), Polygon PoS (137), BNB Smart Chain (56)**. Most material is chain-agnostic; addresses are network-specific.
+**Status:** verified against the canonical `Instadapp/fluid-contracts-public` (branch `main`) source and live RPC on every listed chain on 2026-05-29. All topic0/selector hashes computed locally with keccak; all addresses confirmed via `eth_getCode`.
+**Scope:** Fluid **Lending** ("Lend & Earn": fTokens, the ERC-4626 deposit side) on **Ethereum (1), Base (8453), Arbitrum One (42161), Polygon PoS (137), BNB Smart Chain (56)**. fTokens are pure suppliers to the shared Liquidity Layer — see [`liquidity-layer.md`](liquidity-layer.md) for the core, `LogOperate`, the InfiniteProxy and per-chain modules. Other modules: [`vaults.md`](vaults.md), [`dex.md`](dex.md).
+**Key fact:** an fToken is an ERC-20 + **ERC-4626** wrapper over a Liquidity-Layer supply position — it never custodies funds (a deposit flows straight through to Liquidity via `liquidityCallback`). It emits standard ERC-4626 `Deposit`/`Withdraw`, each mirrored by a Liquidity `LogOperate` in the same tx (`user = fToken address`). Yield (incl. rewards) accrues into the fToken→underlying **exchange price**, not via per-user claim events.
 
-> **Fluid is NOT deployed on Optimism (10) or Avalanche (43114).** The canonical repo's `deployments/` directory contains only `mainnet, arbitrum, base, polygon, bnb, plasma`. The cross-chain Liquidity proxy `0x52Aa…E497` has **no bytecode** on Optimism or Avalanche (verified). Any "Fluid on Optimism/Avalanche/Fantom" claim refers to legacy Instadapp DSA/Avocado infrastructure, not the Fluid Liquidity Layer / Lending protocol.
->
-> **Note on BNB:** several analytics dashboards (Messari/Blockworks, as of ~Apr 2026) list Fluid only on Ethereum/Arbitrum/Base/Polygon and omit BNB. BNB is a newer deployment and IS live — verified here on-chain: Liquidity proxy + LendingFactory + 4 fTokens (fU, fUSDC, fUSDT, fWBNB) all have bytecode, with active `LogOperate` traffic. `plasma` also exists in the repo (out of scope for this doc). Treat the on-chain evidence as authoritative over dashboard listings.
+> **Not on Optimism (10) or Avalanche (43114).** The repo's `deployments/` has only `mainnet, arbitrum, base, polygon, bnb, plasma`; no bytecode at the core addresses on OP/Avax (verified).
+> **BNB IS live** (some dashboards omit it): LendingFactory + 4 fTokens (fU, fUSDC, fUSDT, fWBNB) all have bytecode with active traffic — verified on-chain. Treat on-chain evidence as authoritative over dashboard listings.
 
-## 0. Architecture in one screen
-
-Fluid is several protocols on one shared **Liquidity Layer** that custodies *all* funds. Allow-listed protocols ("users", tracked per `_userClass`) interact with it through a single `operate(...)` entrypoint; every supply/withdraw/borrow/payback emits one `LogOperate`.
-
-- **Liquidity Layer** — central vault. `FluidLiquidityProxy` (an InfiniteProxy, §6) at `0x52Aa…E497` on **every** Fluid chain. Behind it sit implementation *modules* (UserModule = `operate`, AdminModule = governance/config). It never faces end users directly.
-- **Lending protocol** (the subject of this doc) = **`FluidLendingFactory`** + the **fTokens** it deploys. fTokens are ERC-20 + **ERC-4626** wrappers that are pure *suppliers* to the Liquidity Layer — they never custody funds (a deposit flows straight through to Liquidity via `liquidityCallback`). Yield (incl. rewards) accrues into the fToken→underlying **exchange price**, not via per-user reward claims.
-- **Rewards** = one `FluidLendingRewardsRateModel` per reward program (can drive up to 3 fTokens). It only computes a rate; the fToken folds it into its exchange price.
-- **Resolvers** = read-only helpers (`FluidLendingResolver`, `FluidLiquidityResolver`).
-- **Vault** (borrow/collateral) and **DEX** (smart-collateral/debt AMM, incl. `SmartLending`/`fSL*`) are **separate products** — out of scope here, addresses labelled clearly where they share a registry.
-
-**Versioning:** there is *no* on-chain v1/v2 of Lending. `FluidLendingFactory` is a plain non-upgradeable `Owned` contract; it extends by registering new `fTokenType` creation codes (SSTORE2) rather than redeploying. fTokens are non-upgradeable **CREATE3** deployments (salt `keccak256(abi.encode(asset, fTokenType))`) — a "new version" of an fToken is simply a new address. The Liquidity Layer is one continuously-governed InfiniteProxy that evolves by swapping per-selector implementation modules (`LogSetImplementation`/`LogRemoveImplementation`), never by redeploying the proxy. The repo's `deployments/<chain>/v1_0_0/` and mainnet `v1_1_0/` are deploy-batch snapshots, not protocol versions (`v1_1_0` mainnet = oracle deployments only).
+**Versioning:** there is *no* on-chain v1/v2 of Lending. `FluidLendingFactory` is a plain non-upgradeable `Owned` contract; it extends by registering new `fTokenType` creation codes (SSTORE2) rather than redeploying. fTokens are non-upgradeable **CREATE3** deployments (salt `keccak256(abi.encode(asset, fTokenType))`) — a "new version" of an fToken is simply a new address.
 
 ---
 
 ## 1. Topics (chain-agnostic — `topic0 = keccak256(event signature)`)
 
-### 1.1 Liquidity Layer — UserModule (the workhorse; one per supply/withdraw/borrow/payback)
-
-| topic0 | Event |
-|--------|-------|
-| `0x4d93b232a24e82b284ced7461bf4deacffe66759d5c24513e6f29e571ad78d15` | `LogOperate(address indexed user, address indexed token, int256 supplyAmount, int256 borrowAmount, address withdrawTo, address borrowTo, uint256 totalAmounts, uint256 exchangePricesAndConfig)` |
-
-`supplyAmount > 0` = deposit, `< 0` = withdrawal; `borrowAmount > 0` = borrow, `< 0` = payback. `user` is the *protocol* that triggered it (an fToken for Lending, or the Vault). `totalAmounts` / `exchangePricesAndConfig` are bit-packed storage slots (layout documented inline in source / decoded by `FluidLiquidityResolver`).
-
-### 1.2 Liquidity Layer — AdminModule (governance / config; tuple args expanded for keccak)
-
-| topic0 | Event |
-|--------|-------|
-| `0xb694cde8b4bf47e7f5845bb4374f98c5b29bbbaa5208ea679121cecb5d8fd3e0` | `LogUpdateAuths((address,bool)[] authsStatus)` |
-| `0x530db3bf9b4b0c4f296fe1d9e21620b91db0a8bdcaca4cf1e6dc9844739405c1` | `LogUpdateGuardians((address,bool)[] guardiansStatus)` |
-| `0xde3dd47a9a762713b4a9813a037ab6f57e36569d8b0ec4ddb285d8a61878b5b4` | `LogUpdateRevenueCollector(address indexed revenueCollector)` |
-| `0xb33384c8a450936b9fba178db857f03fb9865a40d166aa2f9d439a9fdddfbe22` | `LogChangeStatus(uint256 indexed newStatus)` (pause / unpause) |
-| `0x9ccbc3483d75ae36da94213ac30ac0a047e1226ef3435d004cd501608e5b388b` | `LogUpdateUserClasses((address,uint256)[] userClasses)` |
-| `0xa9d5be7e168dc43b637b924e6cc22c262478dffd9d475fa170b6d4e4ba576460` | `LogUpdateTokenConfigs((address,uint256,uint256,uint256)[] tokenConfigs)` `{token,fee,threshold,maxUtilization}` |
-| `0x614e3525ec8c152da9319cd9038950346a4a042d3c6810a7f3ffddc34347bdb0` | `LogUpdateUserSupplyConfigs((address,address,uint8,uint256,uint256,uint256)[])` `{user,token,mode,expandPercent,expandDuration,baseWithdrawalLimit}` |
-| `0x4a3d512075def8d38b63e79dacfdab217654f641be2b2f7d638b67b2515df7c0` | `LogUpdateUserBorrowConfigs((address,address,uint8,uint256,uint256,uint256,uint256)[])` `{user,token,mode,expandPercent,expandDuration,baseDebtCeiling,maxDebtCeiling}` |
-| `0x6686e5bb0cc56cbc9aa2b434eb18009891bf411d6d3f961fdfe70be336ca4528` | `LogPauseUser(address user, address[] supplyTokens, address[] borrowTokens)` |
-| `0xacd30ef49b8fd1b51bbefff95071c5b0257180a7778c9c0fa4eb77a8842e290d` | `LogUnpauseUser(address user, address[] supplyTokens, address[] borrowTokens)` |
-| `0x1f953465aa7f3f2478d38b6c2a9cfcfbda846398254e278f614d586d527d902c` | `LogUpdateRateDataV1s((address,uint256,uint256,uint256,uint256)[])` `{token,kink,rateAtUtilizationZero,...Kink,...Max}` |
-| `0xf96f9120f802331b6220bac68c2ab90cce6c8a8f9fed548d72dd092ad1899bf9` | `LogUpdateRateDataV2s((address,uint256,uint256,uint256,uint256,uint256,uint256)[])` `{token,kink1,kink2,...Zero,...Kink1,...Kink2,...Max}` |
-| `0x7ded56fbc1e1a41c85fd5fb3d0ce91eafc72414b7f06ed356c1d921823d4c37c` | `LogCollectRevenue(address indexed token, uint256 indexed amount)` |
-| `0x96c40bed7fc8d0ac41633a3bd47f254f0b0076e5df70975c51d23514bc49d3b8` | `LogUpdateExchangePrices(address indexed token, uint256 indexed supplyExchangePrice, uint256 indexed borrowExchangePrice, uint256 borrowRate, uint256 utilization)` |
-| `0xbd618a42c279f25a1d0dd6144f1a1b2ded22549073604bb0774cff6a99ee8428` | `LogUpdateUserWithdrawalLimit(address user, address token, uint256 newLimit)` |
-
-### 1.3 InfiniteProxy (emitted by FluidLiquidityProxy and any other Fluid InfiniteProxy)
-
-| topic0 | Event |
-|--------|-------|
-| `0xb2396a4169c0fac3eb0713eb7d54220cbe5e21e585a59578ec4de929657c0733` | `LogSetAdmin(address indexed oldAdmin, address indexed newAdmin)` |
-| `0x761380f4203cd2fcc7ee1ae32561463bc08bbf6761cb9d5caa925f99a6d54502` | `LogSetDummyImplementation(address indexed oldDummyImplementation, address indexed newDummyImplementation)` |
-| `0xd613a4a18e567ee1f2db4d5b528a5fee09f7dff92d6fb708afd6c095070a9c6d` | `LogSetImplementation(address indexed implementation, bytes4[] sigs)` |
-| `0xda53aaefabec4c3f8ba693a2e3c67fa0152fbd71c369d51f669e66b28a4a0864` | `LogRemoveImplementation(address indexed implementation)` |
-
-### 1.4 FluidLendingFactory
+### 1.1 FluidLendingFactory
 
 | topic0 | Event |
 |--------|-------|
@@ -71,7 +24,7 @@ Fluid is several protocols on one shared **Liquidity Layer** that custodies *all
 
 Subscribe to `LogTokenCreated` from the factory to discover every fToken on a chain. `count` = 1-based index in `allTokens()`. `fTokenType` is `"fToken"` (standard) or `"NativeUnderlying"` (wrapped-native).
 
-### 1.5 fToken (per ERC-4626 lending token)
+### 1.2 fToken (per ERC-4626 lending token)
 
 | topic0 | Event |
 |--------|-------|
@@ -85,9 +38,9 @@ Subscribe to `LogTokenCreated` from the factory to discover every fToken on a ch
 | `0xdff2a3947bcf9fc0807b142e7c8497066db9183428b7bdbfb1fcd0f55c27a3df` | `LogRescueFunds(address indexed token)` |
 | `0xdb94ee7fd8b5bbf8f6d59e76731ff4b4f5a02ab3af1d3e0c774862cf96ff613b` | `LogUpdateRebalancer(address indexed rebalancer)` |
 
-Normal user activity emits only `Deposit` / `Withdraw` / `Transfer` / `Approval` (verified: a fUSDC window had exactly those four and none of the `Log*` events). `LogUpdateRates`/`LogRebalance`/`LogUpdateRewards`/`LogRescueFunds`/`LogUpdateRebalancer` are admin/maintenance events. There is **no** `LogClaimReward` — rewards are not per-user-claimed; they accrue into the exchange price.
+The ERC-4626 `Deposit`/`Withdraw` topic0s are the **standard** ones, shared by every ERC-4626 vault (Morpho MetaMorpho, Yearn v3, etc.) — disambiguate a Fluid fToken by its address (LendingFactory-deployed) or `symbol()` ("f"-prefixed). Normal user activity emits only `Deposit`/`Withdraw`/`Transfer`/`Approval` (verified: a fUSDC window had exactly those four). `LogUpdateRates`/`LogRebalance`/`LogUpdateRewards`/`LogRescueFunds`/`LogUpdateRebalancer` are admin/maintenance events. There is **no** `LogClaimReward` — rewards are not per-user-claimed; they accrue into the exchange price.
 
-### 1.6 FluidLendingRewardsRateModel
+### 1.3 FluidLendingRewardsRateModel
 
 | topic0 | Event |
 |--------|-------|
@@ -101,24 +54,9 @@ Normal user activity emits only `Deposit` / `Withdraw` / `Transfer` / `Approval`
 
 ## 2. Function signatures (chain-agnostic)
 
-Selectors = `keccak256(canonical signature)[0:4]`, verified against deployed dispatcher bytecode (fToken, factory) or live per-selector dispatch (Liquidity).
+Selectors = `keccak256(canonical signature)[0:4]`, verified against deployed dispatcher bytecode (fToken, factory).
 
-### 2.1 Liquidity Layer (UserModule + InfiniteProxy admin/getters)
-
-| Selector | Signature | Notes |
-|----------|-----------|-------|
-| `0xad967e15` | `operate(address token, int256 supplyAmount, int256 borrowAmount, address withdrawTo, address borrowTo, bytes callbackData)` | Sole user entrypoint. Returns `(uint256 memVar1, uint256 memVar2)`. Emits `LogOperate`. Live dispatch → UserModule (read it, don't assume). |
-| `0x6e9960c3` | `getAdmin()` | proxy admin (governance). |
-| `0x908bfe5e` | `getDummyImplementation()` | the EIP-1967-impl-slot value (ABI stub). |
-| `0xa5fcc8bc` | `getSigsImplementation(bytes4 sig_)` | **the authoritative selector→implementation lookup.** |
-| `0x89396dc8` | `getImplementationSigs(address impl_)` | `bytes4[]` registered for an impl. |
-| `0xb5c736e4` | `readFromStorage(bytes32 slot_)` | raw `sload`. |
-| `0x704b6c02` | `setAdmin(address)` | onlyAdmin. Emits `LogSetAdmin`. |
-| `0xc39aa07d` | `setDummyImplementation(address)` | onlyAdmin. |
-| `0xf0c01b42` | `addImplementation(address, bytes4[])` | onlyAdmin. Emits `LogSetImplementation`. |
-| `0x22175a32` | `removeImplementation(address)` | onlyAdmin. Emits `LogRemoveImplementation`. |
-
-### 2.2 FluidLendingFactory
+### 2.1 FluidLendingFactory
 
 | Selector | Signature | Notes |
 |----------|-----------|-------|
@@ -134,7 +72,7 @@ Selectors = `keccak256(canonical signature)[0:4]`, verified against deployed dis
 | `0x50c358a4` | `isDeployer(address)` | |
 | `0x2861c7d1` | `LIQUIDITY()` | the immutable Liquidity address bound at deploy. |
 
-### 2.3 fToken (ERC-4626 + Fluid extensions; standard `"fToken"` type)
+### 2.2 fToken (ERC-4626 + Fluid extensions; standard `"fToken"` type)
 
 | Selector | Signature | Notes |
 |----------|-----------|-------|
@@ -163,7 +101,7 @@ Selectors = `keccak256(canonical signature)[0:4]`, verified against deployed dis
 
 Plus standard ERC-4626 views `convertToShares 0xc6e6f592`, `convertToAssets 0x07a2d13a`, `previewDeposit 0xef8b30f7`, `previewMint 0xb3d7f6b9`, `previewWithdraw 0x0a28a477`, `previewRedeem 0x4cdad506`, `maxDeposit 0x402d267d`, `maxMint 0xc63d75b6`, `maxWithdraw 0xce96cb77`, `maxRedeem 0xd905777e`, and ERC-20 `transfer/approve/...`.
 
-### 2.4 fTokenNativeUnderlying (wrapped-native fTokens: fWETH, fWPOL, fWBNB)
+### 2.3 fTokenNativeUnderlying (wrapped-native fTokens: fWETH, fWPOL, fWBNB)
 
 Adds native-coin entrypoints. `0xEeee…EEeE` is the Liquidity NATIVE token sentinel.
 
@@ -180,9 +118,9 @@ Adds native-coin entrypoints. `0xEeee…EEeE` is the Liquidity NATIVE token sent
 | `0xe3597548` | `redeemWithSignatureNative(uint256 shares, address receiver, address owner, uint256 minAmountOut, uint256 deadline, bytes signature)` | |
 | `0xdf2ebdbb` | `NATIVE_TOKEN_ADDRESS()` | returns `0xEeee…EEeE`. |
 
-> `mintNative(uint256,address)` (2-arg, selector `0x00acb736`) is declared in current `main` source but is **not present** in the deployed mainnet fWETH bytecode (only the 3-arg `mintNative` `0x80541187` is) — a version drift between the live deployment and HEAD. Treat the 3-arg form as canonical for the deployed contracts.
+> `mintNative(uint256,address)` (2-arg, selector `0x00acb736`) is declared in current `main` source but is **not present** in the deployed mainnet fWETH bytecode (only the 3-arg `mintNative` `0x80541187` is) — version drift between the live deployment and HEAD. Treat the 3-arg form as canonical for the deployed contracts.
 
-### 2.5 FluidLendingRewardsRateModel
+### 2.4 FluidLendingRewardsRateModel
 
 | Selector | Signature | Notes |
 |----------|-----------|-------|
@@ -196,47 +134,26 @@ Adds native-coin entrypoints. `0xEeee…EEeE` is the Liquidity NATIVE token sent
 
 ---
 
-## 3. Addresses — shared across all Fluid chains (deterministic CREATE3)
+## 3. Addresses
 
-These core addresses are **identical on Ethereum, Base, Arbitrum, Polygon, BNB** (verified `eth_getCode` non-empty on each). Per-chain divergence (modules, dummy impl, admin, fTokens) is in §4–§5.
+### 3.1 Shared across all Fluid chains (deterministic CREATE3)
+
+Identical on **Ethereum, Base, Arbitrum, Polygon, BNB** (verified `eth_getCode` non-empty on each).
 
 | Role | Address | One-liner |
 |------|---------|-----------|
-| **Liquidity (FluidLiquidityProxy)** | `0x52Aa899454998Be5b000Ad077a46Bbe360F4e497` | Core Liquidity Layer (InfiniteProxy). All Lending/Vault/DEX liquidity routes through it. `code=4462 B` on every chain. |
 | **FluidLendingFactory** | `0x54B91A0D94cb471F37f949c60F7Fa7935b551D03` | Deploys fTokens (CREATE3). Non-upgradeable `Owned`. `code=8305 B`. |
 | **FluidLendingResolver** | `0x48D32f49aFeAEC7AE66ad7B9264f446fc11a1569` | Read helper for fTokens/lending. `code=10757 B`. |
-| **FluidLiquidityResolver** | `0xca13A15de31235A37134B4717021C35A3CF25C60` | Decodes packed Liquidity storage. `code=12803 B`. |
-| **RevenueResolver** | `0x0A84741D50B4190B424f57425b09FAe60C330F32` | Revenue/reserve read resolver. |
-| **ReserveContractProxy** | `0x264786EF916af64a1DB19F513F24a3681734ce92` | Reserve & governance auth / revenue collector. Minimal proxy (`code=190 B`). The fToken rebalancer. |
-| SmartLendingResolver | `0x3E69A3Af4305b65598b228d3da70786Bd9cfeB0e` | DEX-backed "smart lending" resolver. On ETH/Base/Arb/Polygon only — **BNB uses `0x1446dEc487B4411DE222547ADbC3b3e01933787f`** instead. |
-| VaultFactory *(Vault, not Lending)* | `0x324c5Dc1fC42c7a4D43d92df1eBA58a54d13Bf2d` | Deploys Fluid Vaults. |
-| DexFactory *(DEX, not Lending)* | `0x91716C4EDA1Fb55e84Bf8b4c7085f84285c19085` | Deploys Fluid DEX pools. |
+| ReserveContractProxy | `0x264786EF916af64a1DB19F513F24a3681734ce92` | The fToken rebalancer / revenue collector. Minimal proxy (`code=190 B`). |
+| SmartLendingResolver | `0x3E69A3Af4305b65598b228d3da70786Bd9cfeB0e` | DEX-backed "smart lending" resolver. ETH/Base/Arb/Polygon — **BNB uses `0x1446dEc487B4411DE222547ADbC3b3e01933787f`**. |
 
-Deployer/owner (all chains): `0x4F6F977aCDD1177DCD81aB83074855EcB9C2D49e`. Team/governance multisig (Liquidity constructor arg): `0xCA5E9219e1007931FD5d938C1815a90ef08f1584`.
+Deployer/owner (all chains): `0x4F6F977aCDD1177DCD81aB83074855EcB9C2D49e`. The shared Liquidity proxy and InfiniteProxy detail live in [`liquidity-layer.md`](liquidity-layer.md).
 
----
-
-## 4. Per-chain Liquidity-Layer modules, dummy impl & admin
-
-The proxy address is shared, but its **EIP-1967 dummy-impl slot, admin slot, and registered modules differ per chain** — read them live, don't assume. Values below verified via `eth_getStorageAt` / live `getSigsImplementation(operate)` on 2026-05-29.
-
-| Chain | Proxy admin (governance) `getAdmin()` | DummyImpl (impl slot) | Live `operate` impl (UserModule) |
-|-------|----------------------------------------|------------------------|----------------------------------|
-| Ethereum (1) | `0x2386dc45added673317ef068992f19421b481f4c` | `0xcc331daf69752bece3dc98dbc63eacd5092266a2` | `0x4bdc8816f2f56914b66ebf3786d78872d3a73ab7` |
-| Base (8453) | `0x4F6F977aCDD1177DCD81aB83074855EcB9C2D49e` | `0xa57D7CeF617271F4cEa4f665D33ebcFcBA4929f6` | `0x3c06514287e74ede035d293362a2369bDa60E642` |
-| Arbitrum (42161) | `0x4F6F977aCDD1177DCD81aB83074855EcB9C2D49e` | `0xa57D7CeF617271F4cEa4f665D33ebcFcBA4929f6` | `0x3c06514287e74ede035d293362a2369bDa60E642` |
-| Polygon (137) | `0x4F6F977aCDD1177DCD81aB83074855EcB9C2D49e` | `0xa57D7CeF617271F4cEa4f665D33ebcFcBA4929f6` | `0x3c06514287e74ede035d293362a2369bDa60E642` |
-| BNB (56) | `0x1c0fc15e0db6960a9a688dda8ee2cfdd54f45cc0` | `0x3560a1d1E9F30b61cd0E24349f7a23890f6261D9` | `0x3c06514287e74ede035d293362a2369bDa60E642` |
-
-`0xa57D7CeF…4929f6` is the originally-deployed `LiquidityDummyImpl`. **Mainnet has since upgraded** its dummy impl to `0xcc331daf…` (its admin is also the governance multisig, not the deployer) — a real signal that mainnet is the most-governed instance. AdminModule addresses from the deploy registry: ETH `0x53EFFA0e612d88f39Ab32eb5274F2fae478d261C`, Base/Arb `0x48eeDDF09565338B62126214c5a85E863C197e4D`, Polygon `0xb74EbF69fe16292df8943964507c59f99765AEd9`, BNB `0xE1CCc6E5FB4684Abb23b71ce6F44f76ffe3a33B0`. (Registry UserModule on mainnet `0x2e40…46aD` is stale vs the live `operate` impl `0x4bdc88…3ab7`.) Mainnet also has a `ZircuitTransferModule` `0x9191b9539DD588dB81076900deFDd79Cb1115f72`.
-
----
-
-## 5. fTokens & rewards-rate-models — per chain
+### 3.2 fTokens & rewards-rate-models — per chain
 
 All fToken addresses verified `eth_getCode` non-empty. Standard `"fToken"` runtime = **19617 B**; native-underlying = **21098 B** (a clean way to tell them apart on-chain).
 
-### 5.1 Ethereum (1)
+#### Ethereum (1)
 
 | fToken | Address | Underlying | Underlying addr | RewardsRateModel |
 |--------|---------|-----------|-----------------|------------------|
@@ -248,7 +165,7 @@ All fToken addresses verified `eth_getCode` non-empty. Standard `"fToken"` runti
 | fsUSDS | `0x2BBE31d63E6813E3AC858C04dae43FB2a72B0D11` | sUSDS | `0xa3931d71…Fec27fbD` | — |
 | fUSDtb | `0x15e8c742614b5D8Db4083A41Df1A14F5D2bFB400` | USDtb | `0xC139190F…8b18aC1C` | — |
 
-### 5.2 Base (8453)
+#### Base (8453)
 
 | fToken | Address | Underlying | RewardsRateModel |
 |--------|---------|-----------|------------------|
@@ -259,7 +176,7 @@ All fToken addresses verified `eth_getCode` non-empty. Standard `"fToken"` runti
 | fGHO | `0x8DdbfFA3CFda2355a23d6B11105AC624BDbE3631` | GHO `0x6Bb7a212…8da10Ee` | — |
 | fsUSDS | `0xf62e339f21d8018940f188F6987Bcdf02A849619` | sUSDS `0x5875eEE1…675467a` | — |
 
-### 5.3 Arbitrum One (42161)
+#### Arbitrum One (42161)
 
 | fToken | Address | Underlying | RewardsRateModel |
 |--------|---------|-----------|------------------|
@@ -272,7 +189,7 @@ All fToken addresses verified `eth_getCode` non-empty. Standard `"fToken"` runti
 | fGHO | `0x037dFf1C12805707d7c29F163E0F09fC9102657A` | GHO `0x7dfF7269…7c8B33` | — |
 | fsUSDS | `0x3459fcc94390C3372c0F7B4cD3F8795F0E5aFE96` | sUSDS `0xdDb46999…16d7610` | — |
 
-### 5.4 Polygon PoS (137)
+#### Polygon PoS (137)
 
 | fToken | Address | Underlying | RewardsRateModel |
 |--------|---------|-----------|------------------|
@@ -285,7 +202,7 @@ All fToken addresses verified `eth_getCode` non-empty. Standard `"fToken"` runti
 
 *(No per-fToken RewardsRateModel deployed on Polygon at time of writing.)*
 
-### 5.5 BNB Smart Chain (56)
+#### BNB Smart Chain (56)
 
 | fToken | Address | Underlying | RewardsRateModel |
 |--------|---------|-----------|------------------|
@@ -294,71 +211,34 @@ All fToken addresses verified `eth_getCode` non-empty. Standard `"fToken"` runti
 | fUSDT | `0xA5b8FCa32E5252B0B58EAbf1A8c79d958F8EE6A2` | USDT(BSC-USD) `0x55d39832…3197955` | `0xBE02b3DA446BF1B5CB271553F162A0f7C92E90bD` |
 | fWBNB *(native)* | `0x527C2a0B8A3eDD9696B4A9443ef66Ec30fD7B84a` | WBNB `0xbb4CdB9C…73bc095c` | — |
 
-BNB RewardsRateModel runtime is larger (`5547 B` vs `1820 B` on other chains) — a newer model build; same `getRate`/`getConfig` interface.
+BNB RewardsRateModel runtime is larger (`5547 B` vs `1820 B` elsewhere) — a newer model build; same `getRate`/`getConfig` interface.
 
 ---
 
-## 6. Proxies — the Fluid "InfiniteProxy" (read carefully)
+## 4. Proxies
 
-`FluidLiquidityProxy` (and Vault/DEX cores) use Fluid's **InfiniteProxy** (`contracts/infiniteProxy/proxy.sol`), a multi-implementation delegatecall router. **fTokens, the LendingFactory, resolvers and the RewardsRateModels are NOT proxies** — they are plain CREATE3/normal contracts (fToken "upgrade" = new address).
-
-**Slots (standard EIP-1967 — reused):**
-- Admin: `0xb53127684a568b3173ae13b9f8a6016e243e63b6e8ee1178d6a717850b5d6103` (`keccak256("eip1967.proxy.admin")-1`).
-- Dummy implementation: `0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc` (`keccak256("eip1967.proxy.implementation")-1`). **Holds only an ABI-stub "dummy" impl** so explorers can introspect — it is *not* what `delegatecall` actually targets.
-- Per-selector base: `_SIG_SLOT_BASE = 0x000000003ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc` (the impl slot with the top 4 bytes zeroed). The implementation for a selector lives at `_SIG_SLOT_BASE | bytes4(selector)` (selector occupies the top 4 bytes).
-
-**Dispatch:** `fallback()` reads `msg.sig`, ORs it into `_SIG_SLOT_BASE`, `sload`s the impl address from that slot, and `delegatecall`s it (reverts if zero). There is **no** central mapping struct — the selector→impl map *is* the storage layout. Two helper-slot families: `keccak256(abi.encode("eip1967.proxy.implementation", impl))` stores the `bytes4[]` registered for an impl; `_SIG_SLOT_BASE | sig` stores the impl for a selector.
-
-**Read which impl serves a call:** `getSigsImplementation(bytes4)` (`0xa5fcc8bc`) — e.g. `getSigsImplementation(0xad967e15)` → UserModule. `getImplementationSigs(address)` (`0x89396dc8`) for the reverse. `getDummyImplementation()`/`getAdmin()` for the EIP-1967 slots.
-
-**ReserveContractProxy** `0x264786…ce92` is a *separate*, tiny minimal proxy (`code=190 B`), not an InfiniteProxy.
+fTokens, the LendingFactory, resolvers and the RewardsRateModels are **NOT proxies** — they are plain CREATE3 / normal contracts (an fToken "upgrade" = a new address; the factory is a non-upgradeable `Owned`). The only proxy in the Lending path is the shared **Liquidity** InfiniteProxy that fTokens supply into — see [`liquidity-layer.md`](liquidity-layer.md). `ReserveContractProxy` `0x264786…ce92` is a separate, tiny minimal proxy (`code=190 B`), not an InfiniteProxy.
 
 ---
 
-## 7. Detection invariants & gotchas
+## 5. Detection invariants & gotchas
 
-1. **One `LogOperate` per Lending action, emitted by the Liquidity proxy — not by the fToken.** A user deposit into fUSDC emits: fUSDC `Deposit` + fUSDC `Transfer` (mint) + Liquidity `LogOperate` (with `user = fUSDC address`, `supplyAmount > 0`). To attribute Liquidity flows to Lending, map `LogOperate.user ∈ allTokens()`.
-2. **`LogOperate.user` is the protocol, never the end user.** The end user is in the fToken `Deposit.owner` / the underlying-token `Transfer.from`. For Vault flows `user` is the Vault; same topic, different protocol — disambiguate by which contract `user` is.
+1. **One `LogOperate` per Lending action, emitted by the Liquidity proxy — not by the fToken.** A user deposit into fUSDC emits: fUSDC `Deposit` + fUSDC `Transfer` (mint) + Liquidity `LogOperate` (with `user = fUSDC address`, `supplyAmount > 0`). To attribute Liquidity flows to Lending, map `LogOperate.user ∈ allTokens()`. See [`liquidity-layer.md`](liquidity-layer.md).
+2. **fToken `Deposit`/`Withdraw` use the standard ERC-4626 topic0s** — not Fluid-specific. Identify a Fluid fToken by address (LendingFactory-deployed) or `symbol()` ("f"-prefixed).
 3. **fTokens never hold the underlying.** Underlying flows depositor → Liquidity directly via `liquidityCallback`. Don't expect the fToken's underlying balance to track deposits (it's ~0); use `totalAssets()` / `getData()`.
-4. **Yield & rewards accrue into the exchange price**, not via claim events. `tokenExchangePrice` (fToken→underlying) rises over time. There is no `LogClaimReward` and no per-user reward event. The only reward-program events are on the `FluidLendingRewardsRateModel` (`LogStartRewards` etc.) and the fToken `LogUpdateRewards` (model address change).
+4. **Yield & rewards accrue into the exchange price**, not via claim events. `tokenExchangePrice` (fToken→underlying) rises over time. There is no `LogClaimReward` and no per-user reward event. The only reward-program events are on `FluidLendingRewardsRateModel` (`LogStartRewards` etc.) and the fToken `LogUpdateRewards` (model address change).
 5. **`LogUpdateRates`/`LogRebalance` are rare maintenance events**, not per-deposit. A normal fToken window emits only ERC-4626 `Deposit/Withdraw` + ERC-20 `Transfer/Approval`. Don't rely on `LogUpdateRates` to track APY — read exchange prices via `getData()`/resolver.
-6. **The Liquidity proxy address is identical on every Fluid chain** (`0x52Aa…E497`), but its admin, dummy impl, and live module set differ per chain — always resolve modules with `getSigsImplementation`, never hardcode a module address.
-7. **`getDummyImplementation()` ≠ the executing implementation.** The EIP-1967 impl slot holds an ABI stub. Tools that read that slot to "find the logic" get the wrong contract for InfiniteProxies — use the per-selector slot instead.
-8. **Native vs standard fToken is detectable by bytecode size** (21098 B native-underlying vs 19617 B standard) and by the presence of `depositNative`/`NATIVE_TOKEN_ADDRESS`. The wrapped-native fToken on each chain is fWETH (ETH/Base/Arb), fWPOL (Polygon), fWBNB (BNB).
-9. **fToken address is deterministic** = CREATE3 of `salt = keccak256(abi.encode(asset, fTokenType))` from the factory — reproducible off-chain via `computeToken(asset, fTokenType)`.
-10. **Live deployments can lag HEAD source.** Mainnet fWETH lacks the 2-arg `mintNative` that's in current `main`; mainnet's dummy impl and `operate` module differ from the deploy-registry snapshot. When a selector/module matters, verify against the live contract, not the repo file.
-11. **Fluid is not on Optimism or Avalanche.** Don't index `0x52Aa…E497` there — no code.
-12. **`AddressBool[]`/struct-array admin events**: topic0s in §1.2 were computed with the tuple types *expanded* (e.g. `LogUpdateAuths((address,bool)[])`). Using the Solidity struct name instead of the expanded tuple gives a wrong hash.
+6. **Native vs standard fToken is detectable by bytecode size** (21098 B native-underlying vs 19617 B standard) and by the presence of `depositNative`/`NATIVE_TOKEN_ADDRESS`. The wrapped-native fToken is fWETH (ETH/Base/Arb), fWPOL (Polygon), fWBNB (BNB).
+7. **fToken address is deterministic** = CREATE3 of `salt = keccak256(abi.encode(asset, fTokenType))` from the factory — reproducible off-chain via `computeToken(asset, fTokenType)`.
+8. **Live deployments can lag HEAD source.** Mainnet fWETH lacks the 2-arg `mintNative` that's in current `main`. When a selector matters, verify against the live contract, not the repo file.
+9. **Not on Optimism or Avalanche** — no LendingFactory/fToken bytecode there.
 
 ---
 
-## 8. Quick-copy detection constants (bytea-ready for PG)
+## 6. Quick-copy detection constants (bytea-ready for PG)
 
 ```
--- ===== Topics (chain-agnostic) =====
--- Liquidity UserModule
-TOPIC_LIQ_OPERATE                = '\x4d93b232a24e82b284ced7461bf4deacffe66759d5c24513e6f29e571ad78d15'
--- Liquidity AdminModule
-TOPIC_ADMIN_UPDATE_AUTHS         = '\xb694cde8b4bf47e7f5845bb4374f98c5b29bbbaa5208ea679121cecb5d8fd3e0'
-TOPIC_ADMIN_UPDATE_GUARDIANS     = '\x530db3bf9b4b0c4f296fe1d9e21620b91db0a8bdcaca4cf1e6dc9844739405c1'
-TOPIC_ADMIN_UPDATE_REVENUE_COLL  = '\xde3dd47a9a762713b4a9813a037ab6f57e36569d8b0ec4ddb285d8a61878b5b4'
-TOPIC_ADMIN_CHANGE_STATUS        = '\xb33384c8a450936b9fba178db857f03fb9865a40d166aa2f9d439a9fdddfbe22'
-TOPIC_ADMIN_UPDATE_USER_CLASSES  = '\x9ccbc3483d75ae36da94213ac30ac0a047e1226ef3435d004cd501608e5b388b'
-TOPIC_ADMIN_UPDATE_TOKEN_CONFIGS = '\xa9d5be7e168dc43b637b924e6cc22c262478dffd9d475fa170b6d4e4ba576460'
-TOPIC_ADMIN_UPDATE_SUPPLY_CFG    = '\x614e3525ec8c152da9319cd9038950346a4a042d3c6810a7f3ffddc34347bdb0'
-TOPIC_ADMIN_UPDATE_BORROW_CFG    = '\x4a3d512075def8d38b63e79dacfdab217654f641be2b2f7d638b67b2515df7c0'
-TOPIC_ADMIN_PAUSE_USER           = '\x6686e5bb0cc56cbc9aa2b434eb18009891bf411d6d3f961fdfe70be336ca4528'
-TOPIC_ADMIN_UNPAUSE_USER         = '\xacd30ef49b8fd1b51bbefff95071c5b0257180a7778c9c0fa4eb77a8842e290d'
-TOPIC_ADMIN_UPDATE_RATE_DATA_V1  = '\x1f953465aa7f3f2478d38b6c2a9cfcfbda846398254e278f614d586d527d902c'
-TOPIC_ADMIN_UPDATE_RATE_DATA_V2  = '\xf96f9120f802331b6220bac68c2ab90cce6c8a8f9fed548d72dd092ad1899bf9'
-TOPIC_ADMIN_COLLECT_REVENUE      = '\x7ded56fbc1e1a41c85fd5fb3d0ce91eafc72414b7f06ed356c1d921823d4c37c'
-TOPIC_ADMIN_UPDATE_EXCH_PRICES   = '\x96c40bed7fc8d0ac41633a3bd47f254f0b0076e5df70975c51d23514bc49d3b8'
-TOPIC_ADMIN_UPDATE_USER_WD_LIMIT = '\xbd618a42c279f25a1d0dd6144f1a1b2ded22549073604bb0774cff6a99ee8428'
--- InfiniteProxy
-TOPIC_PROXY_SET_ADMIN            = '\xb2396a4169c0fac3eb0713eb7d54220cbe5e21e585a59578ec4de929657c0733'
-TOPIC_PROXY_SET_DUMMY_IMPL       = '\x761380f4203cd2fcc7ee1ae32561463bc08bbf6761cb9d5caa925f99a6d54502'
-TOPIC_PROXY_SET_IMPL             = '\xd613a4a18e567ee1f2db4d5b528a5fee09f7dff92d6fb708afd6c095070a9c6d'
-TOPIC_PROXY_REMOVE_IMPL          = '\xda53aaefabec4c3f8ba693a2e3c67fa0152fbd71c369d51f669e66b28a4a0864'
+-- ===== Topics =====
 -- LendingFactory
 TOPIC_LF_TOKEN_CREATED           = '\x60c8487fc242a40cc8d2722cf9b3b5a14b316a50bf4ed30c9f0f1b0126728a36'
 TOPIC_LF_SET_AUTH                = '\x014b54fa6d2080e9aacd1c598c7689a625610d7d684dd41d10407e48aa8b1200'
@@ -382,12 +262,6 @@ TOPIC_RR_CANCEL_QUEUED           = '\x13d39d3c3c727cbaa38766164c6fb182ddfb8daaaf
 TOPIC_RR_TRANSITIONED            = '\xa27da0b2cea36637915acc9460cc212a1eb5ad386e422cfc9f40e5f4014e222f'
 
 -- ===== Selectors =====
-SEL_LIQ_OPERATE                  = '\xad967e15'
-SEL_PROXY_GET_SIGS_IMPL          = '\xa5fcc8bc'
-SEL_PROXY_GET_IMPL_SIGS          = '\x89396dc8'
-SEL_PROXY_GET_ADMIN              = '\x6e9960c3'
-SEL_PROXY_GET_DUMMY_IMPL         = '\x908bfe5e'
-SEL_PROXY_READ_FROM_STORAGE      = '\xb5c736e4'
 SEL_LF_CREATE_TOKEN              = '\xe78e049a'
 SEL_LF_COMPUTE_TOKEN             = '\xbb4a64d3'
 SEL_LF_ALL_TOKENS                = '\x6ff97f1d'
@@ -422,14 +296,10 @@ SEL_RR_START_REWARDS             = '\x6283311d'
 SEL_RR_STOP_REWARDS              = '\x797008c6'
 
 -- ===== Shared addresses (ALL Fluid chains: ETH, Base, Arbitrum, Polygon, BNB) =====
-FLUID_LIQUIDITY                  = '\x52aa899454998be5b000ad077a46bbe360f4e497'
 FLUID_LENDING_FACTORY            = '\x54b91a0d94cb471f37f949c60f7fa7935b551d03'
 FLUID_LENDING_RESOLVER           = '\x48d32f49afeaec7ae66ad7b9264f446fc11a1569'
-FLUID_LIQUIDITY_RESOLVER         = '\xca13a15de31235a37134b4717021c35a3cf25c60'
-FLUID_REVENUE_RESOLVER           = '\x0a84741d50b4190b424f57425b09fae60c330f32'
 FLUID_RESERVE_CONTRACT_PROXY     = '\x264786ef916af64a1db19f513f24a3681734ce92'
 FLUID_DEPLOYER                   = '\x4f6f977acdd1177dcd81ab83074855ecb9c2d49e'
-FLUID_TEAM_MULTISIG              = '\xca5e9219e1007931fd5d938c1815a90ef08f1584'
 
 -- ===== fTokens — Ethereum (1) =====
 ETH_FUSDC                        = '\x9fb7b4477576fe5b32be4c1843afb1e55f251b33'
@@ -467,25 +337,19 @@ BNB_FU                           = '\x007df53cda786450cf8145a73b2748b241a0069c'
 BNB_FUSDC                        = '\xfe60462e93cee34319f48cfc6acfbc13c2882df9'
 BNB_FUSDT                        = '\xa5b8fca32e5252b0b58eabf1a8c79d958f8ee6a2'
 BNB_FWBNB                        = '\x527c2a0b8a3edd9696b4a9443ef66ec30fd7b84a'
-
--- ===== InfiniteProxy storage slots =====
-SLOT_EIP1967_ADMIN               = '\xb53127684a568b3173ae13b9f8a6016e243e63b6e8ee1178d6a717850b5d6103'
-SLOT_EIP1967_IMPL_DUMMY          = '\x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc'
-SLOT_SIG_BASE                    = '\x000000003ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc'
 ```
 
 ---
 
-## 9. Verification & sources
+## 7. Verification & sources
 
 How every constant here was verified (2026-05-29):
 
-- **Topic0 / selector hashes:** computed locally as `keccak256(canonical signature)` / `[0:4]` (pycryptodome). Canonical signatures taken verbatim from `Instadapp/fluid-contracts-public` (`main`): `contracts/infiniteProxy/events.sol`, `contracts/liquidity/userModule/events.sol`, `contracts/liquidity/adminModule/{events,structs}.sol`, `contracts/protocols/lending/{lendingFactory,fToken,lendingRewardsRateModel}/events.sol`, and interfaces `iFToken.sol`/`iLendingFactory.sol`/`iLendingRewardsRateModel.sol`. Struct-array event args expanded to tuples before hashing.
-- **Address bytecode existence:** `eth_getCode` non-empty on `ethereum-rpc.publicnode.com`, `base-rpc.publicnode.com`, `arbitrum-one-rpc.publicnode.com`, `polygon-bor-rpc.publicnode.com`, `bsc-rpc.publicnode.com` for every listed contract. fToken/factory/resolver runtime sizes recorded (fToken 19617 B / native 21098 B; factory 8305 B; LendingResolver 10757 B; LiquidityResolver 12803 B; RewardsRateModel 1820 B, BNB 5547 B).
-- **Selectors in bytecode:** confirmed present in deployed fUSDC, fWETH (native), and LendingFactory bytecode (e.g. `createToken`, `computeToken`, `deposit`, `redeem`, `getData`, `rebalance`, `updateRates`, `updateRewards`, `liquidityCallback`, `depositNative`, `NATIVE_TOKEN_ADDRESS`, `getRate`, `getConfig`). `operate` confirmed via live per-selector dispatch.
-- **Live topics:** `eth_getLogs` (address-scoped) confirmed `LogOperate` on the Liquidity proxy (ETH/BNB/Polygon) and ERC-4626 `Deposit`/`Withdraw` on fUSDC; a full topic0 tally of a recent fUSDC window showed exactly `Transfer/Deposit/Withdraw/Approval` (confirming `LogUpdateRates`/`LogRebalance` are maintenance-only).
-- **Proxy slots & dispatch:** `eth_getStorageAt` for the EIP-1967 admin + dummy-impl slots (per-chain values in §4); `getSigsImplementation(0xad967e15)` returned the per-chain UserModule (ETH `0x4bdc88…`, others `0x3c0651…`), confirming the per-selector dispatch model.
-- **Not on Optimism/Avalanche:** confirmed by absence of `deployments/optimism|avalanche` in the repo and no bytecode at `0x52Aa…E497` on either chain.
+- **Topic0 / selector hashes:** computed locally as `keccak256(canonical signature)` / `[0:4]`. Canonical signatures taken verbatim from `Instadapp/fluid-contracts-public` (`main`): `contracts/protocols/lending/{lendingFactory,fToken,lendingRewardsRateModel}/events.sol`, interfaces `iFToken.sol`/`iLendingFactory.sol`/`iLendingRewardsRateModel.sol`.
+- **Address bytecode existence:** `eth_getCode` non-empty on `ethereum-rpc.publicnode.com`, `base-rpc.publicnode.com`, `arbitrum-one-rpc.publicnode.com`, `polygon-bor-rpc.publicnode.com`, `bsc-rpc.publicnode.com` for every listed contract. Runtime sizes recorded (fToken 19617 B / native 21098 B; factory 8305 B; LendingResolver 10757 B; RewardsRateModel 1820 B, BNB 5547 B).
+- **Selectors in bytecode:** confirmed present in deployed fUSDC, fWETH (native), and LendingFactory bytecode.
+- **Live topics:** a full topic0 tally of a recent fUSDC window showed exactly `Transfer/Deposit/Withdraw/Approval` (confirming `LogUpdateRates`/`LogRebalance` are maintenance-only).
+- **Not on Optimism/Avalanche:** confirmed by absence of `deployments/optimism|avalanche` in the repo and no bytecode at the core addresses.
 
 **Authoritative sources:**
 - [`Instadapp/fluid-contracts-public`](https://github.com/Instadapp/fluid-contracts-public) — all source + `deployments/<chain>/v1_0_0/*.json` artifacts (fToken addresses + constructor args = canonical address registry).
