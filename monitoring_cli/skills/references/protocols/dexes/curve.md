@@ -1,4 +1,4 @@
-# Curve Finance — Topics, Selectors, Addresses (Ethereum, Arbitrum, Optimism, Base, Polygon, Gnosis, Avalanche)
+# Curve Finance — Topics, Selectors, Addresses (Ethereum, Arbitrum, Optimism, Base, BSC, Polygon, Gnosis, Avalanche)
 
 **Status:** event topic0 hashes and function selectors computed locally with `cast keccak` / `cast sig` from canonical signatures read directly out of the `curvefi` Vyper source repos (verified, deterministic). Addresses sourced from Curve's official deployment records (`curvefi/curve-js` `network_constants.ts`), the Curve readthedocs deployment page, and Etherscan contract labels as of 2026-05. **Addresses were NOT independently RPC-verified** in this environment — treat the hashes/selectors as ground truth and the addresses as authoritative-but-unverified. See §14.
 **Scope:** the Curve AMM exchange protocol across seven EVM chains, its factories/registries, the Curve DAO/tokenomics stack (Ethereum), and an adjacent crvUSD pointer. Topics + selectors are chain-agnostic; addresses are network-specific.
@@ -204,7 +204,7 @@ Selectors = `keccak256(canonical signature)[0:4]`, computed with `cast sig`. **V
 | `0x9ac90d3d` | `get_coins(address)` | factories + MetaRegistry |
 | `0x92e3cc2d` | `get_balances(address)` | factories + MetaRegistry |
 | `0xa87df06c` | `find_pool_for_coins(address, address)` | factories |
-| `0x493f4f74` | `get_address(uint256 id)` | AddressProvider (both) — **id 7 = MetaRegistry** |
+| `0x493f4f74` | `get_address(uint256 id)` | AddressProvider (both) — **id 7 = MetaRegistry on Ethereum only** (id map is chain-specific) |
 | `0xa262904b` | `get_registry()` | classic AddressProvider |
 | `0xbdf475c3` | `get_pool_from_lp_token(address)` | MetaRegistry |
 | `0x619ea806` | `is_registered(address)` | MetaRegistry |
@@ -234,12 +234,12 @@ Curve deploys its registry stack with a deterministic deployer, so several addre
 | Role | Address | Notes |
 |------|---------|-------|
 | **AddressProvider** | `0x0000000022D53366457F9d5E68Ec105046FC4383` | Same on Ethereum, Arbitrum, Optimism, Base, Polygon, Gnosis, Avalanche (and most other Curve chains). The entry point: `get_address(id)`. |
-| **MetaRegistry (Ethereum)** | `0xF98B45FA17DE75FB1aD0e7aFD971b0ca00e379fC` | Reachable on any chain via `AddressProvider.get_address(7)`. L2s use a `MetaRegistryL2` variant at a chain-specific address. |
-| **TwoCrypto-NG factory** | `0x98EE851a00abeE0d95D08cF4CA2BdCE32aeaAF7F` | Identical on Ethereum, Arbitrum, Optimism, Polygon, Gnosis, Avalanche. **Base is the exception** (`0xc9Fe0C63…b665F`). |
+| **MetaRegistry (Ethereum)** | `0xF98B45FA17DE75FB1aD0e7aFD971b0ca00e379fC` | On **Ethereum** reachable via `AddressProvider.get_address(7)` (verified on-chain). **This does NOT generalize** — on Arbitrum/Optimism/Base/Gnosis/Avalanche `get_address(7)` returns `0x0`, and on Polygon it returns a different contract. The id→contract map is chain-specific; find the L2 MetaRegistry by scanning the AddressProvider's populated ids per chain. |
+| **TwoCrypto-NG factory** | `0x98EE851a00abeE0d95D08cF4CA2BdCE32aeaAF7F` | Identical on Ethereum, Arbitrum, Optimism, Polygon, Gnosis, Avalanche, **BSC**. **Base is the exception** (`0xc9Fe0C63…b665F`). |
 | **Router (CurveRouterNG)** | `0x0DCDED3545D565bA3B19E683431381007245d983` | Identical on Optimism, Polygon, Gnosis, Avalanche. Ethereum/Arbitrum/Base differ (see per-chain tables). |
 | **Deposit & Stake zap** | `0x37c5ab57AF7100Bdc9B668d766e193CCbF6614FD` | Identical on Arbitrum, Optimism, Polygon, Gnosis, Avalanche. |
 
-`AddressProvider` IDs worth knowing: `0` = main StableSwap Registry, `1` = PoolInfo, `2` = Exchange/Swaps, `3` = crypto Registry, `5` = crypto factory, `7` = MetaRegistry, `11/12/13` = NG factories (varies by chain — read it, don't assume).
+`AddressProvider` IDs are **chain-specific — read them, don't assume.** On **Ethereum** (verified on-chain): `0` = main StableSwap Registry, `1` = PoolInfo, `2` = Exchange/Swaps, `3` = crypto Registry, `5` = crypto factory, `7` = MetaRegistry. On L2s the same ids map to different contracts (e.g. Polygon `get_address(7)` is **not** the MetaRegistry) or are unpopulated (`get_address(7)` = `0x0` on Arbitrum/Optimism/Base/Gnosis/Avalanche).
 
 ---
 
@@ -290,7 +290,7 @@ Curve deploys its registry stack with a deterministic deployer, so several addre
 
 ## 5–9. Addresses — L2 / sidechains
 
-All from `curvefi/curve-js` `network_constants.ts`. AddressProvider is `0x0000000022D53366457F9d5E68Ec105046FC4383` on every chain (omitted from the rows below). CRV is bridged (a different address per chain). MetaRegistry per chain via `AddressProvider.get_address(7)`.
+All from `curvefi/curve-js` `network_constants.ts`, on-chain re-verified. AddressProvider is `0x0000000022D53366457F9d5E68Ec105046FC4383` on every chain (omitted from the rows below). CRV is bridged (a different address per chain). The MetaRegistry is **not** uniformly at `get_address(7)` on L2s — that id is Ethereum-specific (see §3).
 
 ### 5. Arbitrum One (chain ID 42161)
 
@@ -356,6 +356,22 @@ All from `curvefi/curve-js` `network_constants.ts`. AddressProvider is `0x000000
 | Router | `0x0DCDED3545D565bA3B19E683431381007245d983` | `0x0DCDED3545D565bA3B19E683431381007245d983` |
 | Deposit & Stake | `0x37c5ab57AF7100Bdc9B668d766e193CCbF6614FD` | `0x37c5ab57AF7100Bdc9B668d766e193CCbF6614FD` |
 
+### 9b. BNB Smart Chain (chain ID 56) — factory-only
+
+On-chain verified via `bsc-rpc.publicnode.com`. The classic `AddressProvider` exists (`0x0000…4383`, code present) but its registry ids are **unpopulated** (`get_address()` = `0x0`) — Curve on BSC is purely factory-deployed pools: no MetaRegistry, no native CRV/gauge stack.
+
+| Role | Address |
+|------|---------|
+| Stableswap-NG factory | `0xd7E72f3615aa65b92A4DBdC211E296a35512988B` (pool_count 168 ✓) |
+| Tricrypto-NG factory | `0xc55837710bc500F1E3c7bb9dd1d51F7c5647E657` (pool_count 20 ✓) |
+| Twocrypto-NG factory | `0x98EE851a00abeE0d95D08cF4CA2BdCE32aeaAF7F` (pool_count 126 ✓; shared addr) |
+| Old crypto factory | `0xBd5fBd2FA58cB15228a9Abdac9ec994f79E3483C` (pool_count 10 ✓) |
+| Old metapool factory | `0xEfDE221f306152971D8e9f181bFe998447975810` (pool_count 0 — deployed, empty ✓) |
+| Router (CurveRouterNG) | `0xA72C85C258A81761433B4e8da60505Fe3Dd551CC` |
+| Deposit & Stake | `0x4f37A9d177470499A2dD084621020b023fcffc1F` |
+
+**CRV: none** — curve-js lists `0x8Ee73c…0415` (a Base address) which has no code on BSC; treat as unset. No MetaRegistry / classic registry on BSC.
+
 ---
 
 ## 10. crvUSD (adjacent — stablecoin/lending, not a DEX pool)
@@ -399,8 +415,8 @@ There is no single init-code hash (contrast Uniswap V2 §11). See `references/pr
 7. **`TokenExchangeUnderlying` only fires on lending/metapools.** A metapool swap touching the base-pool coins emits `TokenExchangeUnderlying` (`0xd013ca23…`), not `TokenExchange`. Monitor both.
 8. **`coins`/`balances`/`A`/`get_virtual_price` selectors are shared across virtually all families** (`0xc6610657`/`0x4903b0d1`/`0xf446c1d0`/`0xbb7b8b80`). Never infer pool type from these — always from the event topic0 or the factory.
 9. **NG pools ARE their own LP token; classic + old-crypto pools have a separate LP token.** For NG, the pool address emits ERC-20 `Transfer`/`Approval`. For classic, the LP token is a different contract (see `token()` / the LP column in §4.3). LP-supply accounting must target the right contract.
-10. **AddressProvider is the same address on every chain** (`0x0000…fc4383`), but the registries/factories it points to are chain-specific. Resolve infra by `get_address(id)` per chain rather than hard-coding, and remember **id 7 = MetaRegistry**.
-11. **Factory addresses cluster across chains.** The TwoCrypto-NG factory is `0x98EE…AF7F` on six of seven chains but `0xc9Fe…b665F` on Base; the Router `0x0DCD…d983` and Deposit&Stake `0x37c5…14FD` repeat on several L2s. Always condition on `(chainId, address)`.
+10. **AddressProvider is the same address on every chain** (`0x0000…fc4383`), but the registries/factories it points to are chain-specific. Resolve infra by `get_address(id)` per chain rather than hard-coding. **`id 7 = MetaRegistry` only on Ethereum** — on L2s that id is `0x0` or points elsewhere (and on BSC the AddressProvider's ids are entirely unpopulated).
+11. **Factory addresses cluster across chains.** The TwoCrypto-NG factory is `0x98EE…AF7F` on every chain (ETH/Arbitrum/Optimism/Polygon/Gnosis/Avalanche/BSC) **except Base** (`0xc9Fe…b665F`); the Router `0x0DCD…d983` and Deposit&Stake `0x37c5…14FD` repeat on several L2s. Always condition on `(chainId, address)`.
 12. **Parameter changes are timelocked DAO actions.** `RampA`/`NewParameters`/`ApplyNewFee` originate from the Ownership/Parameter Agent (§4.2) via the DAO, not from random EOAs — useful for distinguishing legitimate parameter changes from anomalies.
 13. **`mint(address)` selector `0x6a627842` collides with Uniswap V2 `mint(address)`.** On Curve it is the Minter claiming CRV for a gauge; disambiguate by target address (Minter `0xd061…2fcE0`).
 14. **Bytea hex literals must have an even digit count:** 40 hex chars for addresses, 64 for 32-byte topic values. Topic0 values above are 64 hex chars (32 bytes); selectors are 8 hex chars (4 bytes).
@@ -548,6 +564,13 @@ AVAX_CRV                            = '\x47536f17f4ff30e64a96a7555826b8f9e66ec46
 AVAX_STABLESWAP_NG_FACTORY          = '\x1764ee18e8b3cca4787249ceb249356192594585'
 AVAX_TRICRYPTO_NG_FACTORY           = '\x3d6cb2f6dcf47cdd9c13e4e3beae9af041d8796a'
 AVAX_OLD_METAPOOL_FACTORY           = '\xb17b674d9c5cb2e441f8e196a2f048a81355d031'
+
+-- ===== BNB Smart Chain (56) — factory-only, no CRV/registry =====
+BSC_STABLESWAP_NG_FACTORY           = '\xd7e72f3615aa65b92a4dbdc211e296a35512988b'
+BSC_TRICRYPTO_NG_FACTORY            = '\xc55837710bc500f1e3c7bb9dd1d51f7c5647e657'
+BSC_OLD_CRYPTO_FACTORY              = '\xbd5fbd2fa58cb15228a9abdac9ec994f79e3483c'
+BSC_OLD_METAPOOL_FACTORY            = '\xefde221f306152971d8e9f181bfe998447975810'
+BSC_ROUTER                          = '\xa72c85c258a81761433b4e8da60505fe3dd551cc'
 ```
 
 ---
@@ -558,7 +581,7 @@ How the constants in this doc were produced:
 
 - **Event topic0 hashes and function selectors:** computed locally with Foundry `cast keccak` (full keccak256 of the canonical event signature) and `cast sig` (`keccak256(sig)[0:4]`). Canonical signatures were read directly from the `curvefi` Vyper source (see file list below). Every hash/selector in §1, §2, and §13 was machine-computed, not transcribed — these are ground truth.
 - **The `int128` vs `uint256` index distinction, NG field layouts, and per-family event differences** were taken from the actual Vyper `event` declarations in source, then confirmed by the hash differing across families.
-- **Addresses (§3–§10, §13):** sourced from `curvefi/curve-js` `src/constants/network_constants.ts` (per-chain factories, router, CRV, crvUSD), the Curve readthedocs deployment page (Ethereum classic registry, DAO/tokenomics, classic pools), and Etherscan contract labels (crvUSD ControllerFactory, MetaRegistry via AddressProvider id 7). **Not independently RPC-verified in this environment** — before wiring an address into a live alert, confirm with `eth_getCode` / a block explorer, especially for L2 factories and flagship pools.
+- **Addresses (§3–§10, §13):** sourced from `curvefi/curve-js` `src/constants/network_constants.ts` (per-chain factories, router, CRV, crvUSD), the Curve readthedocs deployment page, and Etherscan labels — then **independently re-verified on-chain** via `cast` against `publicnode` RPCs on all eight chains incl BSC (2026-05). Verified: Ethereum `AddressProvider.get_address(7)` = MetaRegistry `0xF98B…79fC` (`pool_count()` = 2262); CRV `symbol()` = `"CRV"` on every chain that has it; crvUSD `symbol()` = `"crvUSD"`; StableSwap-NG and Tricrypto-NG factories return live `pool_count()` (Ethereum 899 / 121; non-zero on every L2; BSC 168 / 20); 3pool `coins(0)` = DAI. **Corrections surfaced by this check:** the `id 7 = MetaRegistry` rule holds **only on Ethereum** — on Arbitrum/Optimism/Base/Gnosis/Avalanche `get_address(7)` = `0x0` and on Polygon it maps elsewhere (§3); **BSC is factory-only** (AddressProvider present but registries unpopulated, and curve-js's BSC `crv` is a Base address with no code on BSC — §9b). Flagship pool addresses (§4.3) and crvUSD controllers remain doc-sourced; confirm those on a block explorer before use.
 
 Authoritative source repos / pages:
 
