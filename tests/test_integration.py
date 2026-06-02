@@ -1,6 +1,8 @@
 import os
+
 import pytest
 from typer.testing import CliRunner
+
 from monitoring_cli.cli import app
 from monitoring_cli.config import Config, Profile
 

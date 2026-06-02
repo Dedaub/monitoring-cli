@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from pathlib import PurePosixPath
 
 from rich.console import Console
@@ -8,6 +7,12 @@ from rich.table import Table
 from rich.tree import Tree
 
 _console = Console()
+
+_MSG_MAX = 120
+
+
+def _truncate(text: str, limit: int = _MSG_MAX) -> str:
+    return text if len(text) <= limit else text[:limit] + "…"
 
 
 def format_entities(
@@ -68,7 +73,7 @@ def format_query_metadata(
     console: Console | None = None,
 ) -> None:
     c = console or _console
-    c.print_json(json.dumps(metadata))
+    c.print_json(data=metadata)
 
 
 def format_lines(
@@ -155,13 +160,13 @@ def format_logs(
     table.add_column("Message")
     for log in logs:
         query = log.get("query") or {}
-        name = query.get("query_name", str(log.get("query_id", "")))
+        name = query.get("query_name") or str(log.get("query_id", ""))
         msg = str(log.get("message") or "")
         table.add_row(
             log.get("status", ""),
             name,
             str(log.get("start_ts", "")),
-            msg[:120] + ("…" if len(msg) > 120 else ""),
+            _truncate(msg),
         )
     c.print(table)
     last = logs[-1]
@@ -185,13 +190,13 @@ def format_fired_alerts(
     table.add_column("Message")
     for alert in alerts:
         query = alert.get("query") or {}
-        name = query.get("query_name", str(alert.get("query_id", "")))
+        name = query.get("query_name") or str(alert.get("query_id", ""))
         msg = str(alert.get("query_message") or "")
         table.add_row(
             str(alert.get("alert_id", "")),
             name,
             str(alert.get("_ts", "")),
-            msg[:120] + ("…" if len(msg) > 120 else ""),
+            _truncate(msg),
         )
     c.print(table)
     last = alerts[-1]

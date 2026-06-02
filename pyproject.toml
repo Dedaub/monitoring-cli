@@ -27,8 +27,27 @@ lint = [
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
+# Explicit package selection: monitoring_cli has no __init__.py (PEP 420
+# namespace package), so hatchling's auto-detection can't find it. This also
+# ships the bundled skills/*.md resources loaded via importlib.resources.
+[tool.hatch.build.targets.wheel]
+packages = ["monitoring_cli"]
+
 [tool.uv]
 default-groups = ["dev", "lint"]
 
+[tool.ruff]
+target-version = "py313"
+extend-exclude = [".claude"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+# E501: long lines are almost all Typer --help strings, kept on one line for readability.
+# B904: the pervasive `raise typer.Exit(1)` inside except is intentional control flow,
+#       not error-swallowing (real error wrapping already chains with `from`).
+ignore = ["E501", "B904"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+addopts = "-ra --strict-markers --strict-config"
+filterwarnings = ["error"]

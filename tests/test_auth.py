@@ -1,6 +1,6 @@
+import httpx
 import pytest
 import respx
-import httpx
 
 from monitoring_cli.auth import (
     AuthError,
@@ -11,7 +11,6 @@ from monitoring_cli.auth import (
     start_device_flow,
 )
 from monitoring_cli.config import Profile
-
 
 PROFILE = Profile(
     base_url="https://api.dedaub.com",

@@ -1,13 +1,15 @@
 from io import StringIO
+
 from rich.console import Console
+
 from monitoring_cli.output import (
-    format_entities,
-    format_tree,
-    format_query_text,
-    format_logs,
-    format_fired_alerts,
-    format_query_results,
     format_alert_queries,
+    format_entities,
+    format_fired_alerts,
+    format_logs,
+    format_query_results,
+    format_query_text,
+    format_tree,
 )
 
 

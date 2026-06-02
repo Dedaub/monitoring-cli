@@ -1,7 +1,8 @@
 import json
+
+import httpx
 import pytest
 import respx
-import httpx
 
 from monitoring_cli.auth import SessionExpiredError
 from monitoring_cli.client import (

@@ -34,7 +34,7 @@ class MonitoringClient:
         path: str,
         json: Any = None,
         params: dict | None = None,
-        timeout: float | None = None,
+        timeout: float | None = 30.0,
     ) -> Any:
         resp = httpx.post(
             f"{self._base}{path}",
@@ -46,15 +46,30 @@ class MonitoringClient:
         _raise_for_status(resp, path)
         return resp.json()
 
-    def _put(self, path: str, json: object = None, params: dict | None = None) -> None:
+    def _put(
+        self,
+        path: str,
+        json: object = None,
+        params: dict | None = None,
+        timeout: float | None = 30.0,
+    ) -> None:
         resp = httpx.put(
-            f"{self._base}{path}", headers=self._headers(), json=json, params=params
+            f"{self._base}{path}",
+            headers=self._headers(),
+            json=json,
+            params=params,
+            timeout=timeout,
         )
         _raise_for_status(resp, path)
 
-    def _delete(self, path: str, params: dict | None = None) -> None:
+    def _delete(
+        self, path: str, params: dict | None = None, timeout: float | None = 30.0
+    ) -> None:
         resp = httpx.delete(
-            f"{self._base}{path}", headers=self._headers(), params=params
+            f"{self._base}{path}",
+            headers=self._headers(),
+            params=params,
+            timeout=timeout,
         )
         _raise_for_status(resp, path)
 

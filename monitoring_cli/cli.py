@@ -4,7 +4,7 @@ import datetime
 import sys
 from importlib.resources import files
 from pathlib import Path, PurePosixPath
-from typing import Annotated, Optional
+from typing import Annotated, NoReturn
 
 import typer
 from rich.console import Console
@@ -26,6 +26,7 @@ from monitoring_cli.client import (
 )
 from monitoring_cli.config import (
     Config,
+    ConfigError,
     NotLoggedInError,
     Profile,
     ProfileNotFoundError,
@@ -34,12 +35,21 @@ from monitoring_cli.config import (
 app = typer.Typer(help="Dedaub Monitoring CLI")
 err = Console(stderr=True)
 
+# Single network is currently supported across config/alert commands.
+_NETWORK = "ethereum"
+
 ProfileOption = Annotated[
-    Optional[str], typer.Option("--profile", "-p", help="Profile name", hidden=True)
+    str | None, typer.Option("--profile", "-p", help="Profile name", hidden=True)
 ]
 
 
-def _exit_error(e: Exception) -> None:
+def _parse_ts(ts: str | None) -> float | None:
+    if ts is None:
+        return None
+    return datetime.datetime.fromisoformat(ts.replace("Z", "+00:00")).timestamp()
+
+
+def _exit_error(e: Exception) -> NoReturn:
     if isinstance(e, SessionExpiredError):
         err.print("Session expired. Run: dedaub-monitoring login")
     else:
@@ -60,6 +70,9 @@ def _load_client(profile_name: str | None) -> tuple[MonitoringClient, Profile]:
         raise typer.Exit(1)
     except SessionExpiredError:
         err.print("Session expired. Run: dedaub-monitoring login")
+        raise typer.Exit(1)
+    except ConfigError as e:
+        err.print(f"{e}\nRun: dedaub-monitoring login")
         raise typer.Exit(1)
 
 
@@ -95,7 +108,10 @@ def login(
 
     try:
         refresh_token = poll_token(
-            p, flow["device_code"], interval=flow.get("interval", 5)
+            p,
+            flow["device_code"],
+            interval=flow.get("interval", 5),
+            expires_in=flow.get("expires_in", 600),
         )
     except DeviceFlowExpiredError:
         err.print("Login timed out. Please try again.")
@@ -159,7 +175,7 @@ def entities(profile: ProfileOption = None) -> None:
 def tree(
     profile: ProfileOption = None,
     entity_id: Annotated[
-        Optional[int], typer.Option(help="Entity ID (defaults to your own)")
+        int | None, typer.Option(help="Entity ID (defaults to your own)")
     ] = None,
 ) -> None:
     """Show the query file tree for an entity. Use --entity-id to view another entity's tree."""
@@ -193,7 +209,7 @@ def create_folder(
     ],
     profile: ProfileOption = None,
     entity_id: Annotated[
-        Optional[int], typer.Option(help="Entity ID (defaults to your own)")
+        int | None, typer.Option(help="Entity ID (defaults to your own)")
     ] = None,
 ) -> None:
     """Create a folder. Intermediate directories are created automatically. Use --entity-id to target another entity."""
@@ -217,10 +233,10 @@ def create_folder(
 def rename_folder(
     new_path: Annotated[str, typer.Option(help="New folder path")],
     profile: ProfileOption = None,
-    id: Annotated[Optional[int], typer.Option(help="Folder ID")] = None,
-    path: Annotated[Optional[str], typer.Option(help="Current folder path")] = None,
+    id: Annotated[int | None, typer.Option(help="Folder ID")] = None,
+    path: Annotated[str | None, typer.Option(help="Current folder path")] = None,
     entity_id: Annotated[
-        Optional[int], typer.Option(help="Entity ID (defaults to your own)")
+        int | None, typer.Option(help="Entity ID (defaults to your own)")
     ] = None,
 ) -> None:
     """Rename a folder. Specify with --id <folder_id>, or --path /Folder [--entity-id]."""
@@ -242,10 +258,10 @@ def rename_folder(
 @app.command()
 def delete_folder(
     profile: ProfileOption = None,
-    id: Annotated[Optional[int], typer.Option(help="Folder ID")] = None,
-    path: Annotated[Optional[str], typer.Option(help="Folder path")] = None,
+    id: Annotated[int | None, typer.Option(help="Folder ID")] = None,
+    path: Annotated[str | None, typer.Option(help="Folder path")] = None,
     entity_id: Annotated[
-        Optional[int], typer.Option(help="Entity ID (defaults to your own)")
+        int | None, typer.Option(help="Entity ID (defaults to your own)")
     ] = None,
 ) -> None:
     """Delete a folder. Specify with --id <folder_id>, or --path /Folder [--entity-id]."""
@@ -296,13 +312,33 @@ def _resolve_query(
     return resolve_query_id(folders, queries, path)
 
 
+def _resolve_query_text_and_owner(
+    client: MonitoringClient,
+    query_id: int,
+    query_text: str | None,
+    entity_id: int | None,
+) -> tuple[str, int]:
+    """Resolve query text (from arg, stdin, or stored) and the owning entity id."""
+    if query_text is None:
+        if sys.stdin.isatty():
+            q = client.get_query(query_id)
+            query_text = q.get("query_text", "")
+            if entity_id is None:
+                entity_id = q["owner"]["entity_id"]
+        else:
+            query_text = sys.stdin.read()
+    if entity_id is None:
+        entity_id = client.get_query(query_id)["owner"]["entity_id"]
+    return query_text, entity_id
+
+
 @app.command()
 def query_metadata(
     profile: ProfileOption = None,
-    id: Annotated[Optional[int], typer.Option(help="Query ID")] = None,
-    path: Annotated[Optional[str], typer.Option(help="Query path")] = None,
+    id: Annotated[int | None, typer.Option(help="Query ID")] = None,
+    path: Annotated[str | None, typer.Option(help="Query path")] = None,
     entity_id: Annotated[
-        Optional[int], typer.Option(help="Entity ID (defaults to your own)")
+        int | None, typer.Option(help="Entity ID (defaults to your own)")
     ] = None,
 ) -> None:
     """Print full metadata for a query as JSON. Specify with --id <query_id>, or --path /Folder/QueryName [--entity-id]."""
@@ -321,10 +357,10 @@ def query_metadata(
 @app.command()
 def read_query(
     profile: ProfileOption = None,
-    id: Annotated[Optional[int], typer.Option(help="Query ID")] = None,
-    path: Annotated[Optional[str], typer.Option(help="Query path")] = None,
+    id: Annotated[int | None, typer.Option(help="Query ID")] = None,
+    path: Annotated[str | None, typer.Option(help="Query path")] = None,
     entity_id: Annotated[
-        Optional[int], typer.Option(help="Entity ID (defaults to your own)")
+        int | None, typer.Option(help="Entity ID (defaults to your own)")
     ] = None,
 ) -> None:
     """Print the SQL text of a query. Specify with --id <query_id>, or --path /Folder/QueryName [--entity-id]."""
@@ -350,7 +386,7 @@ def create_query(
     ],
     profile: ProfileOption = None,
     entity_id: Annotated[
-        Optional[int], typer.Option(help="Entity ID (defaults to your own)")
+        int | None, typer.Option(help="Entity ID (defaults to your own)")
     ] = None,
 ) -> None:
     """Create a new empty query. The folder must already exist. Use --entity-id to target another entity."""
@@ -378,13 +414,13 @@ def create_query(
 @app.command()
 def write_query(
     query_text: Annotated[
-        Optional[str], typer.Argument(help="SQL text (omit to read from stdin)")
+        str | None, typer.Argument(help="SQL text (omit to read from stdin)")
     ] = None,
     profile: ProfileOption = None,
-    id: Annotated[Optional[int], typer.Option(help="Query ID")] = None,
-    path: Annotated[Optional[str], typer.Option(help="Query path")] = None,
+    id: Annotated[int | None, typer.Option(help="Query ID")] = None,
+    path: Annotated[str | None, typer.Option(help="Query path")] = None,
     entity_id: Annotated[
-        Optional[int], typer.Option(help="Entity ID (defaults to your own)")
+        int | None, typer.Option(help="Entity ID (defaults to your own)")
     ] = None,
 ) -> None:
     """Update the SQL text of a query. Specify with --id <query_id>, or --path /Folder/QueryName [--entity-id]. Pass SQL as argument or pipe via stdin."""
@@ -409,10 +445,10 @@ def write_query(
 def get_schema(
     profile: ProfileOption = None,
     network: Annotated[
-        Optional[str], typer.Option(help="Filter by network, e.g. ethereum")
+        str | None, typer.Option(help="Filter by network, e.g. ethereum")
     ] = None,
     table: Annotated[
-        Optional[str], typer.Option(help="Filter tables by name substring")
+        str | None, typer.Option(help="Filter tables by name substring")
     ] = None,
     macros: Annotated[
         bool, typer.Option(help="Show available macros instead of tables")
@@ -435,21 +471,21 @@ def get_schema(
 def run_query(
     id: Annotated[int, typer.Option(help="Query ID")],
     query_text: Annotated[
-        Optional[str], typer.Argument(help="SQL text (omit to use stored query text)")
+        str | None, typer.Argument(help="SQL text (omit to use stored query text)")
     ] = None,
     profile: ProfileOption = None,
     entity_id: Annotated[
-        Optional[int], typer.Option(help="Entity ID (defaults to query owner)")
+        int | None, typer.Option(help="Entity ID (defaults to query owner)")
     ] = None,
     network: Annotated[
-        Optional[str],
+        str | None,
         typer.Option(help="Network name, e.g. ethereum. Omit to load all networks."),
     ] = None,
     duration: Annotated[
         str, typer.Option(help="Look-back window, e.g. 5m, 24h, 7d")
     ] = "5m",
     start_time: Annotated[
-        Optional[str],
+        str | None,
         typer.Option(help="Start time (ISO 8601), e.g. 2025-01-01T00:00:00Z"),
     ] = None,
     limit: Annotated[int, typer.Option(help="Max rows (max 500)")] = 25,
@@ -458,16 +494,9 @@ def run_query(
     """Execute a query and print results. Requires --id. Pass SQL as argument or via stdin; omit to run the stored query text."""
     client, _ = _load_client(profile)
     try:
-        if query_text is None:
-            if sys.stdin.isatty():
-                q = client.get_query(id)
-                query_text = q.get("query_text", "")
-                if entity_id is None:
-                    entity_id = q["owner"]["entity_id"]
-            else:
-                query_text = sys.stdin.read()
-        if entity_id is None:
-            entity_id = client.get_query(id)["owner"]["entity_id"]
+        query_text, entity_id = _resolve_query_text_and_owner(
+            client, id, query_text, entity_id
+        )
         results = client.execute_query(
             query_text,
             id,
@@ -489,10 +518,10 @@ def run_query(
 @app.command()
 def get_config(
     profile: ProfileOption = None,
-    id: Annotated[Optional[int], typer.Option(help="Query ID")] = None,
-    path: Annotated[Optional[str], typer.Option(help="Query path")] = None,
+    id: Annotated[int | None, typer.Option(help="Query ID")] = None,
+    path: Annotated[str | None, typer.Option(help="Query path")] = None,
     entity_id: Annotated[
-        Optional[int], typer.Option(help="Entity ID (for path lookup)")
+        int | None, typer.Option(help="Entity ID (for path lookup)")
     ] = None,
 ) -> None:
     """Show materialization/scheduling config for a query. Specify with --id <query_id> or --path /Folder/QueryName."""
@@ -508,32 +537,23 @@ def get_config(
     output.format_query_metadata(cfg)
 
 
-_NETWORK = "ethereum"
-
-
-def _parse_ts(ts: str | None) -> float | None:
-    if ts is None:
-        return None
-    return datetime.datetime.fromisoformat(ts.replace("Z", "+00:00")).timestamp()
-
-
 @app.command()
 def set_config(
     profile: ProfileOption = None,
-    id: Annotated[Optional[int], typer.Option(help="Query ID")] = None,
-    path: Annotated[Optional[str], typer.Option(help="Query path")] = None,
+    id: Annotated[int | None, typer.Option(help="Query ID")] = None,
+    path: Annotated[str | None, typer.Option(help="Query path")] = None,
     entity_id: Annotated[
-        Optional[int], typer.Option(help="Entity ID (for path lookup)")
+        int | None, typer.Option(help="Entity ID (for path lookup)")
     ] = None,
     materialize: Annotated[
         str, typer.Option(help="Materialization type: TABLE, VIEW, INCREMENTAL")
     ] = "TABLE",
     frequency: Annotated[
-        Optional[int],
+        int | None,
         typer.Option(help="Run frequency in seconds, e.g. 3600 for hourly"),
     ] = None,
     incrementalization: Annotated[
-        Optional[str],
+        str | None,
         typer.Option(
             help="Incremental strategy: IGNORE or UPSERT (required when --materialize INCREMENTAL)"
         ),
@@ -577,29 +597,29 @@ def enable_alerts(
         int, typer.Option(help="Run frequency in seconds, e.g. 3600 for hourly")
     ],
     profile: ProfileOption = None,
-    id: Annotated[Optional[int], typer.Option(help="Query ID")] = None,
-    path: Annotated[Optional[str], typer.Option(help="Query path")] = None,
+    id: Annotated[int | None, typer.Option(help="Query ID")] = None,
+    path: Annotated[str | None, typer.Option(help="Query path")] = None,
     entity_id: Annotated[
-        Optional[int], typer.Option(help="Entity ID (for path lookup)")
+        int | None, typer.Option(help="Entity ID (for path lookup)")
     ] = None,
     incrementalization: Annotated[
         str, typer.Option(help="Incremental strategy: IGNORE or UPSERT")
     ] = "IGNORE",
     alert_template: Annotated[
-        Optional[str],
+        str | None,
         typer.Option(
             help="Jinja2 alert message template. Columns from query results are available as variables, e.g. '{{from_a}} sent {{amount}} to {{to_a}}'. Uses stored value if already set."
         ),
     ] = None,
     unique_key: Annotated[
-        Optional[str],
+        str | None,
         typer.Option(
             help="Comma-separated column(s) for deduplication, e.g. tx_hash,log_index. Uses stored value if already set."
         ),
     ] = None,
     email: Annotated[bool, typer.Option(help="Send email notifications")] = False,
     webhook_id: Annotated[
-        Optional[int], typer.Option(help="Webhook ID for notifications")
+        int | None, typer.Option(help="Webhook ID for notifications")
     ] = None,
 ) -> None:
     """Enable alerts for a query: sets materialization to INCREMENTAL and turns on notifications. Specify with --id <query_id> or --path /Folder/QueryName."""
@@ -662,18 +682,18 @@ def enable_alerts(
 @app.command()
 def get_logs(
     profile: ProfileOption = None,
-    id: Annotated[Optional[int], typer.Option(help="Filter by query ID")] = None,
+    id: Annotated[int | None, typer.Option(help="Filter by query ID")] = None,
     status: Annotated[
-        Optional[str],
+        str | None,
         typer.Option(help="Filter by status: SUCCESS, FAIL, WARNING, TIMEOUT"),
     ] = None,
     since: Annotated[
-        Optional[str],
+        str | None,
         typer.Option(help="Show logs after this time, e.g. 2026-05-07T17:00:00Z"),
     ] = None,
     limit: Annotated[int, typer.Option(help="Number of results")] = 10,
     before: Annotated[
-        Optional[str],
+        str | None,
         typer.Option(
             help="Next-page cursor: start_ts of last row from previous result"
         ),
@@ -697,18 +717,18 @@ def get_logs(
 @app.command()
 def get_alerts(
     profile: ProfileOption = None,
-    id: Annotated[Optional[int], typer.Option(help="Filter by query ID")] = None,
+    id: Annotated[int | None, typer.Option(help="Filter by query ID")] = None,
     since: Annotated[
-        Optional[str],
+        str | None,
         typer.Option(help="Show alerts after this time, e.g. 2026-05-07T17:00:00Z"),
     ] = None,
     before: Annotated[
-        Optional[str],
+        str | None,
         typer.Option(help="Show alerts before this time, e.g. 2026-05-07T18:00:00Z"),
     ] = None,
     limit: Annotated[int, typer.Option(help="Number of results")] = 10,
     after_id: Annotated[
-        Optional[int],
+        int | None,
         typer.Option(help="Next-page cursor: last alert ID from previous result"),
     ] = None,
 ) -> None:
@@ -730,10 +750,10 @@ def get_alerts(
 @app.command()
 def disable_alerts(
     profile: ProfileOption = None,
-    id: Annotated[Optional[int], typer.Option(help="Query ID")] = None,
-    path: Annotated[Optional[str], typer.Option(help="Query path")] = None,
+    id: Annotated[int | None, typer.Option(help="Query ID")] = None,
+    path: Annotated[str | None, typer.Option(help="Query path")] = None,
     entity_id: Annotated[
-        Optional[int], typer.Option(help="Entity ID (for path lookup)")
+        int | None, typer.Option(help="Entity ID (for path lookup)")
     ] = None,
 ) -> None:
     """Disable notifications for a query (materialization is left unchanged). Specify with --id <query_id> or --path /Folder/QueryName."""
@@ -754,10 +774,10 @@ def disable_alerts(
 @app.command()
 def reset_materialization(
     profile: ProfileOption = None,
-    id: Annotated[Optional[int], typer.Option(help="Query ID")] = None,
-    path: Annotated[Optional[str], typer.Option(help="Query path")] = None,
+    id: Annotated[int | None, typer.Option(help="Query ID")] = None,
+    path: Annotated[str | None, typer.Option(help="Query path")] = None,
     entity_id: Annotated[
-        Optional[int], typer.Option(help="Entity ID (for path lookup)")
+        int | None, typer.Option(help="Entity ID (for path lookup)")
     ] = None,
 ) -> None:
     """Reset the materialized table for a query, forcing a full recompute on next run. Specify with --id <query_id> or --path /Folder/QueryName."""
@@ -777,7 +797,7 @@ def reset_materialization(
 def list_alerts(
     profile: ProfileOption = None,
     entity_id: Annotated[
-        Optional[int], typer.Option(help="Entity ID (defaults to your own)")
+        int | None, typer.Option(help="Entity ID (defaults to your own)")
     ] = None,
 ) -> None:
     """List all queries that currently have alerts enabled."""
@@ -807,29 +827,22 @@ def list_alerts(
 def preprocess_query(
     id: Annotated[int, typer.Option(help="Query ID for macro context")],
     query_text: Annotated[
-        Optional[str], typer.Argument(help="SQL text (omit to use stored query text)")
+        str | None, typer.Argument(help="SQL text (omit to use stored query text)")
     ] = None,
     profile: ProfileOption = None,
     entity_id: Annotated[
-        Optional[int], typer.Option(help="Entity ID (defaults to your own)")
+        int | None, typer.Option(help="Entity ID (defaults to your own)")
     ] = None,
     network: Annotated[
-        Optional[str], typer.Option(help="Network name, e.g. ethereum")
+        str | None, typer.Option(help="Network name, e.g. ethereum")
     ] = None,
 ) -> None:
     """Render DedaubQL macros and print the resulting SQL. Omit SQL to use the stored query text."""
     client, _ = _load_client(profile)
     try:
-        if query_text is None:
-            if sys.stdin.isatty():
-                q = client.get_query(id)
-                query_text = q.get("query_text", "")
-                if entity_id is None:
-                    entity_id = q["owner"]["entity_id"]
-            else:
-                query_text = sys.stdin.read()
-        if entity_id is None:
-            entity_id = client.get_query(id)["owner"]["entity_id"]
+        query_text, entity_id = _resolve_query_text_and_owner(
+            client, id, query_text, entity_id
+        )
         result = client.preview_query(query_text, id, entity_id, network)
     except NotFoundError as e:
         err.print(str(e))
@@ -843,29 +856,22 @@ def preprocess_query(
 def explain_query(
     id: Annotated[int, typer.Option(help="Query ID for macro context")],
     query_text: Annotated[
-        Optional[str], typer.Argument(help="SQL text (omit to use stored query text)")
+        str | None, typer.Argument(help="SQL text (omit to use stored query text)")
     ] = None,
     profile: ProfileOption = None,
     entity_id: Annotated[
-        Optional[int], typer.Option(help="Entity ID (defaults to your own)")
+        int | None, typer.Option(help="Entity ID (defaults to your own)")
     ] = None,
     network: Annotated[
-        Optional[str], typer.Option(help="Network name, e.g. ethereum")
+        str | None, typer.Option(help="Network name, e.g. ethereum")
     ] = None,
 ) -> None:
     """Print the query explanation (dependency analysis). Omit SQL to use the stored query text."""
     client, _ = _load_client(profile)
     try:
-        if query_text is None:
-            if sys.stdin.isatty():
-                q = client.get_query(id)
-                query_text = q.get("query_text", "")
-                if entity_id is None:
-                    entity_id = q["owner"]["entity_id"]
-            else:
-                query_text = sys.stdin.read()
-        if entity_id is None:
-            entity_id = client.get_query(id)["owner"]["entity_id"]
+        query_text, entity_id = _resolve_query_text_and_owner(
+            client, id, query_text, entity_id
+        )
         lines = client.explain_query(query_text, id, entity_id, network)
     except NotFoundError as e:
         err.print(str(e))
@@ -879,7 +885,10 @@ def explain_query(
 def install_skill() -> None:
     """Install the Claude Code /dedaub-monitoring skill to ~/.claude/skills/dedaub-monitoring/SKILL.md."""
     dest = Path.home() / ".claude" / "skills" / "dedaub-monitoring" / "SKILL.md"
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    src = files("monitoring_cli.skills").joinpath("SKILL.md")
-    dest.write_text(src.read_text(encoding="utf-8"), encoding="utf-8")
+    try:
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        src = files("monitoring_cli.skills").joinpath("SKILL.md")
+        dest.write_text(src.read_text(encoding="utf-8"), encoding="utf-8")
+    except OSError as e:
+        _exit_error(e)
     typer.echo(f"Skill installed to {dest}")

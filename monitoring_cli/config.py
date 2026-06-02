@@ -27,12 +27,21 @@ class Config:
     def load(cls) -> Config:
         if not CONFIG_PATH.exists():
             raise NotLoggedInError()
-        data = json.loads(CONFIG_PATH.read_text())
-        profiles = {k: Profile(**v) for k, v in data["profiles"].items()}
-        return cls(default=data["default"], profiles=profiles)
+        try:
+            data = json.loads(CONFIG_PATH.read_text())
+            profiles = {k: Profile(**v) for k, v in data["profiles"].items()}
+            return cls(default=data["default"], profiles=profiles)
+        except (json.JSONDecodeError, KeyError, TypeError) as e:
+            raise ConfigError(
+                f"Config file at {CONFIG_PATH} is corrupt or outdated: {e}"
+            ) from e
 
     def save(self) -> None:
-        CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
+        parent = CONFIG_PATH.parent
+        # mode= is subject to umask and skipped when the dir already exists,
+        # so enforce owner-only perms explicitly to protect the refresh token.
+        parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        parent.chmod(0o700)
         data = {
             "default": self.default,
             "profiles": {k: asdict(v) for k, v in self.profiles.items()},
@@ -69,3 +78,7 @@ class NotLoggedInError(Exception):
 class ProfileNotFoundError(Exception):
     def __init__(self, name: str) -> None:
         super().__init__(f"Profile '{name}' not found")
+
+
+class ConfigError(Exception):
+    pass
