@@ -1,7 +1,7 @@
 # PancakeSwap Infinity (V4) — Compressed Reference (BSC, Base)
 
 **Status:** CL event topic0s via `cast keccak` from `pancakeswap/infinity-core` source (verified); core addresses on-chain re-verified with `cast` vs `publicnode` (2026-05). Bin-pool events + non-BSC addresses partly sourced/UNVERIFIED — see §Verification.
-**Scope:** PancakeSwap **Infinity** (its "V4" — a singleton + hooks architecture, launched ~Mar 2025). Two AMM types share one accounting **Vault**: **CLPoolManager** (concentrated liquidity) and **BinPoolManager** (liquidity-book / bins). Deployed on **BSC and Base**. Other versions: [`v2.md`](v2.md), [`v3.md`](v3.md), [`stableswap.md`](stableswap.md). Shared CAKE/router: [`v2.md`](v2.md).
+**Scope:** PancakeSwap **Infinity** (its "V4" — a singleton + hooks architecture; BSC mainnet launch **April 28, 2025**, Base deployment **July 22, 2025**). Two AMM types share one accounting **Vault**: **CLPoolManager** (concentrated liquidity) and **BinPoolManager** (liquidity-book / bins). Deployed on **BSC and Base**. Other versions: [`v2.md`](v2.md), [`v3.md`](v3.md), [`stableswap.md`](stableswap.md). Shared CAKE/router: [`v2.md`](v2.md).
 **Key facts:** Singleton design (like Uniswap V4) — pools are **not** separate contracts; they live inside the PoolManagers, keyed by a `PoolId` (bytes32). All swap/liquidity events emit from the **CLPoolManager / BinPoolManager**, and token settlement flows through the **Vault** (transient accounting, EIP-1153). Per-pool **hooks** are supported. Pancake's events differ from Uniswap V4's (different field layouts) → Pancake-specific topic0s.
 
 ---

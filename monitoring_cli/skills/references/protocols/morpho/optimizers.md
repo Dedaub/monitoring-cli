@@ -1,6 +1,6 @@
 # Morpho Optimizers (legacy, deprecated) — Topics, Selectors, Addresses (Ethereum only)
 
-**Status:** verified against live Ethereum RPC on 2026-05-29 and the `morpho-org/morpho-optimizers` (Compound + Aave-V2) and `morpho-org/morpho-aave-v3` (Aave-V3 ETH Optimizer) repos. **Deprecated** — wind-down governed by [MIP-120](https://forum.morpho.org/t/mip-120-compound-v2-and-aave-v2-optimizers-deprecation-final-phase/2038) (Compound V2 + Aave V2 final-phase deprecation). The successor is Morpho Blue ([v1.md](v1.md)); index in [README.md](README.md).
+**Status:** verified against live Ethereum RPC on 2026-05-29 and the `morpho-org/morpho-optimizers` (Compound + Aave-V2) and `morpho-org/morpho-aave-v3` (Aave-V3 ETH Optimizer) repos. **Fully deprecated** — all three Optimizers are wound down: Compound V2 + Aave V2 via [MIP-120](https://forum.morpho.org/t/mip-120-compound-v2-and-aave-v2-optimizers-deprecation-final-phase/2038) (final-phase deprecation), and the Aave V3 ETH Optimizer via [MIP-121](https://forum.morpho.org/t/mip-121-aave-v3-optimizer-full-deprecation/2055) (full deprecation). Morpho V0 was deprecated on 2025-12-17 (the `morpho-aavev3-optimizer` repo was archived 2025-12-18). The successor is Morpho Blue ([v1.md](v1.md)); index in [README.md](README.md).
 **Scope:** the **first generation** of Morpho — a peer-to-peer matching *overlay* on top of Aave V2, Aave V3, and Compound V2. Deposits/borrows are matched P2P at an improved rate when possible, otherwise fall back to the underlying pool. **Ethereum mainnet only** (these were never multi-chain). Three independent instances. Kept here for historical position/event detection; do not build new integrations against them.
 
 Unlike Morpho Blue, the Optimizers are **upgradeable** — each is a `TransparentUpgradeableProxy` (EIP-1967) behind a shared `ProxyAdmin`. Read the impl slot, don't assume the logic address.
@@ -22,7 +22,7 @@ Unlike Morpho Blue, the Optimizers are **upgradeable** — each is a `Transparen
 | **Optimizer ProxyAdmin** | `0x99917ca0426fbc677e84f873fb0b726bb4799cd8` | 1827 B | Admin of all three optimizer proxies (+ Lenses). |
 | RewardsDistributor (MORPHO) | `0x3B14E5C73e0A56D607A8688098326fD4b4292135` | 2219 B | Merkle distributor for optimizer MORPHO rewards. |
 
-The Aave-V3 optimizer (`0x33333…`) is the only one with meaningful residual life; Compound (`0x8888…`) and Aave-V2 (`0x7777…`) are fully deprecated. All three are Ethereum-only.
+All three Optimizers are fully deprecated: Compound (`0x8888…`) and Aave-V2 (`0x7777…`) via MIP-120, and the Aave-V3 optimizer (`0x33333…`) via MIP-121. The proxies retain code on-chain (existence-checked via `eth_getCode`) but markets are wound down; expect ~zero new activity. All three are Ethereum-only.
 
 ---
 
@@ -142,4 +142,4 @@ OPT_REWARDS_DISTRIBUTOR = '\x3b14e5c73e0a56d607a8688098326fd4b4292135'
 
 - Event topics computed locally (`keccak256(sig)`) from `morpho-org/morpho-optimizers` (`compound/PositionsManager.sol`, `aave-v2/Entry/ExitPositionsManager.sol`) and `morpho-org/morpho-aave-v3` (`src/libraries/Events.sol`); `Supplied` topic validated against live Aave-V3-optimizer logs (5 hits at block 18,000,000–18,040,000).
 - Proxy impls read live from EIP-1967 slot on 2026-05-29; all three share ProxyAdmin `0x99917ca0…9cd8`. Addresses existence-checked via `eth_getCode`.
-- [`morpho-org/morpho-optimizers`](https://github.com/morpho-org/morpho-optimizers) · [`morpho-org/morpho-aave-v3`](https://github.com/morpho-org/morpho-aave-v3) · [MIP-120 deprecation](https://forum.morpho.org/t/mip-120-compound-v2-and-aave-v2-optimizers-deprecation-final-phase/2038) · [optimizers.morpho.org](https://optimizers.morpho.org/).
+- [`morpho-org/morpho-optimizers`](https://github.com/morpho-org/morpho-optimizers) · [`morpho-org/morpho-aave-v3`](https://github.com/morpho-org/morpho-aave-v3) · [MIP-120 deprecation](https://forum.morpho.org/t/mip-120-compound-v2-and-aave-v2-optimizers-deprecation-final-phase/2038) · [MIP-121 (Aave V3 Optimizer full deprecation)](https://forum.morpho.org/t/mip-121-aave-v3-optimizer-full-deprecation/2055) · [optimizers.morpho.org](https://optimizers.morpho.org/).

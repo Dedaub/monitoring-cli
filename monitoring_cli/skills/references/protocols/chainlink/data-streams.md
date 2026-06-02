@@ -66,7 +66,7 @@ The on-chain `verify()` return is ABI-encoded; decode into the schema matching t
 
 ## Data Streams — VerifierProxy addresses per chain
 
-All verified non-empty bytecode, 2026-05-29 (Ethereum/ARB/Base/OP/AVAX ≈ 14020 B; the shared **BNB+Polygon** proxy is a different, smaller build at 7009 B).
+All verified non-empty bytecode, 2026-05-29 — every listed VerifierProxy returns identical 7009-byte runtime bytecode (14018 hex chars; 14020 including the `0x` prefix) on all seven chains. There are two byte-distinct builds (Ethereum/BNB/Polygon vs Arbitrum/Base/Optimism/Avalanche), but both are the same 7009-byte size — there is no separate "smaller build" for BNB/Polygon.
 
 | Chain | chainId | VerifierProxy | Verified |
 |-------|---------|---------------|----------|

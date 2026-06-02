@@ -432,31 +432,6 @@ Authoritative sources:
 - Sourcify: `https://sourcify.dev/server/v2/contract/<chainId>/<address>`
 - Explorers: [Etherscan](https://etherscan.io/address/0x8a2ddc0461Fcf96F81a05529Bed540d4f1eb2a00) · [Basescan](https://basescan.org/address/0xaEC634d949df14Be76dC317504C7b9a6a8A5f576) · [BscScan](https://bscscan.com/address/0xF064b069Ed18Eb5c61159247C55C5af79B28a968) · [Arbiscan](https://arbiscan.io/address/0x0FC85a171bD0b53BF0bBace74F04B66170Ae3eAb)
 
-### Verification.1 Independent fact-check (2026-06-02) — ✅ all swap-side claims confirmed, no corrections
-
-6 non-obvious claims were cross-checked against the official docs addresses page, the `Native-org`
-GitHub org, DefiLlama, and block explorers. Verdicts:
-
-1. **Swap-side contract set is complete (Router V4/V3, RFQPool, Bridge).** — ✅ confirmed. The docs
-   addresses page lists exactly NativeRouter V4, NativeRouter V3, CreditVault, NativeBridge for the four
-   chains; no additional swap-side contract (no separate aggregator, widget, or quoter contract) is
-   published. The `Native-org` org has only two public repos (`native-v2-core`, `public-lists`).
-2. **No standalone Native governance/token/staking contract exists** to add to the swap doc. — ✅ confirmed
-   (no `NATIVE`/`N` ERC-20, airdrop, or staking contract found in docs, GitHub, or search).
-3. **Routers/Pool/Bridge are immutable (not proxies).** — ✅ confirmed (EIP-1967 slots empty; re-read live).
-4. **`RFQTrade` is emitted by the pool, not the router.** — ✅ confirmed (live `eth_getLogs` on the ETH pool).
-5. **All listed ETH/BNB/Arb/Base addresses are current** (match the live docs page verbatim). — ✅ confirmed.
-6. **Chain coverage = ETH/BNB/Arb/Base only among our 7 targets; absent on Avalanche/Optimism/Polygon.**
-   — ✅ confirmed. ⚠️ *Scope note (not a correction):* DefiLlama has historically attributed Native
-   **dexVolume** to **Mantle, Monad, ZetaChain, and zkLink Nova** as well. Those chains are **outside the
-   seven target chains** of this reference and are **not** in Native's official docs addresses page, so
-   they are out of scope here — but if monitoring expands beyond the seven chains, re-check Mantle/Monad
-   for a NativeRouter/NativeBridge deployment (DefiLlama volume there may be Native's *aggregator routing*
-   rather than a native deployment; unverified).
-
-**Net corrections folded in:** none — all swap-side claims confirmed. Added the Mantle/Monad/ZetaChain/zkLink
-out-of-scope note above.
-
 ### UNVERIFIED / open items
 
 - **NativeRFQPool addresses on Base / BNB / Arbitrum** are not yet determinable: routers are deployed but no `NativePoolUpdated` has fired in their (short) history as of 2026-06-02. Re-scan `NativePoolUpdated` forward to capture pools when registered.

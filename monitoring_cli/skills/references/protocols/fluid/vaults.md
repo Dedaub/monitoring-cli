@@ -31,7 +31,7 @@
 
 ## Addresses (network-specific)
 
-> Per-chain-specific (NOT deterministic) — L2 addresses from Fluid docs + verify on-chain. ✓ = verified this run.
+> The **VaultFactory** is deployed at the **same address `0x324c5Dc1fC42c7a4D43d92df1eBA58a54d13Bf2d` on Ethereum, Arbitrum, Base, and Polygon** (deterministic salt deploy) — `name()`="Fluid Vault", `symbol()`="fVLT" on all four. The **individual vault (market) addresses are per-chain-specific** (enumerate via the factory). L2 vault lists from Fluid docs + verify on-chain. ✓ = verified this run.
 
 ### Ethereum (1)
 ```
@@ -39,8 +39,11 @@
 # Individual vault (market) addresses: enumerate via VaultFactory (LogVaultDeployed) / FluidVaultResolver.
 ```
 
-### Arbitrum / Base / Polygon
-VaultFactory + individual vault addresses are per-chain — pull from the Fluid docs contract-addresses page and verify (`cast code` + `totalVaults()`). Liquidity proxy (where vault balances settle) per chain: see [`liquidity-layer.md`](liquidity-layer.md).
+### Arbitrum (42161) / Base (8453) / Polygon (137)
+```
+0x324c5Dc1fC42c7a4D43d92df1eBA58a54d13Bf2d -> VaultFactory (same address as Ethereum, all three chains ✓; name "Fluid Vault" ✓, symbol "fVLT" ✓; totalVaults Arbitrum 88 ✓, Base 48 ✓, Polygon 29 ✓)
+```
+The **VaultFactory address is identical to Ethereum** on each of these chains; only the **individual vault (market) addresses differ per chain** — enumerate via the factory (`LogVaultDeployed` / FluidVaultResolver) and verify (`cast code` + `totalVaults()`). Liquidity proxy (where vault balances settle) per chain: see [`liquidity-layer.md`](liquidity-layer.md).
 
 ---
 
@@ -61,5 +64,5 @@ VaultFactory + individual vault addresses are per-chain — pull from the Fluid 
 
 ## Verification & sources
 - topic0: `cast keccak` from `Instadapp/fluid-contracts-public` `contracts/protocols/vault/vaultT1/coreModule/events.sol` (events read verbatim). T1 core; T2–T4 extend.
-- Addresses: Ethereum VaultFactory verified on-chain (`name()`="Fluid Vault", `totalVaults()`=169). L2 not verified here.
+- Addresses: VaultFactory verified on-chain at the same address `0x324c5Dc1fC42c7a4D43d92df1eBA58a54d13Bf2d` on Ethereum, Arbitrum, Base, and Polygon (`name()`="Fluid Vault", `symbol()`="fVLT" on all four; `totalVaults()` = 169 Ethereum / 88 Arbitrum / 48 Base / 29 Polygon). Individual vault (market) addresses are per-chain — enumerate via the factory.
 - Source: [`Instadapp/fluid-contracts-public`](https://github.com/Instadapp/fluid-contracts-public) · Fluid docs (FluidVaultResolver for live vault enumeration).

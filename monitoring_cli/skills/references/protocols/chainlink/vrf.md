@@ -147,7 +147,7 @@ Wrappers (direct funding), all verified live:
 
 > The AVAX v2 wrapper shares its address with the BNB v2 wrapper (`0x721DFbc5…`) — another deterministic-deploy collision; verified live on **both** AVAX (8168 B) and BNB.
 
-**BlockhashStore (Ethereum):** `0xaA25602bcCf3bBdE8E2F0F09F3a1F6dE54593C0` — shared by the v2 and v2.5 coordinators (read live from `BLOCKHASH_STORE()` = `0x689c4517` on both). For other chains, call `BLOCKHASH_STORE()` on that chain's coordinator and `eth_getCode`-verify.
+**BlockhashStore (Ethereum):** `0xAA25602bccF3bBdE8E2F0F09f3a1f6DEF54593c0` — shared by the v2 and v2.5 coordinators (read live from `BLOCKHASH_STORE()` = `0x689c4517` on both). For other chains, call `BLOCKHASH_STORE()` on that chain's coordinator and `eth_getCode`-verify.
 
 ---
 
@@ -185,7 +185,7 @@ SEL_REQUEST_RANDOM_NATIVE   = '\x9cfc058e'
 ETH_VRF_V2_5  = '\xd7f86b4b8cae7d942340ff628f82735b7a20893a'
 ETH_VRF_V2    = '\x271682deb8c4e0901d1a1550ad2e64d568e69909'
 ETH_VRF_V1    = '\xf0d54349addcf704f77ae15b96510dea15cb7952'
-ETH_BLOCKHASH_STORE = '\xaa25602bccf3bbde8e2f0f09f3a1f6de54593c0'
+ETH_BLOCKHASH_STORE = '\xaa25602bccf3bbde8e2f0f09f3a1f6def54593c0'
 ```
 
 ---

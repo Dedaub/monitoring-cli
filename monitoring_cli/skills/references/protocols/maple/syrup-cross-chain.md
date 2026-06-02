@@ -24,7 +24,7 @@
 
 **Of the 6 non-Ethereum chains: only Base+Arbitrum carry syrupUSDC, only BNB carries syrupUSDT, and SYRUP OFT is only on Base.** Optimism, Polygon, and Avalanche have **no** Maple deployment of any kind.
 
-> ⚠️ **Impostor tokens** named "Maple syrup" exist on Polygon (`0x6d1e6ba0097de189efe88265378244e48d6f0be6`) and BNB (`0x63551015d3d6d79a98b37f217fd99524385db503`) — **0 supply / unrelated**. Exclude them.
+> ⚠️ **Impostor tokens** named "Maple syrup" exist on Polygon (`0x6d1e6ba0097de189efe88265378244e48d6f0be6`, **0 supply**) and BNB (`0x63551015d3d6d79a98b37f217fd99524385db503`, **large non-zero supply** ≈ `0x…4e18e40a48b3f380196c0000000`) — both **unrelated** to Maple. Exclude them.
 
 ---
 

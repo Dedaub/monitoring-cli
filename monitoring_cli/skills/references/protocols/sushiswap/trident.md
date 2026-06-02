@@ -2,7 +2,7 @@
 
 **Status:** topic0/selectors via `cast keccak`/`cast sig`. **Trident is largely deprecated/wound down** — addresses are NOT exhaustively enumerated here; pull them from the `sushi-labs/sushi` SDK (`bentobox`/`trident` features) and confirm on a block explorer before use.
 **Scope:** SushiSwap **Trident** — the BentoBox-based AMM framework (ConstantProduct / Stable / Hybrid pools). Other versions: [`v2.md`](v2.md) (classic AMM), [`v3.md`](v3.md) (concentrated liquidity). **Protocol-wide pieces** (SUSHI token, MasterChef/MiniChef staking, RedSnwapper/RouteProcessor router) are in [`v2.md`](v2.md).
-**Where deployed:** mainly Polygon, Arbitrum, Optimism, Avalanche, BSC (Trident never ran on Ethereum mainnet). It has minimal current activity.
+**Where deployed:** Ethereum mainnet plus Polygon, Arbitrum, Optimism, Avalanche, BSC (and others: BTTC, Fantom, Gnosis, Kava, Metis). It has minimal current activity. On Ethereum the `MasterDeployer` is at `0x10c19390e1ac2fd6d0c3643a2320b0aba38e5baa` (live on-chain).
 
 ---
 
@@ -21,11 +21,11 @@
 ### MasterDeployer + Trident pools
 ```
 0xe469f9471ac1d98222517eb2cdff1ef4df5f7880269173bb782bb78e499d9de3 -> DeployPool(address,address,bytes)            [MasterDeployer: factory,pool,deployData]
-0xcd3829a3813dc3cdd188fd3d01dcf3268c16be2fdd2dd21d0665418816e46062 -> Swap(address,address,address,uint256,uint256)   [CP pool: recipient,tokenIn,tokenOut,amountIn,amountOut — UNVERIFIED vs source]
-0xcf2aa50876cdfbb541206f89af0ee78d44a2abf8d328e37fa4917f982149848a -> Sync(uint256,uint256)                          [Trident pool — UNVERIFIED vs source]
+0xcd3829a3813dc3cdd188fd3d01dcf3268c16be2fdd2dd21d0665418816e46062 -> Swap(address,address,address,uint256,uint256)   [CP pool: recipient,tokenIn,tokenOut,amountIn,amountOut — verified against source]
+0xcf2aa50876cdfbb541206f89af0ee78d44a2abf8d328e37fa4917f982149848a -> Sync(uint256,uint256)                          [Trident pool — verified against source]
 ```
 
-> **Caveat:** the Trident CP-pool `Swap`/`Sync` signatures are best-effort and **NOT verified against deployed source** (Trident is deprecated and the source wasn't re-read this run). Confirm against an actual deployed pool before relying on these two topic0s. BentoBox `Log*` and `DeployPool` are computed from well-established signatures.
+> **Note:** the Trident CP-pool `Swap`/`Sync` topic0s are verified against the canonical source — `IPool.sol` declares `event Swap(address indexed recipient, address indexed tokenIn, address indexed tokenOut, uint256 amountIn, uint256 amountOut)` and `ConstantProductPool.sol` declares `event Sync(uint256 reserve0, uint256 reserve1)`; both topic0s recompute to the listed values. BentoBox `Log*` and `DeployPool` are computed from well-established signatures.
 
 ---
 
@@ -45,7 +45,7 @@ deployPool(address,bytes) -> address
 
 ## Addresses (network-specific)
 
-**Not enumerated (deprecated).** Trident's `BentoBoxV1`, `MasterDeployer`, `ConstantProductPoolFactory`, and `StablePoolFactory` live mainly on Polygon / Arbitrum / Optimism / Avalanche / BSC. Pull current addresses from the `sushi-labs/sushi` SDK (`src/evm/config/features/` bentobox/trident files) and verify on-chain (`cast code` + a functional call) before use. BentoBoxV1 has historically been at `0xF5BCE5077908a1b7370B9ae04AdC565EBd643966` on several chains — **treat as UNVERIFIED here; confirm on the target chain.**
+**Not enumerated (deprecated).** Trident's `BentoBoxV1`, `MasterDeployer`, `ConstantProductPoolFactory`, and `StablePoolFactory` live mainly on Polygon / Arbitrum / Optimism / Avalanche / BSC. Pull current addresses from the `sushi-labs/sushi` SDK (`src/evm/config/features/` bentobox/trident files) and verify on-chain (`cast code` + a functional call) before use. BentoBoxV1 is at `0xf5bce5077908a1b7370b9ae04adc565ebd643966` on Ethereum, Polygon, and BNB (present on-chain, ≈22.8 KB) but is **absent at that address on Arbitrum, Optimism, and Avalanche** — on Arbitrum the SushiSwap BentoBoxV1 lives at `0x74c764d41b77dbbb4fe771dab1939b00b146894a` instead. **The address differs per chain; confirm on the target chain before use.**
 
 Enumerate live Trident pools via the `MasterDeployer.DeployPool` event (topic0 `0xe469f947…`).
 
@@ -59,6 +59,6 @@ Enumerate live Trident pools via the `MasterDeployer.DeployPool` event (topic0 `
 
 ## Verification & sources
 
-- topic0s: `cast keccak` this session. BentoBox `Log*` + `DeployPool` from well-established signatures; **Trident pool `Swap`/`Sync` are UNVERIFIED** (deprecated; source not re-read).
+- topic0s: `cast keccak`. BentoBox `Log*` + `DeployPool` from well-established signatures; Trident pool `Swap`/`Sync` verified against the canonical `sushiswap/trident` source (`IPool.sol` / `ConstantProductPool.sol`).
 - Addresses: not gathered/verified this run (deprecated) — source from [`sushi-labs/sushi`](https://github.com/sushi-labs/sushi) and confirm on-chain.
 - Protocol-wide SUSHI/staking/router: [`v2.md`](v2.md).

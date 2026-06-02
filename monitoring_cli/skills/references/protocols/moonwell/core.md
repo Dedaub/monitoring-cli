@@ -170,7 +170,7 @@ Selectors = `keccak256(canonical signature)[0:4]`, verified against deployed byt
 | `0x4e79238f` | `getHypotheticalAccountLiquidity(address,address,uint256,uint256)` | What-if liquidity check. |
 | `0xabfceffc` | `getAssetsIn(address)` | mTokens the account has entered. |
 | `0x929fe9a1` | `checkMembership(address account, address mToken)` | |
-| `0xb0772d0b` | `getAllMarkets()` | All listed mTokens (Base = 21, OP = 13 as of 2026-05). |
+| `0xb0772d0b` | `getAllMarkets()` | All listed mTokens (Base = 21, OP = 14 as of 2026-06 — the OP array retains the deprecated VELO market). Re-read live rather than hardcoding. |
 | `0x8e8f294b` | `markets(address mToken)` | `(bool isListed, uint collateralFactorMantissa, ...)` |
 | `0x7dc0d1d0` | `oracle()` | The ChainlinkOracle address. |
 | `0xe8755446` | `closeFactorMantissa()` | Max fraction of debt repayable per liquidation. |
@@ -347,7 +347,7 @@ All verified via `eth_getCode` on `https://optimism-rpc.publicnode.com`. Launche
 | xWELL_PROXY (WELL) | `0xA88594D404727625A9437C3f886C7643872296AE` | Same canonical xWELL. |
 | stkWELL | `0xfB26A4947A38cb53e2D083c6490060CCCE7438c5` | |
 
-### 4.2 mToken markets (13)
+### 4.2 mToken markets (13 active; `getAllMarkets()` returns 14 — it also retains the deprecated VELO market)
 
 | mToken | Address | Underlying | Underlying addr |
 |--------|---------|-----------|-----------------|
@@ -365,7 +365,7 @@ All verified via `eth_getCode` on `https://optimism-rpc.publicnode.com`. Launche
 | MOONWELL_wstETH | `0xbb3b1aB66eFB43B10923b87460c0106643B83f9d` | wstETH | `0x1F32b1c2345538c0c6f582fCB022739c4A194Ebb` |
 | MOONWELL_VELO | `0x866b838b97Ee43F2c818B3cb5Cc77A0dc22003Fc` | VELO | `0x9560e827aF36c94D2Ac33a39bCE1Fe78631088Db` |
 
-> `DEPRECATED_MOONWELL_VELO` = `0x21d851585840942B0eF9f20d842C00C5f3735eaF` (old VELO market; excluded from `getAllMarkets()`).
+> `DEPRECATED_MOONWELL_VELO` = `0x21d851585840942B0eF9f20d842C00C5f3735eaF` (old VELO market; **still present in `getAllMarkets()`** — Compound's market array retains deprecated markets rather than removing them, so the on-chain count is 14 while only 13 are active). Distinguish the active VELO market (`0x866b838b97Ee43F2c818B3cb5Cc77A0dc22003Fc`) from this deprecated one by address.
 
 ### 4.3 Active IRMs (Optimism)
 
@@ -416,7 +416,7 @@ All verified via `eth_getCode` on `https://optimism-rpc.publicnode.com`. Launche
 | Chain | ID | Lending? | Unitroller | Comptroller impl | ChainlinkOracle | TemporalGovernor | Markets |
 |-------|----|---------|-----------|------------------|-----------------|------------------|---------|
 | Base | 8453 | ✅ | `0xfBb21d03…F26C` | `0x73D8A3bF…d8Fe` | `0xEC942bE8…a9d0` | `0x8b621804…7d51` | 21 |
-| Optimism | 10 | ✅ | `0xCa889f40…11B9` | `0x8dFBb21d…0Ce2` | `0x2f1490bD…6dcf` | `0x17C9ba3f…fF3d` | 13 |
+| Optimism | 10 | ✅ | `0xCa889f40…11B9` | `0x8dFBb21d…0Ce2` | `0x2f1490bD…6dcf` | `0x17C9ba3f…fF3d` | 14 (`getAllMarkets()`; 13 active + deprecated VELO) |
 | Ethereum | 1 | ❌ (gov+token only) | — | — | — | — | 0 |
 | BNB / Avalanche / Arbitrum / Polygon | 56/43114/42161/137 | ❌ (not deployed) | — | — | — | — | 0 |
 

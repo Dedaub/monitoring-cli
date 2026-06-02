@@ -12,7 +12,7 @@ Data Feeds use a **proxy → aggregator** split. Consumers always read a stable 
 | Contract | Role / 1-liner |
 |----------|----------------|
 | **`EACAggregatorProxy`** (= `AggregatorProxy` + access control) | The stable, per-feed address every consumer calls. Forwards reads to `aggregator()`; encodes `phaseId` into the high bits of `roundId`. Owner can `proposeAggregator`/`confirmAggregator`. `version()` returns 4 or 6. **This is what every "feed address" below is.** |
-| **`AccessControlledOffchainAggregator`** | The current OCR (Off-Chain Reporting) aggregator behind the proxy, with a `SimpleReadAccessController` read gate. Oracles submit one aggregated signed report per round via `transmit()`. Emits `NewTransmission` + `AnswerUpdated` + `NewRound`. `typeAndVersion()` ≈ `"AccessControlledOffchainAggregator 4.0.0"`. |
+| **`AccessControlledOCR2Aggregator`** / **`AccessControlledOffchainAggregator`** | The current OCR (Off-Chain Reporting) aggregator behind the proxy, with a `SimpleReadAccessController` read gate. Oracles submit one aggregated signed report per round via `transmit()`. Emits `NewTransmission` + `AnswerUpdated` + `NewRound`. Live `typeAndVersion()` varies by feed/generation — most canonical feeds today are **OCR2** (`"AccessControlledOCR2Aggregator 1.0.0"`, observed on the ETH/USD aggregators on Ethereum, BNB, Arbitrum); older feeds are **OCR1** (`"AccessControlledOffchainAggregator 3.0.0"`, observed on Optimism ETH/USD). OCR1 and OCR2 differ in their `transmit` selector and `NewTransmission` topic0 (see §2.1 / §3.3). |
 | **`OffchainAggregator`** | Same as above without the read-access gate. Base OCR contract. |
 | **`FluxAggregator`** | Legacy pre-OCR aggregator: each oracle calls `submit()` individually, on-chain median. Emits `SubmissionReceived`, `NewRound`, `AnswerUpdated`. Still behind older feeds/historical phases — relevant for historical log scans. |
 | **`AggregatorFacade`** | Compatibility shim wrapping a bare aggregator to expose the full `AggregatorV2V3Interface`. |
@@ -32,7 +32,8 @@ Data Feeds use a **proxy → aggregator** split. Consumers always read a stable 
 |--------|-------|---------|
 | `0x0559884fd3a460db3073b7fc896cc77986f16e378210ded43186175bf646fc5f` | `AnswerUpdated(int256 indexed current, uint256 indexed roundId, uint256 updatedAt)` | aggregator — **the workhorse price-update event** |
 | `0x0109fc6f55cf40689f02fbaad7af7fe7bbac8a3d2186600afc7d3e10cac60271` | `NewRound(uint256 indexed roundId, address indexed startedBy, uint256 startedAt)` | aggregator |
-| `0xf6a97944f31ea060dfde0566e4167c1a1082551e64b60ecb14d599a9d023d451` | `NewTransmission(uint32 indexed aggregatorRoundId, int192 answer, address transmitter, int192[] observations, bytes observers, bytes32 rawReportContext)` | OCR aggregator — fires once per OCR round; `answer` is the new price |
+| `0xf6a97944f31ea060dfde0566e4167c1a1082551e64b60ecb14d599a9d023d451` | `NewTransmission(uint32 indexed aggregatorRoundId, int192 answer, address transmitter, int192[] observations, bytes observers, bytes32 rawReportContext)` | **OCR1** aggregator (`OffchainAggregator`) — fires once per OCR round; `answer` is the new price |
+| `0xc797025feeeaf2cd924c99e9205acb8ec04d5cad21c41ce637a38fb6dee6016a` | `NewTransmission(uint32 indexed aggregatorRoundId, …)` — **OCR2** variant (extra config-digest/epoch fields in the unindexed tail; `aggregatorRoundId` still the sole indexed arg) | **OCR2** aggregator (`OCR2Aggregator`) — fires once per OCR2 round; **this is the topic0 the canonical ETH/USD feeds emit today**, not `0xf6a97944…` |
 | `0x25d719d88a4512dd76c7442b910a83360845505894eb444ef299409e180f8fb9` | `ConfigSet(uint32 previousConfigBlockNumber, uint64 configCount, address[] signers, address[] transmitters, uint8 threshold, uint64 encodedConfigVersion, bytes encoded)` | OCR aggregator config change |
 | `0x92e98423f8adac6e64d0608e519fd1cefb861498385c6dee70d58fc926ddc68c` | `SubmissionReceived(int256 indexed submission, uint32 indexed round, address indexed oracle)` | **FluxAggregator** (legacy) |
 | `0x18dd09695e4fbdae8d1a5edb11221eb04564269c29a089b9753a6535c54ba92e` | `OraclePermissionsUpdated(address indexed oracle, bool indexed whitelisted)` | FluxAggregator |
@@ -41,7 +42,7 @@ Data Feeds use a **proxy → aggregator** split. Consumers always read a stable 
 | `0x87286ad1f399c8e82bf0c4ef4fcdc570ea2e1e92176e5c848b6413545b885db4` | `AddedAccess(address user)` | access controller |
 | `0x3d68a6fce901d20453d1a7aa06bf3950302a735948037deb182a8db66df2a0d1` | `RemovedAccess(address user)` | access controller |
 
-> The OCR aggregator emits **both** `NewTransmission` (rich, OCR-native) and `AnswerUpdated` (legacy `AggregatorInterface`) on each round. Index whichever you prefer; `AnswerUpdated` is portable across Flux + OCR and is the simplest "new price" trigger. **The proxy address does not emit `AnswerUpdated`** — it's emitted by the underlying aggregator, so to watch a feed you must resolve `proxy.aggregator()` and subscribe to *that* address (and re-resolve on `phaseId` change).
+> The OCR aggregator emits **both** `NewTransmission` (rich, OCR-native) and `AnswerUpdated` (legacy `AggregatorInterface`) on each round. **`NewTransmission` has two distinct topic0s by OCR generation** — OCR1 = `0xf6a97944…`, OCR2 = `0xc797025f…` — and the canonical feeds today are OCR2, so a monitor keyed only on the OCR1 topic0 would miss every OCR2 feed's transmissions. **`AnswerUpdated` (`0x0559884f…`) and `NewRound` (`0x0109fc6f…`) are emitted identically by both OCR1 and OCR2** (and by FluxAggregator), so they are the portable "new price" triggers — prefer them. **The proxy address does not emit `AnswerUpdated`** — it's emitted by the underlying aggregator, so to watch a feed you must resolve `proxy.aggregator()` and subscribe to *that* address (and re-resolve on `phaseId` change).
 
 ### 2.2 Proxy / EIP-1967 (only if a feed proxy is itself upgradeable — rare; most are plain `EACAggregatorProxy`)
 
@@ -83,7 +84,8 @@ Data Feeds use a **proxy → aggregator** split. Consumers always read a stable 
 
 | Selector | Signature | Notes |
 |----------|-----------|-------|
-| `0xc9807539` | `transmit(bytes _report, bytes32[] _rs, bytes32[] _ss, bytes32 _rawVs)` | the OCR round-submission entrypoint (transmitter-only) |
+| `0xc9807539` | `transmit(bytes _report, bytes32[] _rs, bytes32[] _ss, bytes32 _rawVs)` | **OCR1** round-submission entrypoint (transmitter-only) |
+| `0xb1dc65a4` | `transmit(bytes32[3] reportContext, bytes report, bytes32[] rs, bytes32[] ss, bytes32 rawVs)` | **OCR2** round-submission entrypoint (transmitter-only) — the canonical ETH/USD feeds today are OCR2 and call this, not `0xc9807539` |
 | `0x81ff7048` | `latestConfigDetails()` | `(uint32 configCount, uint32 blockNumber, bytes16 configDigest)` |
 | `0xe5fe4577` | `latestTransmissionDetails()` | `(bytes16 configDigest, uint32 epoch, uint8 round, int192 latestAnswer, uint64 latestTimestamp)` |
 | `0x181f5a77` | `typeAndVersion()` | version string |
@@ -141,7 +143,7 @@ All are `EACAggregatorProxy` addresses, verified via `eth_getCode` + `descriptio
 4. **On L2s, gate on the sequencer uptime feed** (§5) with a grace period before trusting a price.
 5. **`AnswerUpdated.current` and the answer are `int256`/`int192`** — signed. Negative is theoretically possible for some indices; most price feeds are positive. `decimals()` is per-feed (8 for USD, 18 for ETH-quoted, 0 for some indices).
 6. **Two `ConfigSet` shapes exist.** The Data Feeds OCR `ConfigSet` (`0x25d719d8…`) is distinct from CCIP/Automation OCR2 `ConfigSet` — different arg tuple, different topic0. Match on the emitter contract.
-7. **FluxAggregator vs OCR.** Pre-2021 feeds and some long-tail feeds still use `FluxAggregator` (per-oracle `SubmissionReceived`); modern feeds are OCR (`NewTransmission`). A historical scan of one feed proxy may cross both as phases changed.
+7. **FluxAggregator vs OCR1 vs OCR2.** Pre-2021 feeds and some long-tail feeds still use `FluxAggregator` (per-oracle `SubmissionReceived`); modern feeds are OCR. **OCR comes in two generations with different constants:** OCR1 (`OffchainAggregator`, `typeAndVersion` `…3.0.0`) uses `transmit` `0xc9807539` and `NewTransmission` topic0 `0xf6a97944…`; OCR2 (`OCR2Aggregator`, `typeAndVersion` `AccessControlledOCR2Aggregator 1.0.0`) uses `transmit` `0xb1dc65a4` and `NewTransmission` topic0 `0xc797025f…`. The canonical ETH/USD feeds today are OCR2. A historical scan of one feed proxy may cross all three as phases changed — key OCR monitoring on the portable `AnswerUpdated`/`NewRound` topics rather than a single `NewTransmission`/`transmit` constant.
 8. **Proof-of-Reserve feeds reuse the exact same interface** (`AggregatorV3`) — they're just feeds whose `answer` is a reserve balance. No separate ABI.
 
 ---
@@ -152,7 +154,8 @@ All are `EACAggregatorProxy` addresses, verified via `eth_getCode` + `descriptio
 -- Topics (chain-agnostic)
 TOPIC_ANSWER_UPDATED        = '\x0559884fd3a460db3073b7fc896cc77986f16e378210ded43186175bf646fc5f'
 TOPIC_NEW_ROUND             = '\x0109fc6f55cf40689f02fbaad7af7fe7bbac8a3d2186600afc7d3e10cac60271'
-TOPIC_NEW_TRANSMISSION      = '\xf6a97944f31ea060dfde0566e4167c1a1082551e64b60ecb14d599a9d023d451'
+TOPIC_NEW_TRANSMISSION_OCR1 = '\xf6a97944f31ea060dfde0566e4167c1a1082551e64b60ecb14d599a9d023d451'
+TOPIC_NEW_TRANSMISSION_OCR2 = '\xc797025feeeaf2cd924c99e9205acb8ec04d5cad21c41ce637a38fb6dee6016a'
 TOPIC_OCR_CONFIG_SET        = '\x25d719d88a4512dd76c7442b910a83360845505894eb444ef299409e180f8fb9'
 TOPIC_SUBMISSION_RECEIVED   = '\x92e98423f8adac6e64d0608e519fd1cefb861498385c6dee70d58fc926ddc68c'
 TOPIC_OWNERSHIP_TRANSFERRED = '\x8be0079c531659141344cd1fd0a4f28419497f9722a3daafe3b4186f6b6457e0'
@@ -166,7 +169,8 @@ SEL_DESCRIPTION             = '\x7284e416'
 SEL_VERSION                 = '\x54fd4d50'
 SEL_AGGREGATOR              = '\x245a7bfc'
 SEL_PHASE_ID                = '\x58303b10'
-SEL_TRANSMIT                = '\xc9807539'
+SEL_TRANSMIT_OCR1           = '\xc9807539'
+SEL_TRANSMIT_OCR2           = '\xb1dc65a4'
 
 -- Ethereum
 ETH_FEED_REGISTRY           = '\x47fb2585d2c56fe188d0e6ec628a38b74fceeedf'

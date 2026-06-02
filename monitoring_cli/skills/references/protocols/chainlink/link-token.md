@@ -55,8 +55,8 @@ On chains where the canonical bridge produces a **non-ERC-677** LINK, Chainlink 
 
 | Chain | PegSwap | Verified |
 |-------|---------|----------|
-| BNB (56) | `0x1FCc3B22955e76Ca48bF025f1A6993685975Bb9e` | ✅ (6846 B) |
-| Polygon PoS (137) | `0xAA1DC356dc4B18f30C347798FD5379F3D77ABC5b` | ✅ (6846 B) |
+| BNB (56) | `0x1FCc3B22955e76Ca48bF025f1A6993685975Bb9e` | ✅ (3422 B) |
+| Polygon PoS (137) | `0xAA1DC356dc4B18f30C347798FD5379F3D77ABC5b` | ✅ (3422 B) |
 
 > **Polygon has two LINK tokens.** The Chainlink-canonical one is the **ERC-677** token `0xb0897686c545045aFc77CF20eC7A532E3120E0F1` (table above). The **Polygon PoS-bridge LINK** `0x53E0bca35eC356BD5ddDFebbD1Fc0fD03FaBad39` (also symbol LINK, also deployed) is **NOT** 677-compatible — bridge it through PegSwap before funding Chainlink services. Same pattern on BNB.
 
@@ -99,6 +99,6 @@ POL_PEGSWAP = '\xaa1dc356dc4b18f30c347798fd5379f3d77abc5b'
 
 ## 7. Verification & sources
 
-- **Addresses:** `eth_getCode` (non-empty) + `symbol()` on the 7 publicnode RPCs; PegSwap verified (6846 B on both BNB and Polygon).
+- **Addresses:** `eth_getCode` (non-empty) + `symbol()` on the 7 publicnode RPCs; PegSwap verified (3422 B on both BNB and Polygon).
 - **Topic0 / selectors:** computed locally (keccak); `transferAndCall` `0x4000aea0` and the 4-arg `Transfer` `0xe19260af…` are the canonical ERC-677 values.
 - Sources: [LINK token contracts](https://docs.chain.link/resources/link-token-contracts) · `smartcontractkit/chainlink` `contracts/src/v0.8/shared/token/ERC677/`.

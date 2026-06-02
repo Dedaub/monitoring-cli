@@ -98,8 +98,8 @@ Deployer/owner (all chains): `0x4F6F977aCDD1177DCD81aB83074855EcB9C2D49e`. Team/
 | Chain | FLUID token |
 |-------|-------------|
 | Ethereum (1) | `0x6f40d4A6237C257fff2dB00FA0510DeEECd303eb` (`symbol()`="FLUID" ✓) |
-| Arbitrum (42161) | `0x61e030a56d33e8260fdd81f03b162a79fe3449cd` |
-| Polygon (137) | `0xf50d05a1402d0adafa880d36050736f9f6ee7dee` |
+| Arbitrum (42161) | `0x61e030a56d33e8260fdd81f03b162a79fe3449cd` (`symbol()`="FLUID" ✓) |
+| Polygon (137) | ⚠️ no native FLUID token confirmed. `0xf50d05a1402d0adafa880d36050736f9f6ee7dee` (often listed) is the **legacy INST bridge**, not FLUID — on-chain `symbol()`="INST", `name()`="Instadapp (PoS)" (FxPortal-bridged mainnet INST). Confirm a native FLUID address on docs/explorer before using. |
 | Base (8453) | bridged via Chainlink CCIP — confirm address on docs/explorer |
 
 ---
@@ -196,9 +196,9 @@ FLUID_DEPLOYER                   = '\x4f6f977acdd1177dcd81ab83074855ecb9c2d49e'
 FLUID_TEAM_MULTISIG              = '\xca5e9219e1007931fd5d938c1815a90ef08f1584'
 
 -- ===== FLUID governance token (per chain) =====
-FLUID_TOKEN_ETH                  = '\x6f40d4a6237c257fff2db00fa0510deeecd303eb'
-FLUID_TOKEN_ARB                  = '\x61e030a56d33e8260fdd81f03b162a79fe3449cd'
-FLUID_TOKEN_POL                  = '\xf50d05a1402d0adafa880d36050736f9f6ee7dee'
+FLUID_TOKEN_ETH                  = '\x6f40d4a6237c257fff2db00fa0510deeecd303eb'  -- symbol()=FLUID
+FLUID_TOKEN_ARB                  = '\x61e030a56d33e8260fdd81f03b162a79fe3449cd'  -- symbol()=FLUID
+-- Polygon: no native FLUID token confirmed. 0xf50d05a1402d0adafa880d36050736f9f6ee7dee is the legacy INST bridge (symbol()=INST, name()="Instadapp (PoS)"), NOT FLUID.
 
 -- ===== InfiniteProxy storage slots =====
 SLOT_EIP1967_ADMIN               = '\xb53127684a568b3173ae13b9f8a6016e243e63b6e8ee1178d6a717850b5d6103'

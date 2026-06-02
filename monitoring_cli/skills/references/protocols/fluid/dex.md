@@ -1,8 +1,8 @@
-# Fluid — DEX (smart collateral / smart debt AMM) — Compressed Reference (Ethereum, Arbitrum, Polygon)
+# Fluid — DEX (smart collateral / smart debt AMM) — Compressed Reference (Ethereum, Base, Arbitrum, Polygon, BNB Chain)
 
 **Status:** topic0 via `cast keccak` (verified, from `Instadapp/fluid-contracts-public` DEX poolT1 source); Ethereum DexFactory on-chain re-verified with `cast` vs `publicnode` (2026-05).
 **Scope:** Fluid **DEX** — an AMM whose liquidity IS the [`liquidity-layer.md`](liquidity-layer.md) (so the same capital can be lending collateral AND DEX liquidity — "smart collateral / smart debt"). Other modules: [`vaults.md`](vaults.md), [`lending.md`](lending.md). FLUID/token: [`liquidity-layer.md`](liquidity-layer.md).
-**Key fact:** Fluid DEX is deployed on **Ethereum, Arbitrum, Polygon** (NOT Base, as of 2026-05). Pools are created by the **DexFactory**. This doc covers **DEX V1 (poolT1)**; Fluid also has **DEX V2** and **DEX Lite** (newer, separate contracts with different events) — confirm those from the docs if needed. DEX liquidity changes also surface as Liquidity-Layer `LogOperate` (same tx).
+**Key fact:** Fluid DEX is deployed on **Ethereum, Base, Arbitrum, Polygon, and BNB Chain** (the same DexFactory `0x91716C4EDA1Fb55e84Bf8b4c7085f84285c19085` is live on all five — verified on-chain 2026-06; `deployments.md` also lists Plasma). Pools are created by the **DexFactory**. This doc covers **DEX V1 (poolT1)**; Fluid also has **DEX V2** and **DEX Lite** (newer, separate contracts with different events) — confirm those from the docs if needed. DEX liquidity changes also surface as Liquidity-Layer `LogOperate` (same tx).
 
 ---
 
@@ -36,7 +36,7 @@
 
 ## Addresses (network-specific)
 
-> Per-chain-specific (NOT deterministic) — L2 from Fluid docs + verify on-chain. DEX is on ETH/Arbitrum/Polygon only. ✓ = verified this run.
+> Per-chain-specific — L2 from Fluid docs + verify on-chain. The DexFactory itself is CREATE2-deterministic (same address on every chain); individual pool addresses are not. DEX is live on Ethereum, Base, Arbitrum, Polygon, and BNB Chain. ✓ = verified this run.
 
 ### Ethereum (1)
 ```
@@ -44,8 +44,8 @@
 # Individual DEX pool (poolT1) addresses: enumerate via DexFactory (LogDexDeployed) / FluidDexResolver.
 ```
 
-### Arbitrum / Polygon
-DexFactory + individual pool addresses per-chain — pull from Fluid docs + verify (`cast code` + `totalDexes()`). The Liquidity proxy the DEX shares liquidity with: see [`liquidity-layer.md`](liquidity-layer.md).
+### Base (8453) / Arbitrum (42161) / Polygon (137) / BNB Chain (56)
+The DexFactory is deployed at the **same CREATE2-deterministic address `0x91716C4EDA1Fb55e84Bf8b4c7085f84285c19085`** on every chain (bytecode byte-identical to Ethereum). `totalDexes()` per chain (verified on-chain 2026-06): Base 18 ✓, Arbitrum 20 ✓, Polygon 8 ✓, BNB Chain 5 ✓. Individual pool addresses are per-chain — enumerate via `LogDexDeployed` / FluidDexResolver + verify (`cast code` + `totalDexes()`). The Liquidity proxy the DEX shares liquidity with: see [`liquidity-layer.md`](liquidity-layer.md).
 
 ---
 
@@ -64,5 +64,5 @@ DexFactory + individual pool addresses per-chain — pull from Fluid docs + veri
 
 ## Verification & sources
 - topic0: `cast keccak` from `Instadapp/fluid-contracts-public` `contracts/protocols/dex/poolT1/coreModule/events.sol` (all 12 events read verbatim).
-- Addresses: Ethereum DexFactory verified on-chain (`totalDexes()`=45). L2 + individual pools not enumerated here. DEX confirmed deployed on ETH/Arbitrum/Polygon (not Base).
+- Addresses: DexFactory (CREATE2-deterministic, same address on all chains) verified on-chain via `totalDexes()` — Ethereum 45, Base 18, Arbitrum 20, Polygon 8, BNB Chain 5. Individual pools not enumerated here. `deployments.md` also lists the factory on Plasma.
 - Source: [`Instadapp/fluid-contracts-public`](https://github.com/Instadapp/fluid-contracts-public) · Fluid docs (FluidDexResolver; DEX V2 / DEX Lite integration pages).
