@@ -108,15 +108,47 @@ WHERE t.to_a = '\x7a250d5630b4cf539739df2c5dacb4c659f2488d'
 
 Full reference: [DedaubQL API Reference](https://docs.dedaub.com/docs/monitoring/TSQLApiReference/)
 
-## Claude Code skill
+## Claude Code skills
 
-If you use [Claude Code](https://claude.ai/code), install the `/monitoring-cli` skill to get an AI-guided alert builder:
+If you use [Claude Code](https://claude.ai/code), this repo ships two skills.
+
+### `/monitoring-cli` — AI-guided alert builder
+
+Install it with:
 
 ```bash
 dedaub-monitoring install-skill
 ```
 
 Then type `/monitoring-cli` in Claude Code to start a session. The skill guides you through researching a protocol, writing alert queries, reviewing them, and deploying them.
+
+### `/protocol-research` — generate protocol reference docs
+
+`protocol-research` researches **every on-chain deployment** of a protocol (all contracts, all versions) across Ethereum, Base, BNB Smart Chain, Avalanche, Arbitrum, Optimism, and Polygon PoS, then writes monitoring-grade reference docs into [`monitoring_cli/skills/references/protocols/`](monitoring_cli/skills/references/protocols/). These docs feed the `/monitoring-cli` alert builder with verified event topics, function selectors, and addresses.
+
+The skill lives at [`.claude/skills/protocol-research/`](.claude/skills/protocol-research/) and is available automatically when you open this repo in Claude Code — no install step.
+
+**Usage** — pass the protocol name as the argument:
+
+```
+/protocol-research aave
+/protocol-research uniswap
+/protocol-research pendle v2 only      # optional scope hint
+```
+
+If you omit the protocol name the skill will ask for one.
+
+**What it produces** — one Markdown file per protocol version under `protocols/<slug>/`, in the house "v2.md/v3.md" shape:
+
+- **Topics** (chain-agnostic) — `topic0 → event signature`
+- **Function signatures** (chain-agnostic) — `selector → function + returns`
+- **Addresses** (per chain) — every deployed contract with a one-line description, absence noted explicitly
+- **Proxies** (old & new) — pattern, EIP-1967 slots, current implementation, upgrade authority
+- plus a cross-chain summary, detection gotchas, copy-paste `\x` bytea constants, and a sources section
+
+Single-version protocols get one file (e.g. `core.md`); multi-version protocols are split per version (e.g. `v2.md`, `v3.md`) with a `README.md` index, mirroring the existing [`uniswap/`](monitoring_cli/skills/references/protocols/uniswap/) and [`morpho/`](monitoring_cli/skills/references/protocols/morpho/) references.
+
+**How it works** — it combines two skills: `evm-expert` for on-chain verification (every topic/selector is recomputed via `keccak256`, every address existence-checked via `eth_getCode`, every proxy slot read live) and `deep-research` for multi-source discovery plus a final adversarial fact-check pass before finalizing. Expect a thorough run — it sweeps all seven chains and double-checks its own output.
 
 ## Commands
 
