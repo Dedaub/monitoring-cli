@@ -17,13 +17,18 @@ dev = [
     "pytest>=9.0.3,<10",
     "pytest-mock>=3.14.0,<4",
     "respx>=0.21.0,<0.22",
-    "ruff>=0.15.12,<0.16",
-    "ty>=0.0.39,<0.1",
+]
+lint = [
+    "ruff>=0.15.15,<0.16",
+    "ty>=0.0.42,<0.1",
 ]
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[tool.uv]
+default-groups = ["dev", "lint"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
