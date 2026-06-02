@@ -1,0 +1,57 @@
+# DODO — Protocol Reference Index
+
+Monitoring-grade references for **DODO** across **Ethereum (1), Base (8453), BNB Smart Chain (56), Avalanche C-Chain (43114), Arbitrum One (42161), Optimism (10), Polygon PoS (137)**. Verified against live RPC + the canonical `DODOEX/*` repos + the DODO contract API on 2026-06-02.
+
+DODO is a **Proactive Market Maker (PMM)** DEX. It is **three pool generations** (V1, V2, V3/"D3") plus a shared **smart-route / trading-entry layer** and a **token / governance / liquidity-mining layer**. One file per layer; each follows the same section order.
+
+| File | Layer | Components | Status |
+|------|-------|------------|--------|
+| [v1.md](v1.md) | **V1 — classic PMM** | `DODOZoo` registry + classic `DODO` base/quote pairs (EIP-1167 clones) + `DODOLpToken` (DLP) + V1 quoting helpers + `DODOMine` (Arbitrum V1 mining) | **Live but legacy.** 6 chains (**not Base**). Few named pairs; discover the rest from `DODOBirth`. |
+| [v2.md](v2.md) | **V2 — PMM pools & factories** | Pool *templates* DVM / DPP / DSP / CP (+ DPPAdmin / DPPAdvanced) + **GSP** ("advanced DSP", solc 0.8.16) + `CloneFactory` / `FeeRateModel` / `PermissionManager` + factories (DVM/DPP/DSP/CrowdPooling/UpCp + ERC20/V2/V3) | **Live, dominant.** All 7 chains (Base reduced, Optimism richest). Pools are clones — discover from `NewDVM/DPP/DSP/CP`. |
+| [v3.md](v3.md) | **V3 — "D3" decentralized MM + lending** | `D3Vault` (shared lending pool) + `D3MM` maker pools (+ `D3Maker`) cloned by `D3MMFactory` + `D3Proxy` + periphery (`D3Oracle`, `D3RateManager`, `D3MMLiquidationRouter`, `D3UserQuota`, `D3PoolQuota`, `D3FeeRateModel`) + clone templates | **Live, newer.** **6 chains — NOT Base.** A market-making **+ margin-lending/liquidation** system, not an AMM. Pools `breedD3Pool`-gated (permissioned). |
+| [smartroute.md](smartroute.md) | **Smart-route / trading entry** | `DODOApprove` + `DODOApproveProxy` (allowance hub) + `DODOV2Proxy` / `RouteProxy` / `DODOFeeRouteProxy` (older + newer ETH build) + DSP/Cp/DPP proxies + adapters (V1/V2/Uni/Curve) + route helpers + `LimitOrder` | **Live, all 7 chains.** Where user swaps enter. `OrderHistory` is the headline topic. |
+| [token.md](token.md) | **Token, governance & mining** | DODO ERC-20 (per-chain, some upgradeable) + vDODO (+ `DODOCirculationHelper`, `Governance`) + DODO Mine V3/V2 (registry + proxy + clone templates) + `DODOIncentive` | **Live.** Mining on all 7; DODO token on 4; vDODO + DODOIncentive on ETH + BNB only. |
+
+Each file follows: **Topics** (chain-agnostic `topic0 = keccak256(event sig)`) → **Function signatures** (chain-agnostic 4-byte selectors) → **Addresses** (network-specific, one section per chain) → **Cross-chain summary** → **Proxies** → **Detection invariants & gotchas** → **Quick-copy bytea constants** → **Verification & sources**.
+
+## At-a-glance presence matrix (✓ = deployed; — = `0x` from `eth_getCode`)
+
+| Chain | ID | V1 (DODOZoo) | V2 pools | V3 / D3 | Smart-route | DODO token | vDODO | DODO Mine | NFT/Fragment |
+|-------|----|--------------|----------|---------|-------------|------------|-------|-----------|--------------|
+| Ethereum | 1 | ✓ (15 named pairs) | ✓ (+GSP clones) | ✓ | ✓ (V2Proxy + Route + 2× Fee + LimitOrder) | ✓ `0x43Df…4DDd` (immutable) | ✓ | ✓ | ✓ |
+| BNB | 56 | ✓ (2 pairs) | ✓ | ✓ | ✓ (**no DODOV2Proxy**; Route + Fee + LimitOrder) | ✓ `0x67ee…29e2` (mint/burn) | ✓ | ✓ | ✓ |
+| Polygon | 137 | ✓ (1 pair) | ✓ | ✓ | ✓ (V2Proxy + Route + Fee + LimitOrder) | ✓ `0xe4Bf…fe78` (**upgradeable proxy**) | — | ✓ | ✓ |
+| Arbitrum | 42161 | ✓ (3 pairs + V1 Mine) | ✓ | ✓ (0 pools yet) | ✓ (V2Proxy + Route + Fee + LimitOrder) | ✓ `0x69Eb…A581` (**beacon proxy**) | — | ✓ | ✓ |
+| Avalanche | 43114 | ✓ (registry only, 0 pairs) | ✓ | ✓ | ✓ (V2Proxy + Route + Fee; **no LimitOrder**) | — | — | ✓ | — |
+| Optimism | 10 | ✓ (registry only, 0 pairs) | ✓ (**richest** templates) | ✓ | ✓ (V2Proxy + Route + Fee; **no DPPProxy, no LimitOrder**) | — | — | ✓ | — |
+| Base | 8453 | **—** | ✓ (**reduced**: V3-only ERC20, no UpCp) | **—** | ✓ (**no RouteProxy**, Fee-only; **no LimitOrder**, V2-adapter only) | — | — | ✓ (Mine **v2**) | — |
+
+## Cross-cutting facts worth knowing before you start
+
+- **No single cross-chain address — every contract differs per chain, and the SAME address is a DIFFERENT contract on different chains.** DODO uses **no deterministic CREATE2 deployer**; addresses are per-chain (e.g. `DODOApprove` is `0xCB85…` on ETH, `0xa128…` on BNB). Worse, addresses **collide across chains and layers**: ETH's `D3Vault 0x49186E32…` is *also* Base's `DSPProxy` and Avalanche's `D3MMTemplate`; BNB's `DODOIncentive 0x4EE639…` is *also* Arbitrum's `DODOV1PmmHelper`. **Always key on `(chainId, address)`, and never infer a contract's role on chain B from its address on chain A.** Topics + selectors, by contrast, are 100% chain-agnostic.
+- **"DODO Proxy" ≠ EIP-1967 proxy.** Every contract DODO names `…Proxy` in the route/V3 layers (`DODOV2Proxy`, `RouteProxy`, `DODOFeeRouteProxy`, `DSP/Cp/DPPProxy`, `D3Proxy`, `DODOMineV3Proxy`) plus `DODOApprove`/`DODOApproveProxy` is an **immutable router/entry contract** — EIP-1967 impl slot `0x0`. No `Upgraded` event; DODO "upgrades" by deploying a **new** address and re-registering. Track the *set* of router addresses (e.g. Ethereum runs **two** fee-route builds — older `0x50f9bDe1…` + newer `0xFe837A35…` that emits `PositiveSlippage`).
+- **Four "a swap/borrow happened" topics, one per layer — don't conflate them.** Route layer: **`OrderHistory`** `0x92ceb067a9883c85aba061e46b9edf505a0d6e81927c4b966ebed543a5221787` (the user-swap headline, every entry contract). V2 pools: **`DODOSwap`** `0xc2c0245e056d5fb095f04cd6373bc770802ebd1e6c918eb78fdef843cdb37b0f` (the pool-level fill — **GSP shares this exact topic0**). V1 pairs: **`BuyBaseToken`** `0xe93ad760…` / **`SellBaseToken`** `0xd8648b6a…`. V3/D3 pools: **`Swap`** `0xb24b7412…` (8-field, `sellOrNot` flag) — plus the D3-unique **`Liquidate`** `0x508ace25…` / `StartLiquidation` / `FinishLiquidation` lending events.
+- **Pools, V1 pairs, GSP pools, mining pools, and D3 pools are all EIP-1167 minimal-proxy clones** (`363d3d373d3d3d363d73‹impl›5af43d82803e903d91602b57fd5bf3`, 45 B) of a per-chain template. They are permissionless/numerous — **never enumerate them.** Discover instances from factory events: `DODOBirth` (V1), `NewDVM/DPP/DSP/CP` (V2), `D3Birth` (V3), `NewMineV3/V2` (mining). The deploy-config "template" address is often *older* than the one a factory currently clones — read the live `_DVM_TEMPLATE_()` / `_D3POOL_TEMPS(0)` off the factory.
+- **One allowance hub gates all custody: `DODOApprove`.** Users approve the per-chain `DODOApprove` (never a router). It only pulls for its single registered caller `DODOApproveProxy`, which holds an `_IS_ALLOWED_PROXY_` registry of every router permitted to call `claimTokens` (added behind a **3-day timelock**). **Watch `SetDODOProxy` (`0xd356351f…`) on `DODOApprove`** — it re-points the entire allowance hub (high severity).
+- **The few contracts that ARE upgradeable are bridged DODO tokens, not the DEX.** Polygon DODO is a Matic `UpgradeabilityProxy` (`proxyType()=2`); Arbitrum DODO is an EIP-1967 **beacon** proxy. Ethereum DODO (fixed 1 B supply) and BNB DODO are immutable. Everything else — V1/V2/V3 pools, factories, routers, approve, vDODO, mine registry/proxy/templates — is immutable.
+
+## Verification methodology
+
+- **Topic0 / selectors:** computed locally with keccak-256 from canonical `DODOEX/contractV2` + `dodo-smart-contract` + `dodo-route-contract` + `dodo-v3` + `dodo-gassaving-pool` source signatures; validated against live `eth_getLogs` — `DODOBirth` + `SellBaseToken`/`BuyBaseToken`/`Deposit`/`Withdraw`/`Donate` (ETH V1 pair), `DODOSwap` + `NewDVM` (ETH DVMFactory; `DODOSwap` also on the ETH GSP clone), `OrderHistory` (ETH DODOV2Proxy + RouteProxy + DODOFeeRouteProxy — identical topic0), `D3Birth` + `AddPool` + `MakerDeposit` (ETH D3MMFactory/D3Vault/pool), `MintVDODO`/`RedeemVDODO` (ETH vDODO), `Incentive` (DODOIncentive).
+- **Addresses:** parsed from the DODO contract API (`api.dodoex.io/dodo-contract/list`, both `version=v1,v2` and `version=v3`) and the per-chain repo configs, then **existence-checked via `eth_getCode`** on each chain. Absence is recorded explicitly (e.g. D3 + DODOZoo on Base; DODOV2Proxy on BNB; RouteProxy on Base; DODO token on Avalanche/Optimism/Base). Cross-chain **address collisions were resolved by selector probing** (e.g. Arbitrum `0x4EE639…` carries `getPairDetail`, not `triggerIncentive` → it is `DODOV1PmmHelper`, not `DODOIncentive`).
+- **Proxy/immutability:** EIP-1967 impl/admin/beacon slots read live via `eth_getStorageAt`; clone bytecode confirmed on sample instances; factory→template wiring confirmed by reading `_*_TEMPLATE_()`, and the approve wiring by `DODOApprove.getDODOProxy()` ⇄ `DODOApproveProxy._DODO_APPROVE_()`.
+
+## Coverage caveats (read these)
+
+- **Instances are not enumerated** — DODO pools (V1/V2/V3/GSP), ERC-20s, and mining pools are permissionless and number in the thousands. The docs list per-chain **singletons** (registries, factories, templates, routers, vaults), not instances. Discover instances from the factory/registry events above.
+- **GSP (GasSavingPool):** documented in [v2.md](v2.md) as an "advanced DSP" (solc 0.8.16, admin price control via `adjustPrice`, same `DODOSwap` topic0). The **named GSPFactory is not in any of the 7 target chains' registry** (only Taiko/X-Layer/etc. in the API snapshot); GSP is **clone-present on Ethereum** (template `0x78d43a88…`). On the other 6 chains GSP pools, if any, are clones-only — discover by `version()="GSP …"` / the `adjustPrice` selector.
+- **Scoped-out product lines (present in the same registry, not expanded here):**
+  - **DODO NFT / Fragment** (fractionalization + NFT-pool AMM): `Fragment`, `BuyoutModel`, `NFTCollateralVault`, `DodoNftErc721/1155`, `DODONFTRegistry/Proxy/Approve`, NFTPool (`FilterAdmin`, `FilterERC721V1`, `FilterERC1155V1`, `NFTPoolController`). On **Ethereum, BNB, Arbitrum, Polygon**. Discoverable via the API `NFT`/`NFTPool` groups.
+  - **DODO Starter / Drops** (BNB launchpad: `DODOStarterFactory`, `FairFunding`, `InstantFunding`, `MysteryBoxV1`). BNB-only.
+  These are explicit boundaries (not silently dropped); expand into their own files if the alert pipeline needs them. A full sweep of the official docs + contract registry (2026-06-02) surfaced no other DODO product lines on these 7 chains.
+
+## Authoritative sources
+
+- Canonical repos: [`DODOEX/contractV2`](https://github.com/DODOEX/contractV2) (V2 + route + token + mine), [`DODOEX/dodo-smart-contract`](https://github.com/DODOEX/dodo-smart-contract) (V1), [`DODOEX/dodo-route-contract`](https://github.com/DODOEX/dodo-route-contract) (route/fee proxies), [`DODOEX/dodo-v3`](https://github.com/DODOEX/dodo-v3) (D3), [`DODOEX/dodo-gassaving-pool`](https://github.com/DODOEX/dodo-gassaving-pool) (GSP).
+- Address registry: DODO contract API `https://api.dodoex.io/dodo-contract/list?version=v1,v2` and `?version=v3` · [docs.dodoex.io — Contract Addresses](https://docs.dodoex.io/en/developer/contracts/contract-address).
+- Explorers: [Etherscan](https://etherscan.io) · [Basescan](https://basescan.org) · [BscScan](https://bscscan.com) · [Snowscan](https://snowscan.xyz) · [Arbiscan](https://arbiscan.io) · [Optimistic Etherscan](https://optimistic.etherscan.io) · [Polygonscan](https://polygonscan.com).
