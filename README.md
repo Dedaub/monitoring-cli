@@ -56,10 +56,16 @@ SQL
 dedaub-monitoring enable-alerts \
   --id 1234 \
   --frequency 300 \
+  --network ethereum \
   --alert-template "{{sender}} sent {{eth_amount}} ETH (tx: {{tx_hash}})" \
   --unique-key "tx_hash" \
   --email
 ```
+
+`--network` (default `ethereum`) selects the chain the alert's run config and notifications
+apply to — set it to match the network used in your query's macros (e.g. `arbitrum`, `base`).
+The same `--network` option is available on `set-config`, `get-config`, `disable-alerts`, and
+`list-alerts`.
 
 ### Check execution logs
 

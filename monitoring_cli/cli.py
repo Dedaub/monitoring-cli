@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import datetime
+import select
+import shutil
 import sys
-from importlib.resources import files
+from importlib.resources import as_file, files
 from pathlib import Path, PurePosixPath
 from typing import Annotated, NoReturn
 
@@ -312,23 +314,57 @@ def _resolve_query(
     return resolve_query_id(folders, queries, path)
 
 
+def _read_ready_stdin() -> str:
+    """Return piped stdin text, but only when data is already waiting.
+
+    `isatty()` is False not just for a closed stdin but also for an *open but
+    empty* one (e.g. the CLI launched from an agent/subprocess that inherits an
+    idle stdin), where a bare `sys.stdin.read()` blocks forever. Gating the read
+    on a zero-timeout `select()` means we only read when bytes are ready, so an
+    idle stdin returns immediately instead of hanging.
+
+    Contract: this polls once with no wait, so stdin must already hold data.
+    Every supported way of piping SQL buffers it up front — a heredoc, `echo |`,
+    or `< file` all have the bytes ready before the command runs — so this is
+    exact for real usage. A producer that emits its first byte *after* the poll
+    (an unusual `slow-generator | cmd` pipe) is treated as no input; pass the SQL
+    as an argument in that case. Returns "" when stdin is a TTY or has nothing
+    waiting.
+    """
+    if sys.stdin.isatty():
+        return ""
+    try:
+        readable, _, _ = select.select([sys.stdin], [], [], 0)
+    except (OSError, ValueError):
+        # Platforms where select() can't poll stdin (e.g. Windows pipes):
+        # preserve the prior read-until-EOF behavior.
+        readable = [sys.stdin]
+    return sys.stdin.read() if readable else ""
+
+
 def _resolve_query_text_and_owner(
     client: MonitoringClient,
     query_id: int,
     query_text: str | None,
     entity_id: int | None,
 ) -> tuple[str, int]:
-    """Resolve query text (from arg, stdin, or stored) and the owning entity id."""
+    """Resolve query text (from arg, piped stdin, or stored) and the owning entity id."""
+    # Fetch the stored query at most once, even when both the text and the
+    # owner entity id have to be read from it.
+    stored: dict | None = None
     if query_text is None:
-        if sys.stdin.isatty():
-            q = client.get_query(query_id)
-            query_text = q.get("query_text", "")
-            if entity_id is None:
-                entity_id = q["owner"]["entity_id"]
+        # Piped SQL if any; otherwise fall back to the stored query text rather
+        # than running an empty query.
+        stdin_text = _read_ready_stdin()
+        if stdin_text.strip():
+            query_text = stdin_text
         else:
-            query_text = sys.stdin.read()
+            stored = client.get_query(query_id)
+            query_text = stored.get("query_text", "")
     if entity_id is None:
-        entity_id = client.get_query(query_id)["owner"]["entity_id"]
+        if stored is None:
+            stored = client.get_query(query_id)
+        entity_id = stored["owner"]["entity_id"]
     return query_text, entity_id
 
 
@@ -425,10 +461,12 @@ def write_query(
 ) -> None:
     """Update the SQL text of a query. Specify with --id <query_id>, or --path /Folder/QueryName [--entity-id]. Pass SQL as argument or pipe via stdin."""
     if query_text is None:
-        if sys.stdin.isatty():
+        # write_query has no stored fallback, so require piped SQL — but never
+        # block on an idle stdin; fail fast instead.
+        query_text = _read_ready_stdin()
+        if not query_text.strip():
             err.print("No query text provided. Pass as argument or pipe via stdin.")
             raise typer.Exit(1)
-        query_text = sys.stdin.read()
     client, _ = _load_client(profile)
     try:
         qid = _resolve_query(client, id, path, entity_id)
@@ -523,12 +561,15 @@ def get_config(
     entity_id: Annotated[
         int | None, typer.Option(help="Entity ID (for path lookup)")
     ] = None,
+    network: Annotated[
+        str, typer.Option(help="Network the config applies to, e.g. ethereum")
+    ] = _NETWORK,
 ) -> None:
     """Show materialization/scheduling config for a query. Specify with --id <query_id> or --path /Folder/QueryName."""
     client, _ = _load_client(profile)
     try:
         qid = _resolve_query(client, id, path, entity_id)
-        cfg = client.get_run_config(qid, _NETWORK)
+        cfg = client.get_run_config(qid, network)
     except NotFoundError as e:
         err.print(str(e))
         raise typer.Exit(1)
@@ -545,6 +586,9 @@ def set_config(
     entity_id: Annotated[
         int | None, typer.Option(help="Entity ID (for path lookup)")
     ] = None,
+    network: Annotated[
+        str, typer.Option(help="Network the config applies to, e.g. ethereum")
+    ] = _NETWORK,
     materialize: Annotated[
         str, typer.Option(help="Materialization type: TABLE, VIEW, INCREMENTAL")
     ] = "TABLE",
@@ -574,7 +618,7 @@ def set_config(
         qid = _resolve_query(client, id, path, entity_id)
         client.set_run_config(
             qid,
-            _NETWORK,
+            network,
             {
                 "materialize": materialize,
                 "frequency": frequency,
@@ -602,6 +646,9 @@ def enable_alerts(
     entity_id: Annotated[
         int | None, typer.Option(help="Entity ID (for path lookup)")
     ] = None,
+    network: Annotated[
+        str, typer.Option(help="Network the alert runs on, e.g. ethereum")
+    ] = _NETWORK,
     incrementalization: Annotated[
         str, typer.Option(help="Incremental strategy: IGNORE or UPSERT")
     ] = "IGNORE",
@@ -653,7 +700,7 @@ def enable_alerts(
         client.update_query_alert_settings(qid, resolved_template, resolved_unique_key)
         client.set_run_config(
             qid,
-            _NETWORK,
+            network,
             {
                 "materialize": "INCREMENTAL",
                 "frequency": frequency,
@@ -664,7 +711,7 @@ def enable_alerts(
         )
         client.set_notify_config(
             qid,
-            _NETWORK,
+            network,
             {
                 "notify": True,
                 "alert_email": email,
@@ -755,13 +802,16 @@ def disable_alerts(
     entity_id: Annotated[
         int | None, typer.Option(help="Entity ID (for path lookup)")
     ] = None,
+    network: Annotated[
+        str, typer.Option(help="Network the alert runs on, e.g. ethereum")
+    ] = _NETWORK,
 ) -> None:
     """Disable notifications for a query (materialization is left unchanged). Specify with --id <query_id> or --path /Folder/QueryName."""
     client, _ = _load_client(profile)
     try:
         qid = _resolve_query(client, id, path, entity_id)
         client.set_notify_config(
-            qid, _NETWORK, {"notify": False, "alert_email": False, "webhook_id": None}
+            qid, network, {"notify": False, "alert_email": False, "webhook_id": None}
         )
     except NotFoundError as e:
         err.print(str(e))
@@ -799,6 +849,9 @@ def list_alerts(
     entity_id: Annotated[
         int | None, typer.Option(help="Entity ID (defaults to your own)")
     ] = None,
+    network: Annotated[
+        str, typer.Option(help="Network to check for enabled alerts, e.g. ethereum")
+    ] = _NETWORK,
 ) -> None:
     """List all queries that currently have alerts enabled."""
     client, _ = _load_client(profile)
@@ -810,7 +863,7 @@ def list_alerts(
         alerted = [
             q
             for q in queries
-            if client.get_notify_config(q["query_id"], _NETWORK).get("notify")
+            if client.get_notify_config(q["query_id"], network).get("notify")
         ]
     except NotFoundError as e:
         err.print(str(e))
@@ -883,12 +936,25 @@ def explain_query(
 
 @app.command()
 def install_skill() -> None:
-    """Install the Claude Code /dedaub-monitoring skill to ~/.claude/skills/dedaub-monitoring/SKILL.md."""
-    dest = Path.home() / ".claude" / "skills" / "dedaub-monitoring" / "SKILL.md"
+    """Install the Claude Code /dedaub-monitoring skill (SKILL.md + references/) to ~/.claude/skills/dedaub-monitoring/."""
+    dest = Path.home() / ".claude" / "skills" / "dedaub-monitoring"
     try:
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        src = files("monitoring_cli.skills").joinpath("SKILL.md")
-        dest.write_text(src.read_text(encoding="utf-8"), encoding="utf-8")
+        dest.mkdir(parents=True, exist_ok=True)
+        src = files("monitoring_cli.skills")
+        # Install SKILL.md *and* the whole references/ tree: the skill reads those paths
+        # (references/database/…, references/protocols/…) at runtime, so shipping SKILL.md
+        # alone would leave every reference lookup broken.
+        dest.joinpath("SKILL.md").write_text(
+            src.joinpath("SKILL.md").read_text(encoding="utf-8"), encoding="utf-8"
+        )
+        refs_dest = dest / "references"
+        with as_file(src.joinpath("references")) as refs:
+            # Mirror the packaged tree exactly: clear the managed references/
+            # subtree first so docs dropped/renamed between versions don't linger
+            # as stale orphans. SKILL.md and anything else under dest is untouched.
+            if refs_dest.exists():
+                shutil.rmtree(refs_dest)
+            shutil.copytree(refs, refs_dest)
     except OSError as e:
         _exit_error(e)
-    typer.echo(f"Skill installed to {dest}")
+    typer.echo(f"Skill installed to {dest}/ (SKILL.md + references/)")

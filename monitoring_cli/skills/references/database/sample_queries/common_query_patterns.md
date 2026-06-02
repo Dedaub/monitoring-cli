@@ -1,10 +1,17 @@
 # Common Queries — Database Query Patterns
 
-**Audience:** an agent translating a business question into SQL against the Watchdog blockchain schema.
+**Audience:** an agent translating a business question into SQL against the blockchain schema.
 **Pairs with:** a protocol knowledge-base doc (e.g. `protocols/uniswap/v2.md`, `protocols/uniswap/v3.md`).
 **Status:** abstracted from x402 detection research on 2026-05-21; verified against PG18 schema for Base mainnet.
 
 > **How to use.** The protocol doc supplies *constants* (contract addresses, function selectors, event topic0 hashes, asset addresses, special EOAs). This doc supplies *patterns* (which tables, which indexes, which joins, which filters). Pick the pattern by matching the business question to §7; substitute constants from the protocol doc into the SQL template. Never write a query that ignores §3 (indexes) or §8 (edge cases).
+
+> **Macro-wrap for the monitoring engine.** These templates use raw `<chain>.<table>` for clarity, but
+> DedaubQL runs them through table **macros** — `{{logs(...)}}`, `{{outer_transaction(...)}}`,
+> `{{transaction_detail(...)}}`, `{{token_ledger(...)}}`, `{{contracts(...)}}`, … — never bare
+> `<chain>.<table>` (it full-scans and times out). The `block_number BETWEEN (SELECT MAX…) - N AND MAX`
+> predicate (§2) collapses to the macro's `duration=` window. See `../macros.md` for the macro list,
+> `inputs=`, and topic0-first filtering.
 
 ---
 
@@ -14,22 +21,24 @@ Per-chain schema (`base.`, `ethereum.`, `arbitrum.`, `optimism.`, `polygon.`, `b
 
 | Table | PK | Purpose |
 |-------|----|---------|
+| `<chain>.outer_transaction` | `(block_number, tx_index)` | One row per **top-level tx**. `tx_hash`, `from_a`/`to_a`, `callvalue` (wei → ETH value), `status` (`false` = reverted), `input`. Entry-call / ETH-value detection. |
 | `<chain>.transaction_detail` | `(block_number, tx_index, vm_step_start)` | One row per executed call frame. `from_a` = caller, `to_a` = callee, `calldata` = input bytes. |
 | `<chain>.logs` | `(block_number, tx_index, vm_step)` | One row per emitted `LOG*`. `address` = emitter, `topic0..3`, `data`. |
 | `<chain>.token_ledger` | `(address, block_number, tx_index, vm_step_start, vm_step)` | Parsed token balance deltas. One row per side of each transfer; `value_delta` is signed. |
-| `<chain>.contract_creation` | `(address)` | One row per deployed contract. `deployer`, `block_number`. |
+| `<chain>.token_transfers` | `(block_number, tx_index, vm_step_start, vm_step)` | One row per token transfer: `token_address`, `from_a`, `to_a`, `value` (unsigned). Lighter than `token_ledger` when you don't need signed deltas / counterparty. |
+| `<chain>.contracts` | `(address)` | One row per deployed contract. `deployer`, `block_number`. |
 | `<chain>.block` | `(block_number)` | Block headers; source of truth for tip and timestamps. |
 
 ### 1.1 Index inventory (use these as leading predicates)
 
-> **Per-chain caveat:** the table below is the **baseline guaranteed on every chain schema** (verified on Base). Older / higher-volume chains (e.g. `ethereum`, `arbitrum`) may carry **additional** indexes — notably a `topic0` index on `logs`, or a `(topic0, address, block_number)` composite. Before assuming an index is missing, run `\d+ <chain>.logs` (or query `pg_indexes WHERE schemaname = '{{CHAIN}}'`) on the target chain. If an index *does* exist, the corresponding §9 anti-pattern stops being one — the query is fast.
+> **Per-chain caveat:** this table is the **baseline guaranteed on every chain** (verified on Base). Some indexes still vary by chain — but **`logs.topic0` is currently indexed on all 8 supported chains** (`(topic0, block_number, address)` btree), so topic0-first is index-fast everywhere today. Indexes can change: before assuming one is present or missing, run `get-schema --network <chain> --table <t>` (or `\d+ <chain>.<t>` / `pg_indexes`). If an index exists, the matching §9 anti-pattern stops being one — the query is fast.
 
 | Table | Indexes (baseline, present on every chain) |
 |-------|--------------------------------------------|
 | `transaction_detail` | `(block_number)`, `(from_a, block_number)`, `(to_a, block_number)`, `(common.selector(calldata), block_number)`, **`(to_a, common.selector(calldata), block_number)`** ← workhorse |
-| `logs` | `(address, block_number DESC)`, `(block_number DESC)` — **no `topic0` index on Base; may exist on other chains** |
+| `logs` | `(address, block_number DESC)`, `(block_number DESC)`, **`(topic0, block_number, address)`** — `topic0` indexed on all 8 chains today (verify per chain) |
 | `token_ledger` | `(address)`, `(address, block_number, tx_index, vm_step_start, vm_step)`, `(block_number)`, `(block_number, tx_index, vm_step_start, vm_step)` |
-| `contract_creation` | `(address)`, `(block_number, tx_index, vm_step_start)`, `(deployer) INCLUDE (address)` |
+| `contracts` | `(address)` [pkey], `(deployer)`, `(block_number)` |
 
 ### 1.2 Helper functions (PG18+)
 
@@ -85,7 +94,7 @@ WHERE <chain>.block_timestamp(block_number) BETWEEN now() - interval '{{X}}' AND
 |---|------|-----|
 | 1 | **Always lead with an indexed column.** `address`, `to_a`, `from_a`, `common.selector(calldata)`, `block_number`. | Sequential scans over `logs` / `transaction_detail` are minutes-to-hours. |
 | 2 | **Always include a block-range filter.** | Without one, even the best index scans the whole table. |
-| 3 | **For `logs`, address-first, topic0-second** *(unless the target chain has a `topic0` index — see §1.1)*. `WHERE address = … AND topic0 = …` is safe everywhere; `WHERE topic0 = …` alone is safe **only after** confirming an index exists on that chain (`\d+ {{CHAIN}}.logs` or `pg_indexes`). | The baseline schema has no `topic0` index; address is the only guaranteed-fast leading predicate. If a chain *does* index `topic0` (or `(topic0, …)`), bare topic0 filtering is fine. |
+| 3 | **For `logs`, `topic0` is indexed on all 8 chains** — `WHERE topic0 = …` alone is index-fast (and is how you catch every fork of an event); add `address = …` to pin one deployment. Re-verify per chain (§1.1) since indexes can change. | A `(topic0, block_number, address)` btree carries it — always pair with a `block_number`/`duration=` bound so the time window is indexed too. |
 | 4 | **Prefer `transaction_detail` as the driving table for function-call detection.** | The `(to_a, selector, block_number)` composite is the cheapest entry point. |
 | 5 | **Prefer `token_ledger` over decoding `logs.Transfer.data` for value analytics.** | Already parsed, signed, joined to counterparty; no TOAST hit. |
 | 6 | **Don't `SELECT *`.** | `calldata`, `returndata`, `logs.data` are TOAST-stored. Project explicit columns. |
@@ -101,6 +110,8 @@ WHERE <chain>.block_timestamp(block_number) BETWEEN now() - interval '{{X}}' AND
 | Selector of a call | `common.selector(td.calldata)` |
 | Indexed address from `topic1`/`topic2` | `substring(log.topic1 FROM 13 FOR 20)::bytea` (right-most 20 of 32 bytes) |
 | `uint256` from `log.data` | `common.hex_to_numeric('0x' || encode(log.data, 'hex'))` |
+| `uint` packed in an indexed topic (e.g. UniV3 fee in `topic3`) | `get_byte(topic3::bytea, 29)*65536 + get_byte(topic3::bytea, 30)*256 + get_byte(topic3::bytea, 31)` — cast `ethword`→`bytea`; last 3 bytes = `uint24` |
+| **Readable address/hash in SELECT** | `concat('0x', encode(col, 'hex'))` (or `'0x' \|\| encode(col, 'hex')`) — bare `encode()` has **no `0x`**; output-only, WHERE literals stay `\x` bytea. Verified live. |
 | Token amount → human units | divide by `pow(10, decimals)` (USDC = 6, WETH = 18, etc.) |
 | Time-bucket | `date_trunc('hour', <chain>.block_timestamp(block_number))` |
 
@@ -407,11 +418,12 @@ Wrap downstream aggregation outside the UNION. Note: `block_number` is **not** c
 
 ```sql
 SELECT cc.address, cc.block_number, {{CHAIN}}.block_timestamp(cc.block_number) AS deployed_at
-FROM {{CHAIN}}.contract_creation cc
+FROM {{CHAIN}}.contracts cc
 WHERE cc.deployer = '{{DEPLOYER}}'::bytea;
 ```
 
-`(deployer) INCLUDE (address)` makes this an index-only scan.
+The `(deployer)` index keeps this cheap. For a deployer/relayer **allowlist** (the §7 "new contracts by
+relayers" row), swap the equality for `WHERE cc.deployer = ANY(ARRAY['\x…'::bytea, '\x…'::bytea])`.
 
 ---
 
@@ -453,7 +465,7 @@ If the protocol doc does not provide a value, **stop and ask** — never guess a
 | "Who deployed contract X?" | P11 | deployer address |
 | "When was contract X first active?" | P11 + P1 with `ORDER BY block_number ASC LIMIT 1` | callee |
 | "Match an off-chain event ID to an on-chain settlement" | P5 (use `auth_nonce` from `topic2`) | callee, auth-event topic0 |
-| "Detect new contracts being deployed by relayers" | P12 with `WHERE deployer = ANY(known_relayers)` | known relayer EOAs |
+| "Detect new contracts being deployed by relayers" | P11 with `WHERE deployer = ANY(known_relayers)` | known relayer EOAs |
 
 ---
 
@@ -479,7 +491,7 @@ If the protocol doc does not provide a value, **stop and ask** — never guess a
 
 | Anti-pattern | Why it's bad | Use instead |
 |--------------|-------------|-------------|
-| `WHERE topic0 = '\x…'` (alone on `logs`) *(chain-dependent)* | On Base and other baseline schemas, no `topic0` index → full table scan. On chains that **do** index `topic0` (verify in §1.1 or via `pg_indexes`), this is fine. | Default to adding `address = '\x…'` as leading predicate; skip the address constraint only after confirming a `topic0`-leading index exists on the target chain. |
+| `WHERE topic0 = '\x…'` (alone on `logs`) **without a block-range** | `topic0` is indexed on all 8 chains, so the topic0 lookup is fine — but with no `block_number`/`duration=` bound it still scans all history for that topic0. | Keep `WHERE topic0 = …` (it's the all-forks pattern) **plus** a `block_number BETWEEN …`/`duration=` bound; add `address = …` only to pin one deployment. |
 | `SELECT *` from `logs` / `transaction_detail` | `data`/`calldata` are TOAST; bloats network | Project explicit columns |
 | `WHERE tx_hash = '\x…'` | `tx_hash` may not be indexed on every table | Use `(block_number, tx_index)` if known |
 | Decoding `logs.Transfer.data` for amounts | Slow + complicated when `token_ledger` has it parsed | P4 |
@@ -496,7 +508,8 @@ If the protocol doc does not provide a value, **stop and ask** — never guess a
 1. Every `WHERE` column either has an index (§1.1) or sits inside an indexed range.
 2. There is a `block_number BETWEEN …` filter.
 3. `committed AND error IS NULL` is present (unless you specifically want reverts).
-4. Addresses are lowercase `bytea` literals; topic hashes are full 32-byte literals.
+4. Addresses are lowercase `bytea` literals; topic hashes are full 32-byte literals. SELECT output
+   for addresses/hashes is `concat('0x', encode(col,'hex'))` (the `0x` prefix; bare `encode()` omits it).
 5. For value math: `tl.value_delta < 0` selects sender rows; otherwise you'll double-count.
 6. For aggregations: time-bucket via `<chain>.block_timestamp(block_number)`, not by joining `<chain>.block`.
 7. Cross-chain queries `UNION ALL` per chain — they never JOIN on `block_number` directly.
