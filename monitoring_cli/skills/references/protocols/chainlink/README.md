@@ -14,7 +14,7 @@ Chainlink is not a single versioned protocol like Uniswap — it's a suite of pr
 | [functions.md](functions.md) | **Functions** (serverless DON compute) | v1 | `FunctionsRouter`, `FunctionsCoordinator`, `FunctionsBilling` |
 | [link-token.md](link-token.md) | **LINK token** (ERC-677) + PegSwap | — | LINK per chain, `transferAndCall`, PegSwap |
 
-Each file follows the house shape: **Topics** (chain-agnostic `topic0 = keccak256(event sig)`) → **Function signatures** (chain-agnostic 4-byte selectors) → **Addresses** (network-specific) → **Detection invariants & gotchas** → **Quick-copy bytea constants** → **Verification & sources**.
+Each file follows the same section layout: **Topics** (chain-agnostic `topic0 = keccak256(event sig)`) → **Function signatures** (chain-agnostic 4-byte selectors) → **Addresses** (network-specific) → **Detection invariants & gotchas** → **Quick-copy bytea constants** → **Verification & sources**.
 
 ## Cross-cutting facts worth knowing before you start
 

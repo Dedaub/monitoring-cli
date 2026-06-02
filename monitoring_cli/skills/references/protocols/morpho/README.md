@@ -2,7 +2,7 @@
 
 Monitoring-grade references for Morpho across **Ethereum (1), Base (8453), BNB Smart Chain (56), Avalanche C-Chain (43114), Arbitrum One (42161), Optimism (10), Polygon PoS (137)**. Verified against live RPC + canonical `morpho-org/*` repos + `@morpho-org/blue-sdk` on 2026-05-29.
 
-Morpho is **three generations** of protocol, not a single linear `v1→v2→v3`. One file per generation (each covers its sub-components and follows the house shape):
+Morpho is **three generations** of protocol, not a single linear `v1→v2→v3`. One file per generation (each covers its sub-components and follows the same section layout):
 
 | File | Generation | Components | Status |
 |------|-----------|------------|--------|
@@ -10,7 +10,7 @@ Morpho is **three generations** of protocol, not a single linear `v1→v2→v3`.
 | [v1.md](v1.md) | **Gen 2 — Morpho V1** | **Morpho Blue** (immutable singleton lending primitive, "Markets V1") + **MetaMorpho** V1.0/V1.1 (ERC-4626 curated vaults, "Vaults V1") + periphery (AdaptiveCurveIRM, PublicAllocator, oracle factory, pre-liquidation, Bundler3, URD, MORPHO token) | **Live, dominant.** All 7 chains. Immutable. |
 | [v2.md](v2.md) | **Gen 3 — Morpho V2** | **Vaults V2** (new protocol-agnostic vault standard + adapters + registry) — *live*; **Markets V2 / "Midnight"** (intent-based fixed-rate/fixed-term primitive) — *whitepaper + codebase open-sourced 2026-05-28, not yet on mainnet* | Vaults V2 live on 6/7 chains (not BNB). Midnight rolling out 2026 (Morpho frames it as a new paradigm, not literally "Blue V2"). |
 
-Each file follows the house shape: **Topics** (chain-agnostic `topic0 = keccak256(event sig)`) → **Function signatures** (chain-agnostic 4-byte selectors) → **Addresses** (network-specific, one section per chain) → **Cross-chain summary** → **Proxies** → **Detection invariants & gotchas** → **Quick-copy bytea constants** → **Verification & sources**.
+Each file follows the same section layout: **Topics** (chain-agnostic `topic0 = keccak256(event sig)`) → **Function signatures** (chain-agnostic 4-byte selectors) → **Addresses** (network-specific, one section per chain) → **Cross-chain summary** → **Proxies** → **Detection invariants & gotchas** → **Quick-copy bytea constants** → **Verification & sources**.
 
 ## Cross-cutting facts worth knowing before you start
 

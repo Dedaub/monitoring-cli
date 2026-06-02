@@ -1,6 +1,6 @@
 # SparkLend — Topics, Selectors, Addresses (Ethereum + Gnosis; Spark non-lending footprint on Base/Arbitrum/Optimism/Avalanche/Unichain/World Chain)
 
-**Status:** verified against Ethereum and Gnosis mainnet RPC, the canonical `sparkdotfi/spark-address-registry` `.sol` libraries, and `aave-dao/aave-v3-origin`, on 2026-05-29. Non-obvious claims additionally fact-checked via deep-research against primary sources (Spark docs/forum, Sky governance, GitHub) — see §11.1.
+**Status:** verified against Ethereum and Gnosis mainnet RPC, the canonical `sparkdotfi/spark-address-registry` `.sol` libraries, and `aave-dao/aave-v3-origin`, on 2026-05-29. Non-obvious claims additionally fact-checked against primary sources (Spark docs/forum, Sky governance, GitHub) — see §11.1.
 **Scope:** the user requested Ethereum, Base, BNB, Avalanche, Arbitrum, Optimism, Polygon PoS. **The SparkLend lending market exists on only two chains — Ethereum (chain 1, active) and Gnosis Chain (chain 100, winding down).** None of Base / BNB / Avalanche / Arbitrum / Optimism / Polygon runs a SparkLend `Pool`. Base/Arbitrum/Optimism/Avalanche (plus Unichain & World Chain) host only the **Spark Savings + Spark Liquidity Layer** products (sUSDS/sUSDC, PSM3, ALM) — documented in §6 since the user asked for "all possible deployments." **BNB Smart Chain and Polygon PoS have no Spark contracts at all** (no registry file).
 
 SparkLend is a **soft fork of Aave V3** (V3.0.x-era; built by Phoenix Labs), so **its event topics and function selectors are byte-for-byte identical to Aave V3** — see [aave/v3.md](../aave/v3.md). It deployed to Ethereum mainnet in March 2023 and **officially launched 2023-05-09**; the Gnosis instance followed in **September 2023** (its first and only cross-chain lending deployment). This doc records what is *specific* to SparkLend: which Aave features it has/lacks (it predates v3.2–v3.4), its Spark-specific contracts (FreezerMom, KillSwitchOracle, CapAutomator, fixed-$1 stable oracles, Sky D3M DAI source), its governance (`SPARK_PROXY`, the Spark subDAO), and its network-specific addresses. Every core contract is a **fully upgradeable proxy**; aTokens are branded **spTokens** (spWETH, spDAI, …) but are mechanically identical Aave aTokens.
@@ -474,7 +474,7 @@ Authoritative sources:
 - [Spark docs — SparkLend](https://docs.spark.fi/) · [Address registry site](https://docs.spark.fi/dev/deployments/address-registry).
 - Explorers: [Etherscan Pool](https://etherscan.io/address/0xC13e21B648A5Ee794902342038FF3aDAB66BE987) · [Gnosisscan Pool](https://gnosisscan.io/address/0x2Dae5307c5E3FD1CF5A72Cb6F698f915860607e0).
 
-### 11.1 Deep-research fact-check (2026-05-29) — all primary claims confirmed
+### 11.1 Independent fact-check (2026-05-29) — all primary claims confirmed
 
 Six non-obvious claims were cross-checked against Spark docs, the Sky governance forum, MakerDAO polls, and GitHub. Verdicts:
 

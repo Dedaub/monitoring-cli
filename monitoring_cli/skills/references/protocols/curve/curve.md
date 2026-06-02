@@ -1,6 +1,6 @@
 # Curve Finance — Topics, Selectors, Addresses (Ethereum, Arbitrum, Optimism, Base, BSC, Polygon, Gnosis, Avalanche)
 
-**Status:** event topic0 hashes and function selectors computed locally with `cast keccak` / `cast sig` from canonical signatures read directly out of the `curvefi` Vyper source repos (verified, deterministic). Addresses sourced from Curve's official deployment records (`curvefi/curve-js` `network_constants.ts`), the Curve readthedocs deployment page, and Etherscan contract labels as of 2026-05. **Addresses were NOT independently RPC-verified** in this environment — treat the hashes/selectors as ground truth and the addresses as authoritative-but-unverified. See §14.
+**Status:** verified against live RPC on all eight listed chains and the canonical `curvefi` Vyper source repos on **2026-06-02**. Event topic0 hashes and function selectors were recomputed locally as `keccak256(canonical signature)` (deterministic; 69/69 topics and 56/56 selectors re-checked, cross-checked against live `eth_getLogs`). **Every address was existence-checked with `eth_getCode`** on each chain it is claimed on (all resolve), every listed proxy slot was read live, and the `AddressProvider` id-map was read on-chain. The companion stablecoin/lending file is [crvusd.md](crvusd.md) (crvUSD mint markets + LlamaLend + scrvUSD); see [README.md](README.md). Full method + the independent fact-check are in §14.
 **Scope:** the Curve AMM exchange protocol across seven EVM chains, its factories/registries, the Curve DAO/tokenomics stack (Ethereum), and an adjacent crvUSD pointer. Topics + selectors are chain-agnostic; addresses are network-specific.
 
 Curve is **not one ABI** — it is a family of pool implementations deployed over six years, each with its own event and function signatures. The single most important fact for monitoring Curve: **StableSwap pools use `int128` coin indices, CryptoSwap pools (tricrypto/twocrypto) use `uint256` indices**, and the "NG" (new-generation) rewrites changed event field layouts again. The *same* logical event name (`TokenExchange`, `AddLiquidity`, …) therefore hashes to *different* `topic0` values across families — you must match on `(topic0, pool-family)`, never on event name alone.
@@ -233,13 +233,15 @@ Curve deploys its registry stack with a deterministic deployer, so several addre
 
 | Role | Address | Notes |
 |------|---------|-------|
-| **AddressProvider** | `0x0000000022D53366457F9d5E68Ec105046FC4383` | Same on Ethereum, Arbitrum, Optimism, Base, Polygon, Gnosis, Avalanche (and most other Curve chains). The entry point: `get_address(id)`. |
+| **AddressProvider (classic)** | `0x0000000022D53366457F9d5E68Ec105046FC4383` | Same on all 8 chains (code verified on each; Base is a smaller 1546-byte variant). The legacy entry point: `get_address(id)`. |
+| **AddressProvider-NG** | `0x5ffe7FB82894076ECB99A30D6A32e969e6e35E98` | The **newer** id-registry — same address on all 8 chains (verified). This, not the classic `0x0000…4383`, is where the NG factories are registered; it has its **own** id-map (Eth, read live: 1=PoolInfo, 2=Exchange Router `0x16c6521d…`, 4=crvUSD FeeDistributor `0xd16d5ec3…`, 7=MetaRegistry, 8=crvUSD Stableswap factory, 11=Tricrypto-NG factory, 12=StableSwap-NG factory `0x6A8c…21bf`, 13=Twocrypto-NG factory, 18=RateProvider). Emits `NewEntry`/`EntryModified` (§1.7). |
+| **Gauge factory (Root/Child)** | `0xabC000d88f23Bb45525E447528DBF656A9D55bf5` | Same address on all 8 chains. On **Ethereum** it is the **RootLiquidityGaugeFactory** (deploys L1 root gauges, ~1.75 KB); on **every L2** it is the **ChildLiquidityGaugeFactory** (deploys L2 child gauges, ~3.5 KB) — *different bytecode per role, same address*. Watch its gauge-deploy events (§1.6). |
 | **MetaRegistry (Ethereum)** | `0xF98B45FA17DE75FB1aD0e7aFD971b0ca00e379fC` | On **Ethereum** reachable via `AddressProvider.get_address(7)` (verified on-chain). **This does NOT generalize** — on Arbitrum/Optimism/Base/Gnosis/Avalanche `get_address(7)` returns `0x0`, and on Polygon it returns a different contract. The id→contract map is chain-specific; find the L2 MetaRegistry by scanning the AddressProvider's populated ids per chain. |
 | **TwoCrypto-NG factory** | `0x98EE851a00abeE0d95D08cF4CA2BdCE32aeaAF7F` | Identical on Ethereum, Arbitrum, Optimism, Polygon, Gnosis, Avalanche, **BSC**. **Base is the exception** (`0xc9Fe0C63…b665F`). |
-| **Router (CurveRouterNG)** | `0x0DCDED3545D565bA3B19E683431381007245d983` | Identical on Optimism, Polygon, Gnosis, Avalanche. Ethereum/Arbitrum/Base differ (see per-chain tables). |
+| **Router (CurveRouterNG)** | `0x0DCDED3545D565bA3B19E683431381007245d983` | Live on Optimism, Polygon, Gnosis, Avalanche **and also Ethereum + Arbitrum** (verified, ~20–24 KB), where it **coexists** with the per-chain routers listed in §4–§5. Base (`0x4f37…fc1F`) and BSC (`0xA72C…51CC`) differ. A second, newer Ethereum router — the AP-NG "Exchange Router" `0x16c6521dff6bab339122a0fe25a9116693265353` — is also live. **Multiple router versions coexist per chain; track every router present, not just one.** |
 | **Deposit & Stake zap** | `0x37c5ab57AF7100Bdc9B668d766e193CCbF6614FD` | Identical on Arbitrum, Optimism, Polygon, Gnosis, Avalanche. |
 
-`AddressProvider` IDs are **chain-specific — read them, don't assume.** On **Ethereum** (verified on-chain): `0` = main StableSwap Registry, `1` = PoolInfo, `2` = Exchange/Swaps, `3` = crypto Registry, `5` = crypto factory, `7` = MetaRegistry. On L2s the same ids map to different contracts (e.g. Polygon `get_address(7)` is **not** the MetaRegistry) or are unpopulated (`get_address(7)` = `0x0` on Arbitrum/Optimism/Base/Gnosis/Avalanche).
+`AddressProvider` IDs are **chain-specific — read them, don't assume.** On **Ethereum** the *classic* AddressProvider id-map is (all read live 2026-06-02 via `get_address(id)`): `0` = Main Registry `0x90e0…d7f5`, `1` = PoolInfo, `2` = **Exchanges** `0x99a58482bd75cbab83b27ec03ca68ff489b5788f`, `3` = **Metapool Factory** `0xb9fc…90d4`, `4` = **crvUSD FeeDistributor** `0xd16d5ec3…`, `5` = **CryptoSwap Registry** `0x8f942c20d02befc377d41445793068908e2250d0`, `6` = **Cryptopool Factory** `0xf18056bb…`, `7` = MetaRegistry, `8` = crvUSD Stableswap factory `0x4f8846ae…`, `11` = Tricrypto-NG factory. ⚠️ **Earlier drafts of this doc inverted ids 3/5/6** ("3 = crypto Registry, 5 = crypto factory") — that was wrong; the live values above are authoritative. On L2s the same ids map to different contracts (e.g. Polygon `get_address(7)` returns the OldCrypto factory `0xe5de15a9…`, **not** the MetaRegistry) or are unpopulated (`get_address(7)` = `0x0` on Arbitrum/Optimism/Base/Gnosis/Avalanche). The NG factories live under the separate **AddressProvider-NG** `0x5ffe7FB8…` id-map (see the §3 table).
 
 ---
 
@@ -259,7 +261,14 @@ Curve deploys its registry stack with a deterministic deployer, so several addre
 | Old metapool/stableswap factory | `0xB9fC157394Af804a3578134A6585C0dc9cc990d4` |
 | Old crypto-swap factory | `0xF18056Bbd320E96A48e3Fbf8bC061322531aac99` |
 | Router (CurveRouterNG) | `0x45312ea0eFf7E09C83CBE249fa1d7598c4C8cd4e` |
+| Exchange Router (newer, AP-NG id2) | `0x16c6521dff6bab339122a0fe25a9116693265353` |
 | Deposit & Stake zap | `0x56C526b0159a258887e0d79ec3a80dfb940d0cD7` |
+| AddressProvider-NG | `0x5ffe7FB82894076ECB99A30D6A32e969e6e35E98` |
+| RootLiquidityGaugeFactory | `0xabC000d88f23Bb45525E447528DBF656A9D55bf5` |
+| Exchanges registry (AP id2) | `0x99a58482bd75cbab83b27ec03ca68ff489b5788f` |
+| CryptoSwap Registry (AP id5) | `0x8f942c20d02befc377d41445793068908e2250d0` |
+| crvUSD Stableswap pool factory (AP id8; `pool_count` 29) | `0x4F8846Ae9380B90d2E71D5e3D042dff3E7ebb40d` |
+| crvUSD FeeDistributor (AP id4, veCRV sink) | `0xD16d5eC345Dd86Fb63C6a9C43c517210F1027914` |
 
 ### 4.2 DAO / tokenomics
 
@@ -285,6 +294,24 @@ Curve deploys its registry stack with a deterministic deployer, so several addre
 | tricrypto-2 (USDT/WBTC/WETH) | `0xD51a44d3FaE010294C616388b506AcdA1bfAAE46` | `0xc4AD29ba4B3c580e6D59105FFf484999997675Ff` | CryptoSwap old (3-coin) |
 | TricryptoUSDC (USDC/WBTC/WETH) | `0x7F86Bf177Dd4F3494b841a37e810A34dD56c829B` | pool = LP | Tricrypto-NG |
 | TricryptoUSDT (USDT/WBTC/WETH) | `0xf5f5B97624542D72A9E06f04804Bf81baA15e2B4` | pool = LP | Tricrypto-NG |
+
+### 4.4 NG blueprint/implementation helpers (Ethereum) — referenced in the factory `*Deployed` events
+
+The NG factories delegate heavy math/views to shared **implementation** contracts (recorded in each pool's `*Deployed` event, §1.6) and clone a **gauge implementation**. These are immutable Vyper deployments, all `eth_getCode`-verified on Ethereum (2026-06-02). You rarely key alerts on them, but you need them to decode `*Deployed` events and to recognise the math contract a crypto pool delegates to.
+
+| Role | Address |
+|------|---------|
+| StableSwap-NG views impl | `0xff53042865df617de4bb871bd0988e7b93439ccf` |
+| StableSwap-NG / Twocrypto math impl | `0xc9cbc565a9f4120a2740ec6f64cc24aeb2bb3e5e` |
+| StableSwap-NG / Twocrypto gauge impl | `0x38d9bda812da2c68dfc6ade85a7f7a54e77f8325` |
+| Tricrypto-NG views impl | `0x064253915b8449fdefac2c4a74aa9fdf56691a31` |
+| Tricrypto-NG math impl | `0xcbff3004a20dbfe2731543aa38599a526e0fd6ee` |
+| Tricrypto-NG gauge impl | `0x5fc124a161d888893529f67580ef94c2784e9233` |
+| Twocrypto-NG math impl | `0x1fd8af16dc4bebd950521308d55d0543b6cdf4a1` |
+| Twocrypto-NG views impl | `0x07cdebf81977e111b08c126defa07818d0045b80` |
+| FeeCollector (NG `fee_receiver`, Ethereum) | `0xa2bcd1a4efbd04b63cd03f5aff2561106ebcce00` |
+
+On L2s the SSNG/Tricrypto factories return their **own** per-chain math impls (e.g. Arbitrum SSNG math `0xd4a8bd4d…`); `gauge_implementation` is `0x0` on L2 factories because the **ChildLiquidityGaugeFactory** (`0xabC000…55bf5`, §3) deploys L2 gauges instead.
 
 ---
 
@@ -374,18 +401,54 @@ On-chain verified via `bsc-rpc.publicnode.com`. The classic `AddressProvider` ex
 
 ---
 
-## 10. crvUSD (adjacent — stablecoin/lending, not a DEX pool)
+## 9c. Cross-chain summary (presence matrix)
 
-crvUSD is Curve's overcollateralized stablecoin. It is *not* a swap pool, but its markets emit their own events and frequently co-occur with Curve pool activity, so it is often monitored alongside the DEX. Ethereum addresses:
+`✓` = bytecode confirmed via `eth_getCode` on 2026-06-02; `—` = not deployed / not listed (absence not exhaustively probed for the old-crypto factory on chains where Curve never shipped it). **AddressProvider, AddressProvider-NG and the Gauge factory share one address across all 8 chains** (§3); everything else is per-chain.
 
-| Role | Address |
-|------|---------|
-| crvUSD token | `0xf939E0A03FB07F59A73314E73794Be0E57ac1b4E` |
-| ControllerFactory (mint markets) | `0xC9332fdCB1C491Dcc683bAe86Fe3cb70360738BC` |
-| PegKeeper (one of several) | `0x6B765d07cf966c745B340AdCa67749fE75B5c345` |
-| crvUSD lending factory (OneWayLendingFactory, per curve-js) | `0x4F8846Ae9380B90d2E71D5e3D042dff3E7ebb40d` |
+| Chain (ID) | AP | AP-NG | SSNG fac | TriNG fac | TwoNG fac | OldMeta fac | OldCrypto fac | Gauge fac | Router(s) present |
+|---|---|---|---|---|---|---|---|---|---|
+| Ethereum (1) | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | Root | `45312…`, `0DCD…`, `16c6…` |
+| Arbitrum (42161) | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | — | Child | `2191…`, `0DCD…` |
+| Optimism (10) | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | — | Child | `0DCD…` |
+| Base (8453) | ✓ | ✓ | ✓ | ✓ | ✓ ¹ | ✓ | ✓ | Child | `4f37…` |
+| Polygon (137) | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | Child | `0DCD…` |
+| Gnosis (100) | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | — | Child | `0DCD…` |
+| Avalanche (43114) | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | — | Child | `0DCD…` |
+| BSC (56) | ✓ ² | ✓ | ✓ | ✓ | ✓ | ✓ ³ | ✓ | Child | `A72C…` |
 
-Each collateral (wstETH, WBTC, ETH, …) has its own **Controller** + **LLAMMA** AMM, deployed by the ControllerFactory — enumerate via the factory rather than hard-coding. crvUSD uses a different event vocabulary (`Borrow`, `Repay`, `Liquidate`, `RemoveCollateral`) not covered here.
+¹ Base TwoCrypto-NG factory is the chain-specific `0xc9Fe…b665F`, **not** the shared `0x98EE…AF7F`. ² BSC AddressProvider exists but its classic registry ids are unpopulated (factory-only chain). ³ BSC OldMeta factory is deployed but `pool_count` 0.
+
+### 9c.1 Per-chain fee receiver (PoolProxy / fee-burn destination)
+
+Each chain routes pool admin fees to a fee receiver (read from the SSNG factory `fee_receiver()`; all `eth_getCode`-verified). Ethereum uses the DAO **PoolProxy** (§4.2); each L2 has its own:
+
+| Chain | Fee receiver (PoolProxy) |
+|-------|--------------------------|
+| Ethereum | `0xeCb456EA5365865EbAb8a2661B0c503410e9B347` (PoolProxy, §4.2) |
+| Arbitrum | `0xd4f94d0aaa640bbb72b5eec2d85f6d114d81a88e` |
+| Optimism | `0xbf7e49483881c76487b0989cd7d9a8239b20ca41` |
+| Base | `0xe8269b33e47761f552e1a3070119560d5fa8bbd6` |
+| Polygon | `0x774d1dba98cfbd1f2bc3a1f59c494125e07c48f9` |
+| Gnosis | `0xbb7404f9965487a9dde721b3a5f0f3ccfa9aa4c5` |
+| Avalanche | `0x06534b0bf7ff378f162d4f348390bda53b15fa35` |
+| BSC | `0x98b4029cabef7fd525a36b0bf8555ec1d42ec0b6` |
+
+---
+
+## 10. crvUSD, LlamaLend & scrvUSD → see [crvusd.md](crvusd.md)
+
+Curve's **crvUSD** stablecoin (overcollateralized minting), the **LlamaLend / Curve Lend** lending markets (built on the same LLAMMA soft-liquidation engine), and **scrvUSD** (the ERC-4626 savings wrapper) are a distinct product line with their own event vocabulary (`Borrow`, `Repay`, `Liquidate`, `RemoveCollateral`, `UserState`, ERC-4626 `Deposit`/`Withdraw`, …). They are documented in full — topics, selectors, every address on all 8 chains, proxies — in the sibling file **[crvusd.md](crvusd.md)**. Quick orientation (Ethereum):
+
+| Role | Address | Note |
+|------|---------|------|
+| crvUSD token | `0xf939E0A03FB07F59A73314E73794Be0E57ac1b4E` | bridged to a *different* address on each L2 (see crvusd.md) |
+| ControllerFactory (mint markets) | `0xC9332fdCB1C491Dcc683bAe86Fe3cb70360738BC` | `n_collaterals()` = 9; mint markets are **Ethereum-only** |
+| OneWayLendingFactory (LlamaLend) | `0xeA6876DDE9e3467564acBeE1Ed5bac88783205E0` | `market_count()` = 48 |
+| scrvUSD (savings) | `0x0655977FEb2f289A4aB78af67BAB0d17aAb84367` | ERC-4626; Yearn-V3 clone |
+
+> ⚠️ **Correction:** earlier drafts listed the LlamaLend factory as `0x4F8846Ae…`. That address is the **crvUSD Stableswap *pool* factory** (`pool_count` = 29, AddressProvider id8 / §4.1) — `market_count()` reverts on it. The real **OneWayLendingFactory** is `0xeA6876DD…` (`market_count()` = 48, verified live).
+
+Mint markets exist **only on Ethereum**; LlamaLend is on **Ethereum + Arbitrum + Optimism** (of the 8 chains); every other chain has only the bridged crvUSD token. Each collateral/market has its own **Controller** + **LLAMMA** AMM — enumerate via the factories, never hard-code. Full detail in [crvusd.md](crvusd.md).
 
 ---
 
@@ -419,7 +482,8 @@ There is no single init-code hash (contrast Uniswap V2 §11). See `references/pr
 11. **Factory addresses cluster across chains.** The TwoCrypto-NG factory is `0x98EE…AF7F` on every chain (ETH/Arbitrum/Optimism/Polygon/Gnosis/Avalanche/BSC) **except Base** (`0xc9Fe…b665F`); the Router `0x0DCD…d983` and Deposit&Stake `0x37c5…14FD` repeat on several L2s. Always condition on `(chainId, address)`.
 12. **Parameter changes are timelocked DAO actions.** `RampA`/`NewParameters`/`ApplyNewFee` originate from the Ownership/Parameter Agent (§4.2) via the DAO, not from random EOAs — useful for distinguishing legitimate parameter changes from anomalies.
 13. **`mint(address)` selector `0x6a627842` collides with Uniswap V2 `mint(address)`.** On Curve it is the Minter claiming CRV for a gauge; disambiguate by target address (Minter `0xd061…2fcE0`).
-14. **Bytea hex literals must have an even digit count:** 40 hex chars for addresses, 64 for 32-byte topic values. Topic0 values above are 64 hex chars (32 bytes); selectors are 8 hex chars (4 bytes).
+14. **The Curve Block Oracle and RateProvider are separate infrastructure, not pool contracts.** The 2025 **Curve Block Oracle** (a cross-chain blockhash / storage-proof messaging primitive deployed on 20+ Curve chains; underpins scrvUSD's cross-chain price) and the per-chain **RateProvider** (AddressProvider-NG id 18) are neither DEX pools nor LP tokens — do not classify their events as swap/liquidity activity. They are noted for completeness; their per-chain addresses are not enumerated here.
+15. **Bytea hex literals must have an even digit count:** 40 hex chars for addresses, 64 for 32-byte topic values. Topic0 values above are 64 hex chars (32 bytes); selectors are 8 hex chars (4 bytes).
 
 ---
 
@@ -496,10 +560,12 @@ SEL_GET_ADDRESS                      = '\x493f4f74'   -- AddressProvider.get_add
 SEL_POOL_COUNT                       = '\x956aae3a'
 SEL_FIND_POOL_FOR_COINS              = '\xa87df06c'
 
--- ===== Infra (same on all 7 chains) =====
+-- ===== Infra (same address on all 8 chains) =====
 ADDRESS_PROVIDER                     = '\x0000000022d53366457f9d5e68ec105046fc4383'
-TWOCRYPTO_NG_FACTORY_SHARED          = '\x98ee851a00abee0d95d08cf4ca2bdce32aeaaf7f'  -- NOT Base
-ROUTER_SHARED_L2                     = '\x0dcded3545d565ba3b19e683431381007245d983'  -- OP/Polygon/Gnosis/Avax
+ADDRESS_PROVIDER_NG                  = '\x5ffe7fb82894076ecb99a30d6a32e969e6e35e98'  -- NG entry point, all 8 chains
+GAUGE_FACTORY_ROOT_CHILD             = '\xabc000d88f23bb45525e447528dbf656a9d55bf5'  -- Root on ETH, Child on every L2
+TWOCRYPTO_NG_FACTORY_SHARED          = '\x98ee851a00abee0d95d08cf4ca2bdce32aeaaf7f'  -- NOT Base (Base = 0xc9fe...b665f)
+ROUTER_SHARED_L2                     = '\x0dcded3545d565ba3b19e683431381007245d983'  -- OP/Polygon/Gnosis/Avax + ALSO ETH+ARB
 DEPOSIT_AND_STAKE_SHARED_L2          = '\x37c5ab57af7100bdc9b668d766e193ccbf6614fd'
 
 -- ===== Ethereum (chain ID 1) =====
@@ -522,6 +588,21 @@ ETH_TRICRYPTO_USDC                   = '\x7f86bf177dd4f3494b841a37e810a34dd56c82
 ETH_TRICRYPTO_USDT                   = '\xf5f5b97624542d72a9e06f04804bf81baa15e2b4'
 ETH_CRVUSD                           = '\xf939e0a03fb07f59a73314e73794be0e57ac1b4e'
 ETH_CRVUSD_CONTROLLER_FACTORY        = '\xc9332fdcb1c491dcc683bae86fe3cb70360738bc'
+ETH_ONEWAY_LENDING_FACTORY           = '\xea6876dde9e3467564acbee1ed5bac88783205e0'  -- LlamaLend (NOT 0x4f8846ae); see crvusd.md
+ETH_CRVUSD_STABLESWAP_FACTORY        = '\x4f8846ae9380b90d2e71d5e3d042dff3e7ebb40d'  -- AP id8, pool_count 29 (NOT lending)
+ETH_CRVUSD_FEE_DISTRIBUTOR           = '\xd16d5ec345dd86fb63c6a9c43c517210f1027914'  -- AP id4, veCRV sink
+ETH_EXCHANGE_ROUTER_2                = '\x16c6521dff6bab339122a0fe25a9116693265353'  -- AP-NG id2 (newer router)
+ETH_EXCHANGES_REGISTRY               = '\x99a58482bd75cbab83b27ec03ca68ff489b5788f'  -- AP id2
+ETH_CRYPTOSWAP_REGISTRY              = '\x8f942c20d02befc377d41445793068908e2250d0'  -- AP id5
+-- per-chain fee receivers (PoolProxy / fee-burn destination), §9c.1
+ETH_POOL_PROXY                       = '\xecb456ea5365865ebab8a2661b0c503410e9b347'
+ARB_FEE_RECEIVER                     = '\xd4f94d0aaa640bbb72b5eec2d85f6d114d81a88e'
+OP_FEE_RECEIVER                      = '\xbf7e49483881c76487b0989cd7d9a8239b20ca41'
+BASE_FEE_RECEIVER                    = '\xe8269b33e47761f552e1a3070119560d5fa8bbd6'
+POL_FEE_RECEIVER                     = '\x774d1dba98cfbd1f2bc3a1f59c494125e07c48f9'
+GNO_FEE_RECEIVER                     = '\xbb7404f9965487a9dde721b3a5f0f3ccfa9aa4c5'
+AVAX_FEE_RECEIVER                    = '\x06534b0bf7ff378f162d4f348390bda53b15fa35'
+BSC_FEE_RECEIVER                     = '\x98b4029cabef7fd525a36b0bf8555ec1d42ec0b6'
 
 -- ===== Arbitrum (42161) =====
 ARB_CRV                              = '\x11cdb42b0eb46d95f990bedd4695a6e3fa034978'
@@ -581,7 +662,9 @@ How the constants in this doc were produced:
 
 - **Event topic0 hashes and function selectors:** computed locally with Foundry `cast keccak` (full keccak256 of the canonical event signature) and `cast sig` (`keccak256(sig)[0:4]`). Canonical signatures were read directly from the `curvefi` Vyper source (see file list below). Every hash/selector in §1, §2, and §13 was machine-computed, not transcribed — these are ground truth.
 - **The `int128` vs `uint256` index distinction, NG field layouts, and per-family event differences** were taken from the actual Vyper `event` declarations in source, then confirmed by the hash differing across families.
-- **Addresses (§3–§10, §13):** sourced from `curvefi/curve-js` `src/constants/network_constants.ts` (per-chain factories, router, CRV, crvUSD), the Curve readthedocs deployment page, and Etherscan labels — then **independently re-verified on-chain** via `cast` against `publicnode` RPCs on all eight chains incl BSC (2026-05). Verified: Ethereum `AddressProvider.get_address(7)` = MetaRegistry `0xF98B…79fC` (`pool_count()` = 2262); CRV `symbol()` = `"CRV"` on every chain that has it; crvUSD `symbol()` = `"crvUSD"`; StableSwap-NG and Tricrypto-NG factories return live `pool_count()` (Ethereum 899 / 121; non-zero on every L2; BSC 168 / 20); 3pool `coins(0)` = DAI. **Corrections surfaced by this check:** the `id 7 = MetaRegistry` rule holds **only on Ethereum** — on Arbitrum/Optimism/Base/Gnosis/Avalanche `get_address(7)` = `0x0` and on Polygon it maps elsewhere (§3); **BSC is factory-only** (AddressProvider present but registries unpopulated, and curve-js's BSC `crv` is a Base address with no code on BSC — §9b). Flagship pool addresses (§4.3) and crvUSD controllers remain doc-sourced; confirm those on a block explorer before use.
+- **Addresses (§3–§10, §13):** sourced from `curvefi/curve-js` `src/constants/network_constants.ts` (per-chain factories, router, CRV, crvUSD), the Curve readthedocs deployment page, and Etherscan labels — then **independently re-verified on-chain** via `cast` against `publicnode` RPCs on all eight chains incl BSC (originally 2026-05; **fully re-verified 2026-06-02** — every address resolves). Verified: Ethereum `AddressProvider.get_address(7)` = MetaRegistry `0xF98B…79fC` (`pool_count()` = 2272 as of 2026-06-02); CRV `symbol()` = `"CRV"` on every chain that has it; crvUSD `symbol()` = `"crvUSD"`; StableSwap-NG and Tricrypto-NG factories return live `pool_count()` (2026-06-02: Ethereum 906 / 122; Arbitrum 267 / 55; BSC 174 / 28); 3pool `coins(0)` = DAI. **Corrections surfaced by this check:** the `id 7 = MetaRegistry` rule holds **only on Ethereum** — on Arbitrum/Optimism/Base/Gnosis/Avalanche `get_address(7)` = `0x0` and on Polygon it maps elsewhere (§3); **BSC is factory-only** (AddressProvider present but registries unpopulated, and curve-js's BSC `crv` is a Base address with no code on BSC — §9b). Flagship pool addresses (§4.3) are `eth_getCode`-confirmed; the full crvUSD/LlamaLend/scrvUSD address set moved to [crvusd.md](crvusd.md).
+
+- **Re-evaluation pass (2026-06-02) — this revision.** Every address in the doc was `eth_getCode`-checked on each chain it is claimed on (**all resolve**); all 69 topic0 + 56 selectors recomputed (**all match**); proxy slots re-read (**all `0x0` — immutable confirmed**). Corrections folded in: (1) the header Status line (previously "addresses NOT RPC-verified") reconciled — they are verified; (2) the classic AddressProvider id-map read live and **ids 3/5/6 corrected** (3 = Metapool Factory, 5 = CryptoSwap Registry, 6 = Cryptopool Factory; the prior draft inverted 3/5); (3) added **AddressProvider-NG** `0x5ffe7FB8…` (8 chains), the **Root/Child gauge factory** `0xabC000…55bf5` (8 chains), per-chain **PoolProxy fee receivers** (§9c.1), the **NG math/views/gauge impls** + FeeCollector (§4.4), a cross-chain presence matrix (§9c), and a 2nd Ethereum **Exchange Router** `0x16c6521d…`; (4) **corrected the crvUSD lending factory** — the real OneWayLendingFactory is `0xeA6876DD…` (`market_count` 48), while the previously-listed `0x4F8846Ae…` is the crvUSD Stableswap pool factory (`pool_count` 29, AP id8); (5) split the crvUSD/LlamaLend/scrvUSD product line into the sibling [crvusd.md](crvusd.md).
 
 Authoritative source repos / pages:
 
@@ -589,3 +672,19 @@ Authoritative source repos / pages:
 - Addresses: [`curvefi/curve-js` network_constants.ts](https://github.com/curvefi/curve-js/blob/master/src/constants/network_constants.ts), [Curve readthedocs deployment addresses](https://curve.readthedocs.io/ref-addresses.html), [Curve Technical Docs — Deployed contracts](https://docs.curve.finance/references/deployed-contracts/)
 - Concepts: [Curve Technical Docs — AddressProvider](https://docs.curve.finance/integration/address-provider/), [MetaRegistry](https://docs.curve.finance/integration/metaregistry/)
 - [EIP-5202: Blueprint contracts](https://eips.ethereum.org/EIPS/eip-5202)
+
+### 14.1 Independent fact-check (2026-06-02) — verified complete; no refutations, two additive leads
+
+Nine non-obvious claims were cross-checked against the official Curve docs (`docs.curve.finance`), `curvefi/curve-llamalend.js` (`aliases.ts`), the legacy `curve.readthedocs.io` registry, Curve governance/news posts, and block explorers — then re-confirmed on-chain. Verdicts:
+
+1. **AMM generations & core infra complete** (StableSwap classic/NG · old-tricrypto-2 + Tricrypto-NG + Twocrypto-NG · classic AddressProvider + AddressProvider-NG · MetaRegistry · Root/Child gauge factory · CurveRouterNG · DAO stack) — ✅ confirmed; no missing pool *generation* surfaced.
+2. **Classic AddressProvider id-map** (0=Main Registry, 2=Exchanges, 3=Metapool Factory, 5=CryptoSwap Registry, 6=Cryptopool Factory, 7=MetaRegistry, 8=crvUSD Stableswap factory, 11=Tricrypto) — ✅ confirmed (read live; docs corroborate).
+3. **Pools immutable, EIP-5202 blueprint deploys, no upgradeable proxy** — ✅ confirmed (impl slots `0x0`; documented).
+4. **LlamaLend factory = `0xeA6876DD…`; `0x4F8846Ae…` is the crvUSD Stableswap factory, not lending** — ✅ confirmed verbatim by `curve-llamalend.js aliases.ts` (Ethereum `OneWayFactory`) + on-chain `market_count` 48 vs `pool_count` 29.
+5. **9 crvUSD mint markets current** — ✅ confirmed: Curve governance/news ("Enhanced crvUSD Markets") confirms cbBTC, weETH, LBTC are the three newest additions atop the existing sfrxETH(×2)/wstETH/WBTC/WETH/tBTC.
+6. **LlamaLend on ETH/ARB/OP only (of the 8)** — ✅ confirmed (expanded to Arbitrum/Optimism/Fraxtal by end-2024; Fraxtal + Sonic out of scope).
+7. **scrvUSD = `0x0655977F…`, Yearn-V3 ERC-4626, Ethereum-only** — ✅ confirmed (`aliases.ts` `stcrvUSD`).
+8. **Deployed Controller `Liquidate` = 5-arg/1-indexed (not the master 7-arg rewrite)** — ✅ confirmed (keccak + deployed-bytecode scan).
+9. **PegKeeper v1 (4) / v2 (5) behind regulator `0x36a04CAf…`** — ✅ confirmed (read live from the regulator).
+
+**Two additive leads (noted, not enumerated):** (a) the **Curve Block Oracle / Blockhash Oracle** — new 2025 cross-chain infrastructure on 20+ Curve chains (storage-proof blockhash distribution; underpins scrvUSD's cross-chain oracle) — a messaging primitive, not a DEX/lending alert target (see §12 item 14); (b) the **RateProvider** at AddressProvider-NG **id 18** (per-chain rate helper, added to the §3 id-map note). A **DAO Treasury** contract also launched June 2025 (governance-side). **Net corrections folded into the body: none beyond the re-evaluation pass above — all nine claims confirmed; the leads are recorded as known, intentionally-out-of-primary-scope components.**

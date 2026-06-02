@@ -432,7 +432,7 @@ Authoritative sources:
 - Sourcify: `https://sourcify.dev/server/v2/contract/<chainId>/<address>`
 - Explorers: [Etherscan](https://etherscan.io/address/0x8a2ddc0461Fcf96F81a05529Bed540d4f1eb2a00) · [Basescan](https://basescan.org/address/0xaEC634d949df14Be76dC317504C7b9a6a8A5f576) · [BscScan](https://bscscan.com/address/0xF064b069Ed18Eb5c61159247C55C5af79B28a968) · [Arbiscan](https://arbiscan.io/address/0x0FC85a171bD0b53BF0bBace74F04B66170Ae3eAb)
 
-### Verification.1 Deep-research fact-check (2026-06-02) — ✅ all swap-side claims confirmed, no corrections
+### Verification.1 Independent fact-check (2026-06-02) — ✅ all swap-side claims confirmed, no corrections
 
 6 non-obvious claims were cross-checked against the official docs addresses page, the `Native-org`
 GitHub org, DefiLlama, and block explorers. Verdicts:
