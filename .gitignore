@@ -11,3 +11,13 @@ dist/
 .coverage
 .env
 .claude*
+# Whitelist only the specific skills we commit; keep everything else under .claude/ ignored
+# (settings.json, other local skills). Order matters: re-include each parent dir, then re-ignore
+# its contents, then negate the specific skill dirs.
+!.claude/
+.claude/*
+!.claude/skills/
+.claude/skills/*
+!.claude/skills/protocol-research/
+!.claude/skills/evm-expert/
+!.claude/skills/deep-research/
