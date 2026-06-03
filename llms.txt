@@ -1,0 +1,36 @@
+# dedaub-monitoring
+
+> Command-line interface (CLI) for the Dedaub monitoring platform. Write SQL (DedaubQL) queries against on-chain data on Ethereum and EVM-compatible chains, test them, and deploy real-time blockchain alerts from your terminal. Package name: `monitoring-cli`. Installed command: `dedaub-monitoring`. License: MIT.
+
+## What it does
+
+- Query on-chain transactions, logs, and contracts with SQL (DedaubQL, a SQL dialect with macros for incremental, time-bounded execution).
+- Deploy real-time alerts with email notifications for events such as large transfers, fund drains, liquidations, oracle price deviations, and privileged admin/owner actions.
+- Manage query folders, schemas, run configs, execution logs, and fired-alert history without leaving the terminal.
+- Works across Ethereum, Arbitrum, Base, and other EVM-compatible chains supported by the Dedaub platform (selected via the `--network` option and DedaubQL macros).
+- Optional Claude Code skill (`dedaub-monitoring install-skill`, then `/monitoring-cli`) provides an AI-guided alert builder.
+
+## Use cases
+
+- Blockchain monitoring and on-chain alerting
+- Smart-contract monitoring and DeFi protocol monitoring
+- Security monitoring (drains, rug pulls, oracle manipulation, admin-key actions)
+- On-chain data analysis and exploration
+
+## Key commands
+
+- `login` — authenticate via browser OAuth2 device flow
+- `tree` — show your query file tree
+- `create-folder` / `create-query` — create folders and queries
+- `write-query` / `read-query` — set or print a query's SQL
+- `run-query` — execute a query and print results
+- `get-schema` — show available tables, columns, and macros
+- `enable-alerts` / `disable-alerts` / `list-alerts` — manage alert notifications
+- `get-logs` / `get-alerts` — inspect execution logs and fired alerts
+- `install-skill` — install the Claude Code skill
+
+## Links
+
+- Source and documentation: https://github.com/Dedaub/monitoring-cli
+- Dedaub monitoring platform: https://app.dedaub.com
+- DedaubQL API reference: https://docs.dedaub.com/docs/monitoring/TSQLApiReference/
