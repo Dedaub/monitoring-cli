@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import contextlib
 import time
+from collections.abc import Callable
 from pathlib import PurePosixPath
 from typing import Any
 
@@ -192,6 +194,7 @@ class MonitoringClient:
         offset: int = 0,
         poll_interval: float = 2.0,
         poll_timeout: float = 1800.0,
+        on_start: Callable[[str], None] | None = None,
     ) -> list[dict]:
         task_id = self._post(
             "/api/tsql/query/execute_async",
@@ -206,18 +209,43 @@ class MonitoringClient:
                 "offset": offset,
             },
         )
+        # task_id now exists server-side, so everything that could interrupt before we
+        # finish (the on_start callback, the poll loop) goes inside the try, and every
+        # revoke is best-effort — a failed DELETE must never mask the interrupt/timeout
+        # we actually want to surface.
         deadline = time.monotonic() + poll_timeout
-        while time.monotonic() < deadline:
-            result = self._get(f"/api/tsql/query/execute_async/{task_id}")
-            status = result.get("status")
-            if status == "SUCCESS":
-                return result.get("result") or []
-            if status == "FAILURE":
-                raise RuntimeError(result.get("error") or "Query execution failed")
-            if status in ("REVOKED", "IGNORED"):
-                raise RuntimeError(f"Query was {status}")
-            time.sleep(poll_interval)
-        raise TimeoutError(f"Query did not complete within {int(poll_timeout // 60)}m")
+        try:
+            if on_start is not None:
+                on_start(task_id)
+            while time.monotonic() < deadline:
+                result = self._get(f"/api/tsql/query/execute_async/{task_id}")
+                status = result.get("status")
+                if status == "SUCCESS":
+                    return result.get("result") or []
+                if status == "FAILURE":
+                    raise RuntimeError(result.get("error") or "Query execution failed")
+                if status in ("REVOKED", "IGNORED"):
+                    raise RuntimeError(f"Query was {status}")
+                time.sleep(poll_interval)
+        except KeyboardInterrupt:
+            # Local Ctrl-C stops polling but the server task keeps running — revoke it.
+            with contextlib.suppress(Exception):
+                self.cancel_query(task_id)
+            raise
+        # Local poll timed out; the server task is still running — revoke it too.
+        with contextlib.suppress(Exception):
+            self.cancel_query(task_id)
+        window = (
+            f"{int(poll_timeout)}s"
+            if poll_timeout < 60
+            else f"{int(poll_timeout // 60)}m"
+        )
+        raise TimeoutError(f"Query did not complete within {window}")
+
+    def cancel_query(self, task_id: str) -> None:
+        """Revoke a running async query task by id. Best-effort and idempotent —
+        the backend returns 200 even for an unknown/already-finished task."""
+        self._delete(f"/api/tsql/query/execute_async/{task_id}")
 
     # --- run config ---
 

@@ -528,8 +528,14 @@ def run_query(
     ] = None,
     limit: Annotated[int, typer.Option(help="Max rows (max 500)")] = 25,
     offset: Annotated[int, typer.Option(help="Row offset for pagination")] = 0,
+    timeout: Annotated[
+        float,
+        typer.Option(
+            help="Max seconds to wait before killing the query (the server task is revoked, not just local polling). Tuning budget: ~30 fast, 120 absolute max."
+        ),
+    ] = 1800.0,
 ) -> None:
-    """Execute a query and print results. Requires --id. Pass SQL as argument or via stdin; omit to run the stored query text."""
+    """Execute a query and print results. Requires --id. Pass SQL as argument or via stdin; omit to run the stored query text. Ctrl-C (or hitting --timeout) revokes the server-side task."""
     client, _ = _load_client(profile)
     try:
         query_text, entity_id = _resolve_query_text_and_owner(
@@ -544,13 +550,39 @@ def run_query(
             default_start_time=start_time,
             limit=limit,
             offset=offset,
+            poll_timeout=timeout,
+            on_start=lambda tid: err.print(f"task {tid} (Ctrl-C to cancel)"),
         )
+    except KeyboardInterrupt:
+        err.print("Cancelled — server task revoked.")
+        raise typer.Exit(130)
+    except TimeoutError as e:
+        err.print(
+            f"{e} — task revoked. Shrink --duration, or raise --timeout (max 120) to widen the look-back."
+        )
+        raise typer.Exit(1)
     except NotFoundError as e:
         err.print(str(e))
         raise typer.Exit(1)
     except Exception as e:
         _exit_error(e)
     output.format_query_results(results)
+
+
+@app.command()
+def cancel_query(
+    task_id: Annotated[
+        str, typer.Option(help="Async task id (printed by run-query when it starts)")
+    ],
+    profile: ProfileOption = None,
+) -> None:
+    """Revoke a running async query task by its id. Idempotent — safe to call on an unknown/finished task."""
+    client, _ = _load_client(profile)
+    try:
+        client.cancel_query(task_id)
+    except Exception as e:
+        _exit_error(e)
+    typer.echo(f"Revoked task {task_id}.")
 
 
 @app.command()

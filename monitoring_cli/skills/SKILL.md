@@ -40,15 +40,10 @@ materialize-or-not).**
    refs supply *constants + patterns only* — never treat a ref (or `common_query_patterns.md`) as the
    schema. Verify column names/types live per chain; coverage differs by network.
 
-3. Create a session workspace (only needed in alert mode, but cheap):
-   ```bash
-   SESSION_DIR=$(mktemp -d /tmp/monitoring-skill-XXXXXX); echo "$SESSION_DIR"
-   ```
-
-4. **Pick the mode** (ask if not obvious from the request) — use the `AskUserQuestion` pop-up:
+3. **Pick the mode** (ask if not obvious from the request) — use the `AskUserQuestion` pop-up:
    > "Do you want a **query** (run it and show results) or an **alert** (deploy it to fire on a schedule)?"
 
-5. **Alert mode only — collect targeting + notification prefs.** Ask **in this order**, and use the
+4. **Alert mode only — collect targeting + notification prefs.** Ask **in this order**, and use the
    `AskUserQuestion` tool (a pop-up) for **everything except the alert condition itself**. Collect the
    notification/frequency prefs once and reuse them for every alert this session.
 
@@ -71,9 +66,10 @@ materialize-or-not).**
    The pop-up caps a question at 4 options, so surface the **4 most relevant** for this alert — when the
    protocol's chain coverage is known (from its ref / `get-schema`) offer exactly those; otherwise
    default to `ethereum, base, arbitrum, polygon`. The remaining slugs reach the user via the auto
-   **"Other"** field. If the user picks **multiple** networks, build **one query that `UNION`s the
-   per-network table sets in a CTE** (each network is its own `get-schema` schema) rather than N copies;
-   deploy under the primary network slot.
+   **"Other"** field. If the user picks **multiple** networks, build **one `UNION ALL` query** spanning
+   them (each branch reads its own network's tables) rather than N copies — see Step 4's *Combine
+   signals with `UNION ALL`* rule (the same mechanism covers multi-protocol requests). Deploy under the
+   primary network slot.
 
    **(c) Frequency** — pop-up, asked **before** notifications. The platform accepts **only** this fixed
    enum; map the chosen label to `--frequency` **seconds** and store `DEFAULT_FREQUENCY_SECONDS`:
@@ -190,12 +186,21 @@ look-backs** (derived from §2 blocks-per-hour):
 In alert mode this window is the macro `duration=` / refresh cadence; in query mode it's the
 `block_number BETWEEN MAX-N AND MAX` predicate (§2).
 
-**Escalate if empty:** the empirical-gate `run-query` (Step 5) may return **0 rows** simply because
-nothing matched in the default window — *not* because the SQL is wrong. When that happens, **widen the
-window stepwise** (×2 → ×4 → …, e.g. Ethereum `7d → 14d → 28d`) and re-run, up to a sane cap, until
-rows appear or you're confident the condition is genuinely quiet. **Always report the window that
-actually produced the rows** — and for alerts, surface the final look-back to the user *before* you
-deploy (see Step 5).
+**Start at the per-chain default, then escalate — never jump straight to a wide window.** Begin every
+scan at the table value above (Base = **24h**, not 7d). The empirical-gate `run-query` (Step 5) may
+return **0 rows** simply because nothing matched in that window — *not* because the SQL is wrong. When
+that happens, **widen stepwise** (×2 → ×4 → …, e.g. Base `24h → 48h → 96h`; Ethereum `7d → 14d → 28d`)
+and re-run until rows appear or you're confident the condition is genuinely quiet. **Always report the
+window that actually produced the rows** — and for alerts, surface the final look-back to the user
+*before* you deploy (see Step 5). Widening is **governed by the test-run latency budget** — keep each
+run < 30s, and only go past that (to 120s max) with the user's OK (Step 5 empirical-gate tuning loop).
+
+**Hard ceiling: 30 days.** Never set a `duration=` / block-range beyond **30d** on any chain — it is
+the platform's max look-back, and escalation stops there (`duration='1000d'` is wrong). If a lookup
+**genuinely needs more history than 30d** — e.g. enumerating *every* market/pool ever created so a
+liquidation on an old market still resolves its tokens — **do not widen the inline scan**: promote that
+lookup to a materialized **TABLE + `{{ref()}}`** (Step 4), which holds the full history without a
+30d-bounded re-scan each run. The alert's own event scan stays at the per-chain default above.
 
 ---
 
@@ -209,11 +214,21 @@ unique key (`--incrementalization IGNORE|UPSERT`). You don't choose that. The ch
 |------|----------|-----|
 | **CTE** (inline `WITH`) | trivial, single-use lookup computable in the scan window | non-materialized, re-evaluated every run; default |
 | **VIEW + `{{ref()}}`** | reusable lookup, re-evaluated each run, shared across alerts / independently testable | a query set to `--materialize VIEW`, pulled in via the `ref` macro. **Not materialized** — this is the "view, read every run" model |
-| **TABLE + `{{ref()}}`** | expensive **history-spanning** set (factory-enumerated pools, full watched-address list) where recompute-each-run is too costly and staleness is acceptable | a query set to `--materialize TABLE` (refreshed on a schedule), pulled in via `ref` |
+| **TABLE + `{{ref()}}`** | **history-spanning** set — anything needing **>30d** of history (every market/pool ever created, full watched-address list). The 30d inline cap (Step 3) *forces* this tier; an old market's `CreateMarket` won't be in a 30d scan, so enumerate it once into a TABLE | a query set to `--materialize TABLE` (refreshed on a schedule), pulled in via `ref` |
 
-**Rule of thumb:** inline a CTE; promote to **VIEW+ref** when the lookup is reused or worth testing
-on its own; use **TABLE+ref** only when the set spans history and recompute is too expensive. Lead
-the alert's own scan with the `address` index so each incremental run stays cheap.
+**Rule of thumb:** inline a CTE (bounded by the ≤30d window); promote to **VIEW+ref** when the lookup
+is reused or worth testing on its own; reach for **TABLE+ref** the moment the lookup needs **>30d of
+history** (the inline cap can't reach it) or recompute-each-run is too expensive. Lead the alert's own
+scan with the `address` index so each incremental run stays cheap.
+
+**Combine signals with `UNION ALL`.** When one query/alert must cover **multiple detection primitives**
+(several `topic0`s / contract `address`es / function selectors) **and/or multiple chains**, `UNION ALL`
+the per-signal/per-chain `SELECT`s into **one** result rather than spawning N alerts. Each branch:
+same column shape, its own indexed lead + block-window, and its own literal `chain_id` (Step 5) so
+rows stay attributable. **Cross-chain caveat:** `block_number` is **not comparable across chains** —
+never JOIN on it; reference each chain's own `<chain>.`/`network=` tables per branch and push any
+aggregation *outside* the UNION over `block_timestamp(...)` (patterns §6/§8). One alert still deploys to
+one `--network` slot — pick the primary chain for it and confirm via `get-logs` it fires (deploy-playbook).
 
 Query mode has no materialization — it's an ad-hoc `run-query` (Step 5 tail).
 
@@ -244,7 +259,14 @@ structure. Hard rules (from §3, §8, §9 + macros.md):
 - Project explicit columns — never `SELECT *` (TOAST: `calldata`, `data`, `returndata`).
 - **No trailing `;`** — the platform UI rejects a query that ends in a semicolon. End on the last
   token (or a comment). See patterns §3.
+- **Default the final result to `LIMIT 200`** — end the outer `SELECT` with `LIMIT 200` (house default,
+  cap 500) unless the user asks otherwise or it's a single-row aggregate. Applies to the final output,
+  not inner CTE/lookup scans. See patterns §3 rule 10.
 - Value math via `token_ledger.value_delta` (signed) over hand-decoding `logs.data`.
+- **ERC20 metadata via `latest_token_info`** — for `symbol`/`token_name`/`decimals`, **always** JOIN
+  `<chain>.latest_token_info ON token_address = <token>` (PK lookup, 1:1, no fan-out); it's the
+  up-to-date source. Inline a `decimals` constant only for a single pinned well-known token. Referenced
+  raw (no macro). See patterns §4.
 - Macros where they win: `duration=` for the window; for events, filter the protocol's `topic0`
   directly (the macro adds `committed`) — use `inputs='0x<addr>.Event(...)'` only to anchor a single
   contract by address or when you want `decode_event`'s typed output. See `macros.md`.
@@ -255,13 +277,30 @@ structure. Hard rules (from §3, §8, §9 + macros.md):
 Don't *guess* whether the SQL is correct/cheap — **prove it** before any LLM review:
 ```bash
 dedaub-monitoring preprocess-query --id <ID>   # see the macro→SQL expansion (sanity, not a plan)
-dedaub-monitoring run-query --id <ID> --duration <window> --limit 25   # must execute + return sane rows
+dedaub-monitoring run-query --id <ID> --duration <window> --limit 200 --timeout 30   # execute + return rows, killed at 30s
 ```
 - `run-query` proves it executes (catches missing columns, bad literals, type errors) and its
   **latency is the index signal** — fast within the window = good lead; slow/timeout = it's scanning,
   fix the lead. (`explain-query` is **dependency analysis only** — use it to confirm `ref` deps
   resolve, NOT as a query plan.)
 - Index correctness is *predicted* from §1.1 + the anti-pattern checklist, then *confirmed* by latency.
+
+**Tuning loop — every test run must finish < 30s *and* return ≥1 sample row:**
+1. Run with `--timeout 30` (the server task is **auto-killed/revoked** at the deadline, not just local
+   polling). If it's killed, the lead is **scanning** — first fix the indexed lead (§3); if the lead is
+   already good and the window is just heavy, **shrink `--duration`** (step *down* from the per-chain
+   default, Step 3) and retry until it runs **sub-30s**.
+2. Once sub-30s, check the row count:
+   - **≥1 row** → gate passed; that window is your validated look-back.
+   - **0 rows** → the fast window is too narrow to have caught a rare event. **Stop and ask the user:**
+     *"no match in the largest window that still runs under 30s — raise the timeout to widen the
+     look-back?"* Only on their OK, retry with a larger `--duration` **and** `--timeout` — **120s
+     absolute max**, and **still ≤30d** (Step 3 ceiling).
+3. Still 0 rows at 120s / 30d → the condition is **genuinely quiet**; tell the user (the alert is valid,
+   it just hasn't fired lately — deploy as-is or revisit the threshold).
+
+Mid-run, **Ctrl-C** (or `cancel-query --task-id <id>`, id printed when the run starts) revokes the
+**server** task, not just local polling.
 
 ### Mode tail
 
@@ -273,19 +312,23 @@ dedaub-monitoring create-query "/_scratch/probe"       # once → reuse this id 
 dedaub-monitoring write-query --id <SCRATCH_ID> <<'SQL'
 <your SQL>
 SQL
-dedaub-monitoring run-query --id <SCRATCH_ID> --limit 25   # put the real window in the macro's duration=
+dedaub-monitoring run-query --id <SCRATCH_ID> --limit 200   # put the real window in the macro's duration=
 ```
 Show the user results + SQL; reuse the same probe next time.
 
 **Alert mode** — validate in-place on the real target query, then review semantics, then deploy:
-1. `create-folder`/`create-query` the **real** `/<AlertName>/<QueryName>`, `write-query` the SQL,
-   run the **empirical gate** on it. On failure, iterate `write-query` on the **same id** — never
-   spawn siblings (queries can't be deleted; see macros.md CLI notes).
-2. Write the draft to `$SESSION_DIR/query_<safe_name>.md` (`references/handoff-schemas.md`).
-3. Dispatch the **Reviewer subagent** (`references/agents/reviewer.md`) — **semantic-only** now
+1. **Every alert gets its own dedicated folder — always.** `create-folder "/<AlertName>"` then
+   `create-query "/<AlertName>/<QueryName>"`; **never share a folder across alerts** (in the
+   protocol-coverage suite below, each alert still gets its own folder). Any VIEW/TABLE lookup it
+   `{{ref()}}`s lives in that **same** folder. `write-query` the SQL, run the **empirical gate** on it.
+   On failure, iterate `write-query` on the **same id** — never spawn siblings (queries can't be
+   deleted; see macros.md CLI notes).
+2. Dispatch the **Reviewer subagent** (`references/agents/reviewer.md`) — **semantic-only** now
    (does it detect the right thing? right threshold/scope/collision family? readable template?).
-   It writes `$SESSION_DIR/review_<safe_name>.md`. On REJECT, revise (≤2 rounds) and re-review.
-4. On APPROVE, **tell the user the look-back window you settled on** — the per-chain default from
+   Pass the draft **inline in the dispatch prompt** (shape: `references/handoff-schemas.md`) — no
+   files. The reviewer **returns its verdict as its final message**. On REJECT, revise (≤2 rounds)
+   and re-review.
+3. On APPROVE, **tell the user the look-back window you settled on** — the per-chain default from
    Step 3 and whether you had to widen it to surface rows (e.g. "validated on Base over the last 24h;
    widened to 48h to catch a sample event"). This is the scan window the empirical gate ran on; the
    user should know it before the alert goes live. Then follow `references/deploy-playbook.md`
@@ -305,8 +348,9 @@ not web research.
 
 ## Step 6 — Summary
 
-Print what was produced. Alert mode: a table of alert | path | query id | network | frequency | status,
-plus `query-metadata`/`get-alerts`/`get-logs` follow-ups. Clean up the temp dir: `rm -rf "$SESSION_DIR"`.
+**Just summarize to the user in chat — do not write a hand-off / deployment doc.** Alert mode: a table
+of alert | path | query id | network | frequency | status, plus the `query-metadata`/`get-alerts`/
+`get-logs` commands they can run to manage it. Query mode: the results + final SQL.
 The `/_scratch/probe` query is intentionally left in place for reuse (it can't be deleted anyway).
 
 ---
@@ -321,6 +365,6 @@ The `/_scratch/probe` query is intentionally left in place for reuse (it can't b
 | `references/protocols/<name>/<file>.md` | Step 2b — surgical grep for constants |
 | `references/agents/reviewer.md` | Alert mode, Step 5 — semantic review subagent |
 | `references/agents/web-fallback.md` | Step 2c — only when no local ref covers the protocol |
-| `references/handoff-schemas.md` | Alert mode — draft + review doc shapes |
+| `references/handoff-schemas.md` | Alert mode — inline draft + verdict shapes for the reviewer handoff |
 | `references/review-criteria.md` | Alert mode — the reviewer's checklist |
 | `references/deploy-playbook.md` | Alert mode, Step 5 — CLI deploy, smoke-test, timeout diagnosis |

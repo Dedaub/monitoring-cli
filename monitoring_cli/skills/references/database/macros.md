@@ -119,3 +119,8 @@ on `(block_number, tx_index)` (1:1, no fan-out) — or on Arbitrum use
   PATH; `delete-folder`/`rename-folder` use `--path`/`--new-path`.)
 - Materialization/notify config is **per-network**; pass `--network` on `set-config`/`get-config`/
   `enable-alerts`/`disable-alerts`/`list-alerts` to match the chain your query's macros read.
+- `run-query --timeout <s>` **kills** a long run at the deadline by **revoking the server task** (not
+  just local polling), printing the task id at start. **Ctrl-C** during a run revokes it too, as does
+  `cancel-query --task-id <id>`. Use `--timeout 30` for the empirical-gate tuning loop (SKILL Step 5);
+  raise to **120 max** only with the user's OK. Default `--timeout` (no flag) stays long (30m) for
+  normal runs.

@@ -101,6 +101,7 @@ WHERE <chain>.block_timestamp(block_number) BETWEEN now() - interval '{{X}}' AND
 | 7 | **Join `transaction_detail` ↔ `logs` ↔ `token_ledger` on `(block_number, tx_index)`.** | All three have it indexed (directly or as a prefix). Add `vm_step` / `log_index` only when ordering inside a tx matters (multicall). |
 | 8 | **`committed = true AND error IS NULL` excludes reverts.** Include both. | A revert still produces a `transaction_detail` row but no state effects. |
 | 9 | **Never end a query with a trailing `;`.** End on the last token (or a comment). | The platform UI **rejects** a query terminated by a semicolon — applies to every query and `{{ref()}}`'d lookup we generate. |
+| 10 | **Default the final result to `LIMIT 200`.** End the outer/final `SELECT` with `LIMIT 200` unless the user asks for more (cap 500) or an aggregate returns one row. | Keeps result payloads bounded and the UI responsive; 200 is the house default for the final output (not the inner CTE/lookup scans). |
 
 ---
 
@@ -114,7 +115,8 @@ WHERE <chain>.block_timestamp(block_number) BETWEEN now() - interval '{{X}}' AND
 | `uint` packed in an indexed topic (e.g. UniV3 fee in `topic3`) | `get_byte(topic3::bytea, 29)*65536 + get_byte(topic3::bytea, 30)*256 + get_byte(topic3::bytea, 31)` — cast `ethword`→`bytea`; last 3 bytes = `uint24` |
 | **Readable address/hash in SELECT** | `concat('0x', encode(col, 'hex'))` (or `'0x' \|\| encode(col, 'hex')`) — bare `encode()` has **no `0x`**; output-only, WHERE literals stay `\x` bytea. Verified live. |
 | **`tx_hash` in the result** | `outer_transaction` has it **natively** (`SELECT concat('0x', encode(ot.tx_hash,'hex'))`). `logs` / `transaction_detail` / `token_ledger` / `token_transfers` carry only `(block_number, tx_index)` → **JOIN** `{{outer_transaction(network=…, duration=…)}}` `ot ON ot.block_number = x.block_number AND ot.tx_index = x.tx_index` (1 tx per `(block,tx_index)`, so **no fan-out**; index-cheap when `x` is already block-bounded). **Arbitrum:** skip the JOIN — `concat('0x', encode(arbitrum.tx_hash(x.block_number, x.tx_index),'hex'))`. |
-| Token amount → human units | divide by `pow(10, decimals)` (USDC = 6, WETH = 18, etc.) |
+| Token amount → human units | divide by `pow(10, decimals)`. Source `decimals` from `latest_token_info` (row below); inline a constant only for a single pinned well-known token (USDC=6, WETH=18, WBTC=8, USDT=6). |
+| **ERC20 metadata (`symbol`/`name`/`decimals`)** | **Always** JOIN `<chain>.latest_token_info lti ON lti.token_address = <token_addr_col>` — the up-to-date source of truth. Columns: `symbol`, `token_name`, `decimals` (smallint), `total_supply`. PK is `token_address` → unique index lookup, **1:1, no fan-out**. e.g. `… / pow(10, lti.decimals) AS amount_human, lti.symbol`. Referenced raw (no macro, like `<chain>.block`). |
 | **`chain_id` in the result** | Project a literal matching the network — `8453 AS chain_id` (base), `1` (ethereum), `42161` (arbitrum), `10` (optimism), `137` (polygon), `56` (bnb), `43114` (avalanche), `81457` (blast). The UI reads it to render the default chain; in a cross-network `UNION` each branch carries its own literal. |
 | Time-bucket | `date_trunc('hour', <chain>.block_timestamp(block_number))` |
 
@@ -518,6 +520,8 @@ If the protocol doc does not provide a value, **stop and ask** — never guess a
 7. Cross-chain queries `UNION ALL` per chain — they never JOIN on `block_number` directly.
 8. **No trailing `;`** — the platform UI rejects a query that ends in a semicolon (§3 rule 9).
 9. **`tx_hash`** and a **literal `chain_id`** are projected (§4) — actionable click-through + UI default-chain render.
+10. **No `duration=`/block-range exceeds 30d** — 30d is the max look-back; history beyond it belongs in a materialized TABLE, not a wide inline scan (`duration='1000d'` is wrong).
+11. **Final `SELECT` ends with `LIMIT 200`** (house default; cap 500) — unless the user asked otherwise or it's a single-row aggregate (§3 rule 10).
 
 ---
 

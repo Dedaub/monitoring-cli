@@ -1,10 +1,10 @@
-# Handoff Document Schemas (alert mode only)
+# Reviewer Handoff Shapes (alert mode only)
 
-Two small docs cross the inline-Writer → Reviewer boundary. Exact shapes — deviation breaks the
-handoff. The bulky `research_brief.md` is gone: the orchestrator greps constants inline and the
-patterns doc replaces the schema dump.
+Two small structures cross the orchestrator → Reviewer boundary, **passed inline** (no files):
+the orchestrator pastes the **draft** into the Reviewer's dispatch prompt, and the Reviewer
+**returns its verdict as its final message**. Keep these shapes — deviation breaks the handoff.
 
-## query_<safe_name>.md — written inline by the orchestrator, read by the Reviewer
+## Draft — pasted by the orchestrator into the Reviewer prompt
 
 ```markdown
 # Query Draft: <Alert Name>
@@ -38,7 +38,7 @@ WHERE ...                         -- indexed lead + block-range/duration; collis
 Scope, index lead, why this won't full-scan, decode notes, macro vs raw choices.
 ```
 
-## review_<safe_name>.md — written by the Reviewer subagent
+## Verdict — the Reviewer's final message (its return value)
 
 ```markdown
 # Review: <Alert Name>
@@ -52,5 +52,3 @@ APPROVED            <!-- or REJECTED -->
 ## Suggestions
 (none)             <!-- or numbered; non-blocking (style, preprocess-query checks) -->
 ```
-
-`<safe_name>` = alert name lowercased, spaces→underscores, special chars removed.
