@@ -4,6 +4,11 @@ Sibling of `sample_queries/common_query_patterns.md` (the hub). `§N` references
 snippets are in `decode_primitives.md`. Each pattern is a template — placeholders use `{{UPPER_CASE}}`;
 the protocol doc supplies the constants. Pick via the hub's §7 map or the quick-pick below.
 
+> **Layout is normative, not just illustrative.** Generated SQL must keep this vertical style — `SELECT`
+> alone on its line, **one projected item per line** (4-space indent past the `SELECT` keyword), keywords
+> (`FROM`/`JOIN`/`WHERE`/`GROUP BY`/`ORDER BY`/`LIMIT`) left-aligned to the `SELECT`, continued `AND`/`OR`
+> indented +2, and a **blank line before each `UNION ALL`**. Don't minify columns onto shared lines.
+
 **Quick-pick** — "find tx/call/function"→P1 · "find event/log/emits"→P2 · "who paid/sent/signed"→P5 ·
 "amount/volume/USD"→P4 · "by hour/day/week, trend"→P6 · "top/leaderboard"→P7 · "network/graph/edges"→P8 ·
 "multiple paths/variants"→P9 · "across chains"→P10 · "total/sum/aggregate (esp. cross-chain)"→P12 ·

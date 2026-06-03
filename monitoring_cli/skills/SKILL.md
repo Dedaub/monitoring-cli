@@ -33,7 +33,11 @@ repo root. Decide once, reuse all session.
    `last_price`+`symbol`+`decimals`+`logo_*`+`presentation_symbol` — **the only USD-price source**
    (`latest_token_info` is metadata, no price). `logs.topic0` is indexed on most chains but **not Base** →
    on Base lead with `address`, never bare `topic0`.
-3. **Pick mode** (ask if unclear, via `AskUserQuestion`): query (run + show) vs alert (deploy on schedule).
+3. **Pick mode** — query (run + show) vs alert (deploy on schedule). **If the user didn't explicitly name
+   the mode, ask via `AskUserQuestion` — do not infer it from phrasing.** "summarize …", "show me …",
+   "what are the …" can be a one-off read *or* the spec for a recurring feed; the same protocol+event ask
+   is valid in both modes. Skip the question only when the words pick the mode ("alert me", "notify",
+   "set up monitoring", "every N min" → alert; "run a query", "show me now", "one-off" → query).
 4. **Alert mode — collect prefs once (reuse all session), in order. `AskUserQuestion` for all but (a):**
 
    **(a) Condition** — free text. User types protocol + event/threshold (e.g. "USDC transfers > \$1M",
@@ -188,6 +192,13 @@ Write PG SQL from the §5 skeleton + grepped constants + scope guard + Step 4 st
 - Addresses lowercase `\x` bytea in WHERE; topics full 32-byte; even hex digits (40 addr / 64 word).
 - **Readable output:** `concat('0x', encode(col,'hex'))` for addresses/hashes (bare `encode` lacks `0x`;
   WHERE literals stay `\x`).
+- **Layout — expanded, never minified.** Reproduce the §5 templates' vertical style; the engine preserves
+  whitespace and humans read these. `SELECT` sits alone on its line; **one projected column/expression per
+  line**, indented 4 spaces past the `SELECT` keyword's column (so a `SELECT` at 2-space CTE indent has
+  columns at 6). `FROM`/`JOIN`/`LEFT JOIN`/`WHERE`/`GROUP BY`/`ORDER BY`/`LIMIT` align to that `SELECT`'s
+  column; continued `AND`/`OR` indent +2 under `WHERE`; nested CTE/subquery bodies indent +2 from their `(`.
+  **Blank line before each `UNION ALL`.** Never crowd several columns onto one line or collapse the query to
+  save space (long single expressions like a wrapped `round(...)` may stay on their own one line).
 - **Always project `tx_hash`** (actionable + unique-key part): native on `outer_transaction`; else JOIN it
   on `(block_number,tx_index)` (1:1), or Arbitrum `arbitrum.tx_hash(block_number,tx_index)`.
 - **Always project literal `chain_id`** (UI default chain): eth 1, base 8453, arb 42161, op 10,
@@ -204,6 +215,14 @@ Write PG SQL from the §5 skeleton + grepped constants + scope guard + Step 4 st
 - Macros: `duration=` for the window; filter `topic0` directly (macro adds `committed`); `inputs='0x<addr>.Event(...)'`
   only to anchor one contract or get typed `decode_event` output.
 - Every unique-key / template column must appear in SELECT.
+- **Header comment (provenance) on every created query — both modes.** Lead the SQL with a comment:
+  ```sql
+  -- Created <UTC ISO8601 — from `date -u +%Y-%m-%dT%H:%M:%SZ`> · <query|alert> · dedaub-monitoring v<pyproject version>
+  -- <one line: what it answers + protocol(s) / chain(s) / look-back window>
+  ```
+  Comments are preserved by the engine and satisfy the no-trailing-`;` rule (a query may *end* on a
+  comment, and may freely *begin* with one). Keep it to ≤2 lines; it is the only in-SQL record of why
+  the query exists and when it was made.
 
 ### Empirical gate (prove, don't guess) — validate first, then run
 ```bash
@@ -226,16 +245,25 @@ Mid-run **Ctrl-C** / `cancel-query --task-id <id>` revokes the server task.
 
 ### Mode tail
 
-**Query mode** — reuse one persistent probe (can't be deleted):
+**Query mode** — **own folder per query** (same discipline as alert mode; never dump into a shared
+`/_scratch`). Name the folder with the **same canonical slug** `<Signal>-<Subject>-<Chain>` as alert mode
+(see the Alert-mode §1 slug rules below) — multiple protocols or chains join with `+` in Step 0(b) priority
+order (`Liquidations-AaveV3-Base+Arbitrum`). **The query inside takes a short role name only — never the
+slug:** a single query → `Query`; a P12 split → `Detail` (row VIEW) + `Summary` (reader). The folder carries
+the identity; the SQL name stays short.
 ```bash
-dedaub-monitoring create-folder "/_scratch"          # no-op if exists
-dedaub-monitoring create-query  "/_scratch/probe"    # once → reuse its id forever
-dedaub-monitoring write-query --id <SCRATCH> <<'SQL'
+dedaub-monitoring create-folder "/<slug>"            # e.g. /Liquidations-AaveV3-Base+Arbitrum
+dedaub-monitoring create-query  "/<slug>/Query"      # role name only → /<slug>/Query; reuse the id all session (no deletes)
+dedaub-monitoring write-query --id <ID> <<'SQL'
+-- Created <UTC, `date -u +%Y-%m-%dT%H:%M:%SZ`> · query · dedaub-monitoring v<ver>
+-- <one line: what it answers + protocol(s)/chain(s)/window>
 <SQL>
 SQL
-dedaub-monitoring run-query --id <SCRATCH> --limit 200
+dedaub-monitoring validate-query --id <ID>           # gate (above) — iterate write→validate on the same id
+dedaub-monitoring run-query      --id <ID> --limit 200 --timeout 30
 ```
-Show results + SQL.
+A re-run of the *same* question overwrites its own folder's query (idempotent); a *new* question gets a new
+slug+folder. Show results + SQL + the query path/id + UI link (Step 6).
 
 **Alert mode:**
 1. **Own folder per alert** (never share). **Name it with the canonical slug
@@ -250,11 +278,13 @@ Show results + SQL.
    - **Drop redundant/duplicate tokens** (no bare `USD`, no chain named twice). One token per slot.
 
    e.g. `Liquidations-MorphoBlue-Base`, `Liquidations-AaveV3-Arbitrum`, `Drains-AaveV3-Base+Arbitrum`,
-   `LargeTransfers-USDC-Ethereum`. `create-folder "/<slug>"` → `create-query "/<slug>/<slug>"`; each
-   `{{ref()}}` lookup shares the folder, reusing the slug + a `-View`/`-Tbl` suffix
-   (`Liquidations-MorphoBlue-Base-View`). `write-query`, run the gate (validate → run), iterate
-   on the **same id** (no deletes). Before deploy, `query-columns --id <ID>` and confirm every
-   `--unique-key` and every `--alert-template {{var}}` is in the output (the most common deploy failure).
+   `LargeTransfers-USDC-Ethereum`. Then `create-folder "/<slug>"` → `create-query "/<slug>/<Name>"` where
+   **`<Name>` is the query's short role only — never the slug** (the folder already carries it): a single
+   alert → `Alert`; a P12 split → `Detail` (row VIEW) + `Summary` (reader); each `{{ref()}}` lookup → a
+   short role noun (`View`/`Tbl`, or e.g. `Markets`). So `/Liquidations-MorphoBlue-Base/Alert`, not
+   `/Liquidations-MorphoBlue-Base/Liquidations-MorphoBlue-Base`. `write-query`, run the gate
+   (validate → run), iterate on the **same id** (no deletes). Before deploy, `query-columns --id <ID>` and
+   confirm every `--unique-key` and every `--alert-template {{var}}` is in the output (most common deploy failure).
 2. **Reviewer subagent** (`references/agents/reviewer.md`) — semantic only (right thing? scope/collision/
    threshold? readable template?). Draft inline (`references/handoff-schemas.md`); verdict is its final
    message. REJECT → revise (≤2 rounds).
@@ -273,7 +303,8 @@ generate→gate→review→deploy per alert (each its own folder). Proposals fro
 Alert mode: a table of alert | path | query id | network | frequency | status, plus `query-metadata` /
 `get-alerts` / `get-logs` to manage, and the UI link `https://app.dedaub.com/tx-monitor?queryId=<id>` per
 alert (call it out for notify-off: keeps refreshing, toggle notifications there). Query mode: results +
-final SQL. `/_scratch/probe` stays (can't be deleted).
+final SQL + the query's folder path & id + its UI link `https://app.dedaub.com/tx-monitor?queryId=<id>`
+(the query persists in its own slug-named folder — no deletes; re-running the same question overwrites it).
 
 ---
 

@@ -257,3 +257,4 @@ If the protocol doc lacks a value, **stop and ask** — never guess a selector o
 8. **No trailing `;`** (§3 rule 9).
 9. **`tx_hash`** and a literal **`chain_id`** are projected (§4).
 10. **Final `SELECT` ends with `LIMIT 200`** (cap 500) — unless single-row aggregate. **Exception:** a P12 principal VIEW carries **NO `LIMIT`** (the reader has it).
+11. **Expanded layout (§5 house style), never minified:** `SELECT` alone on its line, **one projected item per line** (4-space indent past the `SELECT` keyword), `FROM`/`JOIN`/`WHERE`/`GROUP BY`/`ORDER BY`/`LIMIT` left-aligned to that `SELECT`, continued `AND`/`OR` indented +2, and a **blank line before each `UNION ALL`**. Never crowd multiple columns onto one shared line.
