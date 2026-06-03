@@ -19,7 +19,7 @@ dedaub-monitoring write-query --id <LOOKUP_ID> <<'SQL'
 SQL
 # VIEW = re-evaluated each run (reusable, not materialized); TABLE = refreshed snapshot (history)
 dedaub-monitoring set-config --id <LOOKUP_ID> --network <NETWORK> --materialize VIEW
-# the alert references it as: FROM {{ref(<LOOKUP_ID>)}}
+# the alert references it as: FROM {{ref(query_id=<LOOKUP_ID>)}}
 ```
 For a **TABLE** lookup (history-spanning), force the first population so the alert's `{{ref()}}` resolves
 to real rows immediately instead of on the next scheduled cycle:

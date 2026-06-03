@@ -430,6 +430,73 @@ WHERE cc.deployer = '{{DEPLOYER}}'::bytea;
 The `(deployer)` index keeps this cheap. For a deployer/relayer **allowlist** (the §7 "new contracts by
 relayers" row), swap the equality for `WHERE cc.deployer = ANY(ARRAY['\x…'::bytea, '\x…'::bytea])`.
 
+### P12 — Split analytical query (row-level VIEW + aggregating reader)
+
+> Use when: the business question is an **aggregate** (sum / total / volume / leaderboard) over a large
+> row set — especially **cross-chain**. Don't compute the row scan and the aggregate in one query;
+> **split them into two**.
+
+The split:
+
+1. **Principal VIEW (the row scan)** — one query that emits the **full per-row result, `--materialize VIEW`,
+   and carries NO `LIMIT`** (the §3-rule-10 / §10-rule-11 `LIMIT 200` default is **waived here** — the
+   reader must see every row to sum correctly; a `LIMIT` would silently truncate the total). This is the
+   query whose id you reference (e.g. `123142`). It still obeys every other rule: indexed lead,
+   `block_number`/`duration=` bound, `committed AND error IS NULL`, explicit columns, no trailing `;`.
+2. **Aggregating reader (the sum)** — a **separate** query that does `FROM {{ref(query_id=123142)}}` and applies the
+   `SUM`/`GROUP BY`/`ORDER BY … LIMIT`. The reader is where the `LIMIT 200` final-output default lives.
+
+```sql
+-- Principal VIEW (id 123142): full rows, NO limit, materialize VIEW.
+-- One UNION ALL branch per chain; each carries its own literal chain_id + chain_name (cross-chain PK rule below).
+SELECT 8453  AS chain_id, 'base'     AS chain_name, tl.token_address, -tl.value_delta AS amount_raw, lti.decimals, lti.symbol
+FROM {{token_ledger(network='base', duration='24h')}} tl
+JOIN base.latest_token_info lti ON lti.token_address = tl.token_address
+WHERE tl.value_delta < 0 AND tl.value_delta != 0
+UNION ALL
+SELECT 42161 AS chain_id, 'arbitrum' AS chain_name, tl.token_address, -tl.value_delta AS amount_raw, lti.decimals, lti.symbol
+FROM {{token_ledger(network='arbitrum', duration='3h')}} tl
+JOIN arbitrum.latest_token_info lti ON lti.token_address = tl.token_address
+WHERE tl.value_delta < 0 AND tl.value_delta != 0
+-- no LIMIT
+```
+
+```sql
+-- Aggregating reader (separate query): sums every row of the VIEW. PK = (token_address, chain_id).
+-- Project BOTH chain_id (canonical, UI-rendered) and chain_name (human-readable) in the output.
+SELECT
+    r.chain_id,
+    r.chain_name,
+    concat('0x', encode(r.token_address, 'hex')) AS token_address,
+    r.symbol,
+    SUM(r.amount_raw / pow(10, r.decimals)) AS total_amount
+FROM {{ref(query_id=123142)}} r
+GROUP BY r.chain_id, r.chain_name, r.token_address, r.symbol
+ORDER BY total_amount DESC
+LIMIT 200
+```
+
+**Why split instead of one query:** the row scan is reusable and independently testable (one VIEW feeds
+many readers — totals, top-N, time-buckets), and the reader stays cheap and re-runnable without
+re-scanning. It also keeps the unbounded row set out of any single result payload — only the aggregate
+is returned.
+
+**Cross-chain primary key — `address + chain_id`.** When the VIEW spans chains (`UNION ALL` per chain,
+P10), the same token/contract address appears once **per chain**, and the same 20-byte address can even
+belong to **different** tokens on different chains. So the row's identity — the **`GROUP BY` key in the
+reader and the unique key of any alert built on it** — is **`(address, chain_id)`** (token *or* other
+entity address + the chain literal), never `address` alone. Every branch must project its own literal
+`chain_id` (§4) so rows stay attributable; collapsing on bare `address` over-sums across chains and
+mislabels rows.
+
+**Project `chain_name` alongside `chain_id` for readable output.** `chain_id` is the canonical literal the
+UI renders and the one that belongs in the unique/group key — but a bare integer (`8453`, `42161`) is hard
+to read in an aggregate table. So **carry a literal `chain_name` next to `chain_id` in every VIEW branch**
+(`8453 AS chain_id, 'base' AS chain_name`) and project **both** in the reader's output. Group by both (they
+are 1:1, so it doesn't change the grouping) so the human-readable name rides along with each summed row.
+Mapping: `1` ethereum, `8453` base, `42161` arbitrum, `10` optimism, `137` polygon, `56` bnb,
+`43114` avalanche, `81457` blast.
+
 ---
 
 ## 6. What to extract from a protocol doc
@@ -467,6 +534,7 @@ If the protocol doc does not provide a value, **stop and ask** — never guess a
 | "Are there reverted attempts? Abuse?" | P1 with `td.error IS NOT NULL` | callee, selectors |
 | "Detect the protocol across multiple on-chain paths" | P9 | per-path callee + selector set |
 | "Multi-chain aggregate" | P10 (UNION ALL per chain) | per-chain `{{CHAIN}}` + addresses |
+| "Total / sum / volume aggregate (esp. cross-chain)" | **P12** (row-level VIEW + `{{ref()}}` reader) | as the underlying P4/P7/P10 row scan needs |
 | "Who deployed contract X?" | P11 | deployer address |
 | "When was contract X first active?" | P11 + P1 with `ORDER BY block_number ASC LIMIT 1` | callee |
 | "Match an off-chain event ID to an on-chain settlement" | P5 (use `auth_nonce` from `topic2`) | callee, auth-event topic0 |
@@ -517,11 +585,12 @@ If the protocol doc does not provide a value, **stop and ask** — never guess a
    for addresses/hashes is `concat('0x', encode(col,'hex'))` (the `0x` prefix; bare `encode()` omits it).
 5. For value math: `tl.value_delta < 0` selects sender rows; otherwise you'll double-count.
 6. For aggregations: time-bucket via `<chain>.block_timestamp(block_number)`, not by joining `<chain>.block`.
-7. Cross-chain queries `UNION ALL` per chain — they never JOIN on `block_number` directly.
+7. Cross-chain queries `UNION ALL` per chain — they never JOIN on `block_number` directly, and the
+   row key / `GROUP BY` is **`(address, chain_id)`**, never bare `address` (P12 cross-chain PK rule).
 8. **No trailing `;`** — the platform UI rejects a query that ends in a semicolon (§3 rule 9).
 9. **`tx_hash`** and a **literal `chain_id`** are projected (§4) — actionable click-through + UI default-chain render.
 10. **No `duration=`/block-range exceeds 30d** — 30d is the max look-back; history beyond it belongs in a materialized TABLE, not a wide inline scan (`duration='1000d'` is wrong).
-11. **Final `SELECT` ends with `LIMIT 200`** (house default; cap 500) — unless the user asked otherwise or it's a single-row aggregate (§3 rule 10).
+11. **Final `SELECT` ends with `LIMIT 200`** (house default; cap 500) — unless the user asked otherwise or it's a single-row aggregate (§3 rule 10). **Exception:** a P12 principal **VIEW** (the row scan a `{{ref()}}` reader sums) carries **NO `LIMIT`** — the `LIMIT 200` lives on the aggregating reader, not the VIEW.
 
 ---
 
@@ -538,4 +607,5 @@ If the protocol doc does not provide a value, **stop and ask** — never guess a
 | "network" / "graph" / "edges" | P8 |
 | "multiple paths" / "all variants" | P9 |
 | "across chains" | P10 |
+| "total" / "sum" / "aggregate" (esp. cross-chain) | P12 |
 | "deployer" / "first deployed" | P11 |

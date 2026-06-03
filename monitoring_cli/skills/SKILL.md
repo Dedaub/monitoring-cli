@@ -237,6 +237,17 @@ is reused or worth testing on its own; reach for **TABLE+ref** the moment the lo
 history** (the inline cap can't reach it) or recompute-each-run is too expensive. Lead the alert's own
 scan with the `address` index so each incremental run stays cheap.
 
+**Analytical aggregates → split the row scan from the sum (pattern P12).** For any *total / sum / volume /
+leaderboard* — especially **cross-chain** — don't compute the row scan and the aggregate in one query.
+Materialize the **full per-row result as a `--materialize VIEW` carrying NO `LIMIT`** (the row scan you
+reference by id, e.g. `{{ref(query_id=123142)}}`), then write a **separate** reader that `SUM`/`GROUP BY`s over it
+(the `LIMIT 200` lives on the reader). The VIEW is the one place the `LIMIT 200` default is waived — a
+limit there would silently truncate the total. **Cross-chain grouping key is `(address, chain_id)`** (token
+*or* other entity address + the chain literal), never bare `address`: the same address recurs per chain and
+can even be a different token on each, so collapsing on `address` alone over-sums and mislabels. **Carry a
+literal `chain_name` next to `chain_id` in each branch and project both** so the aggregate output is
+human-readable (`8453 AS chain_id, 'base' AS chain_name`). See `common_query_patterns.md` §5 P12.
+
 **Combine signals with `UNION ALL`.** When one query/alert must cover **multiple detection primitives**
 (several `topic0`s / contract `address`es / function selectors) **and/or multiple chains**, `UNION ALL`
 the per-signal/per-chain `SELECT`s into **one** result rather than spawning N alerts. Each branch:

@@ -38,8 +38,10 @@ their columns differ (`status` vs `committed`/`error`). Use the one the question
 
 ## Structural macros
 
-- **`{{ref(...)}}`** — reference another query's output (a VIEW or TABLE). This is how a final
-  INCREMENTAL alert reads a reusable lookup layer. (See Step 4: CTE / VIEW+ref / TABLE+ref.)
+- **`{{ref(query_id=<id>)}}`** — reference another query's output (a VIEW or TABLE) by its integer
+  query id. The id is **named** (`query_id=`), not positional — e.g. `FROM {{ref(query_id=4930)}}`.
+  This is how a final INCREMENTAL alert (or a P12 aggregating reader) pulls in a reusable lookup layer.
+  (See Step 4: CTE / VIEW+ref / TABLE+ref.)
 - `{{param(...)}}` / `{{params(...)}}` — parameterize.
 - `{{is_backfilling}}` / `{{is_ancestor}}` / `{{is_parent}}` — incremental-execution control.
 
