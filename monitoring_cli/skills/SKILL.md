@@ -238,8 +238,21 @@ dedaub-monitoring run-query --id <SCRATCH> --limit 200
 Show results + SQL.
 
 **Alert mode:**
-1. **Own folder per alert** (never share): `create-folder "/<Alert>"` → `create-query "/<Alert>/<Name>"`;
-   any `{{ref()}}` lookup lives in the same folder. `write-query`, run the gate (validate → run), iterate
+1. **Own folder per alert** (never share). **Name it with the canonical slug
+   `<Signal>-<Subject>-<Chain>`** — fixed token order, PascalCase tokens, single `-` between tokens:
+   - *Signal* ∈ {`Liquidations`, `LargeTransfers`, `Drains`, `AdminChange`, `RoleChange`,
+     `OracleDeviation`, `PauseUpgrade`, `Mints`, `Swaps`} (extend in the same style only when none fit).
+   - *Subject* = protocol **with version, no spaces/inner hyphens** (`AaveV3`, `MorphoBlue`, `CompoundV2`,
+     `Chainlink`); for a protocol-agnostic ask use the asset instead (`USDC`, `WETH`).
+   - *Chain* = canonical Title-case name (`Ethereum`/`Base`/`Arbitrum`/`Optimism`/`Polygon`/`BNB`/
+     `Avalanche`) — **never** ad-hoc abbreviations (`Arbitrum`, not `Arb`/`ArbBase`); multi-chain →
+     priority-ordered `+`-join in the Step 0(b) order (`Base+Arbitrum`).
+   - **Drop redundant/duplicate tokens** (no bare `USD`, no chain named twice). One token per slot.
+
+   e.g. `Liquidations-MorphoBlue-Base`, `Liquidations-AaveV3-Arbitrum`, `Drains-AaveV3-Base+Arbitrum`,
+   `LargeTransfers-USDC-Ethereum`. `create-folder "/<slug>"` → `create-query "/<slug>/<slug>"`; each
+   `{{ref()}}` lookup shares the folder, reusing the slug + a `-View`/`-Tbl` suffix
+   (`Liquidations-MorphoBlue-Base-View`). `write-query`, run the gate (validate → run), iterate
    on the **same id** (no deletes). Before deploy, `query-columns --id <ID>` and confirm every
    `--unique-key` and every `--alert-template {{var}}` is in the output (the most common deploy failure).
 2. **Reviewer subagent** (`references/agents/reviewer.md`) — semantic only (right thing? scope/collision/
