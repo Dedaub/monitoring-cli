@@ -101,9 +101,11 @@ the raw `topic0 =` filter above is the safer default.)
 - **`INCREMENTAL`** — incremental block processing + dedup on the unique key. **The alert output.**
   `enable-alerts` forces this; `--incrementalization IGNORE` (skip dup keys) or `UPSERT` (update).
 
-`tx_hash` on `logs`: JOIN `outer_transaction` on `(block_number, tx_index)`; on Arbitrum use
+`tx_hash` in results: `outer_transaction` has it natively; `logs` / `transaction_detail` /
+`token_ledger` / `token_transfers` carry only `(block_number, tx_index)`, so JOIN `outer_transaction`
+on `(block_number, tx_index)` (1:1, no fan-out) — or on Arbitrum use
 `arbitrum.tx_hash(block_number, tx_index)` to skip the JOIN. Readable `0x` SELECT output: see
-`common_query_patterns.md` §4 (`concat('0x', encode(col,'hex'))`).
+`common_query_patterns.md` §4 (`concat('0x', encode(col,'hex'))`). Full recipe in §4.
 
 ## CLI behavior notes (verified live)
 

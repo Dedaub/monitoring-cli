@@ -40,11 +40,28 @@ dedaub-monitoring set-config --id <BORROWED_ID> --network <NETWORK> --materializ
   --frequency <ORIG> --incrementalization IGNORE
 ```
 
+## Verify the config landed (read it back — the UI modal can lie)
+
+`enable-alerts` writes **per-`(query, network)`** config (`set_run_config` + `set_notify_config`). Two
+gotchas this creates:
+- The CLI's default `--network` is **`ethereum`** — if the query's macros read another chain and you
+  forgot `--network <NET>`, the alert config landed on the **wrong network slot** and the query will
+  never alert on its real chain. **`<NETWORK>` here MUST equal the chain the query's macros read.**
+- The platform's **Query Configuration Settings** modal is **scoped to the UI's selected Default
+  Network** — it shows None/off for any network other than the one selected, so it is *not* proof the
+  alert exists. Don't trust it; read the config back from the API instead:
+
+```bash
+dedaub-monitoring get-config --id <QUERY_ID> --network <NETWORK>   # expect materialize=INCREMENTAL, frequency=<FREQUENCY>
+```
+If `get-config` on the alert's network shows `INCREMENTAL` + your frequency, the config is live
+regardless of what the UI modal renders for its currently-selected network.
+
 ## Smoke-test (critical — a non-materializing query silently never alerts)
 
 Wait ~60s then poll, up to 3× (30s apart):
 ```bash
-dedaub-monitoring get-logs --id <QUERY_ID>
+dedaub-monitoring get-logs --id <QUERY_ID>     # proves it RAN; get-alerts --id <QUERY_ID> proves it FIRED
 ```
 - **SUCCESS** → set final frequency (below).
 - **TIMEOUT/FAIL** → Timeout Diagnosis; do not move on.
@@ -63,7 +80,12 @@ dedaub-monitoring get-logs --id <QUERY_ID>
 7. **State stuck** — `reset-materialization --id <QUERY_ID>` forces a full recompute.
 
 ## Finalize
-- **Free slot:** `dedaub-monitoring set-config --id <QUERY_ID> --network <NETWORK> --frequency <FREQUENCY>` → live.
+- **Free slot:** `dedaub-monitoring set-config --id <QUERY_ID> --network <NETWORK> --materialize INCREMENTAL --frequency <FREQUENCY> --incrementalization IGNORE` → live.
+  **Always re-pass `--materialize INCREMENTAL` (+ `--incrementalization IGNORE`) here.** A bare
+  `set-config --frequency <N>` **resets `materialize` to the default `TABLE` and clears
+  `incrementalization`** (verified live: it silently parks the alert). Confirm with `get-config` that
+  `materialize` is still `INCREMENTAL` after this call — if it flipped to `TABLE`, re-run with the
+  explicit flags.
 - **At limit (borrowed):** `set-config --id <QUERY_ID> --network <NETWORK> --materialize TABLE` → parked
   (verified but inactive). Tell the user how to activate later (disable another, then re-`enable-alerts`).
 - Confirm: `dedaub-monitoring query-metadata --id <QUERY_ID>`.

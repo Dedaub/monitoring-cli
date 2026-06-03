@@ -45,14 +45,54 @@ materialize-or-not).**
    SESSION_DIR=$(mktemp -d /tmp/monitoring-skill-XXXXXX); echo "$SESSION_DIR"
    ```
 
-4. **Pick the mode** (ask if not obvious from the request):
+4. **Pick the mode** (ask if not obvious from the request) — use the `AskUserQuestion` pop-up:
    > "Do you want a **query** (run it and show results) or an **alert** (deploy it to fire on a schedule)?"
 
-5. **Alert mode only — collect notification prefs once** (apply to every alert this session):
-   - Email alerts? (yes/no → `--email`)
-   - Webhook ID? (integer or none → `--webhook-id`)
-   - Default frequency? Natural language → seconds (e.g. "hourly"→3600). Store `DEFAULT_FREQUENCY_SECONDS`.
-   - Target network(s) for the alert (`--network`; default `ethereum`). One alert = one network slot.
+5. **Alert mode only — collect targeting + notification prefs.** Ask **in this order**, and use the
+   `AskUserQuestion` tool (a pop-up) for **everything except the alert condition itself**. Collect the
+   notification/frequency prefs once and reuse them for every alert this session.
+
+   **(a) What to alert on** — *free text, no pop-up.* Ask the user to type the condition (protocol +
+   event/threshold is ideal, e.g. "large USDC transfers > \$1M", "any owner/admin change on Aave v3",
+   "Curve pool drain", "liquidations on Morpho"). This is the one thing you can't enumerate, so let
+   them write it.
+
+   **(b) Target network** — pop-up, **only if the network was not already named in the initial
+   request.** `multiSelect: true` (one alert deploys to one `--network` slot, but the user may want
+   coverage across several — see below). The **full supported set** (each is a valid `--network` slug):
+
+   | Network | slug | | Network | slug |
+   |---------|------|-|---------|------|
+   | Ethereum | `ethereum` | | Polygon | `polygon` |
+   | Base | `base` | | BNB | `bnb` |
+   | Arbitrum | `arbitrum` | | Avalanche | `avalanche` |
+   | Optimism | `optimism` | | | |
+
+   The pop-up caps a question at 4 options, so surface the **4 most relevant** for this alert — when the
+   protocol's chain coverage is known (from its ref / `get-schema`) offer exactly those; otherwise
+   default to `ethereum, base, arbitrum, polygon`. The remaining slugs reach the user via the auto
+   **"Other"** field. If the user picks **multiple** networks, build **one query that `UNION`s the
+   per-network table sets in a CTE** (each network is its own `get-schema` schema) rather than N copies;
+   deploy under the primary network slot.
+
+   **(c) Frequency** — pop-up, asked **before** notifications. The platform accepts **only** this fixed
+   enum; map the chosen label to `--frequency` **seconds** and store `DEFAULT_FREQUENCY_SECONDS`:
+
+   | Label | seconds | | Label | seconds |
+   |-------|---------|-|-------|---------|
+   | 30 seconds | `30` | | 10 minutes | `600` |
+   | 1 minute | `60` | | 1 hour | `3600` |
+   | 2 minutes | `120` | | 4 hours | `14400` |
+   | 5 minutes | `300` | | 24 hours | `86400` |
+   | | | | 3 days | `259200` |
+
+   4-option cap: offer 4 sensible defaults (`5 minutes`, `1 hour`, `24 hours`, `3 days`) and **list the
+   full enum in the question text** so an "Other" pick stays within the supported set — reject any value
+   not in the table.
+
+   **(d) Notifications** — pop-up (`multiSelect: true`): "Email" (`--email`) and/or "Webhook". If they
+   pick Webhook, collect the integer **webhook ID** (`--webhook-id`) via the "Other" field or a quick
+   follow-up; neither selected = no notifications.
 
 ---
 
@@ -129,22 +169,33 @@ Never re-verify what a local ref already states.
   `block_number` block-range predicate so the block index carries the query and it finishes in
   time. Use the **per-chain default lookback** below.
 
-### Per-chain default lookback (when forced to scan by block-range)
+### Per-chain default look-back window (scaled by throughput)
 
-Derived from §2 blocks-per-hour. Default to the middle of the 1–6h band; shrink for high-throughput chains.
+A **fixed wall-clock window scans far more blocks on a high-throughput chain** than on a slow one, so
+the same `24h` that returns in a second on Ethereum can crawl on Base or Arbitrum. Scale the window
+**inversely with block time** to hold the scan budget ≈ constant — target **~50k blocks (≈ one
+Ethereum-week)** so a default run costs about the same everywhere. These are the **default initial
+look-backs** (derived from §2 blocks-per-hour):
 
 | Chain | Block time | Default window | ≈ blocks |
 |-------|-----------|----------------|----------|
-| Ethereum (1) | 12 s | 6 h | 1,800 |
-| BNB (56) | 3 s | 4 h | 4,800 |
-| Polygon (137) | ~2 s | 2 h | 3,600 |
-| Optimism (10) | 2 s | 2 h | 3,600 |
-| Base (8453) | 2 s | 2 h | 3,600 |
-| Avalanche (43114) | ~2 s | 2 h | 3,600 |
-| Arbitrum (42161) | ~0.25 s | 1 h | 14,400 |
+| Ethereum (1) | 12 s | **7 d** | 50,400 |
+| BNB (56) | 3 s | **2 d** | 57,600 |
+| Polygon (137) | ~2 s | **24 h** | 43,200 |
+| Optimism (10) | 2 s | **24 h** | 43,200 |
+| Base (8453) | 2 s | **24 h** | 43,200 |
+| Avalanche (43114) | ~2 s | **24 h** | 43,200 |
+| Arbitrum (42161) | ~0.25 s | **3 h** | 43,200 |
 
 In alert mode this window is the macro `duration=` / refresh cadence; in query mode it's the
 `block_number BETWEEN MAX-N AND MAX` predicate (§2).
+
+**Escalate if empty:** the empirical-gate `run-query` (Step 5) may return **0 rows** simply because
+nothing matched in the default window — *not* because the SQL is wrong. When that happens, **widen the
+window stepwise** (×2 → ×4 → …, e.g. Ethereum `7d → 14d → 28d`) and re-run, up to a sane cap, until
+rows appear or you're confident the condition is genuinely quiet. **Always report the window that
+actually produced the rows** — and for alerts, surface the final look-back to the user *before* you
+deploy (see Step 5).
 
 ---
 
@@ -180,7 +231,19 @@ structure. Hard rules (from §3, §8, §9 + macros.md):
 - Addresses **lowercase `\x` bytea** in WHERE; topic hashes full 32-byte literals; even hex digits (40 addr, 64 word).
 - **`0x`-prefix readable output:** `concat('0x', encode(col,'hex'))` for any address/hash/tx_hash in
   SELECT — bare `encode()` lacks `0x` (WHERE literals stay `\x` bytea). See patterns §4.
+- **Always surface `tx_hash` in the result** — it's what makes a hit actionable (click-through to the
+  tx) and a natural unique-key component. `outer_transaction` has it natively; for
+  `logs`/`transaction_detail`/`token_ledger`/`token_transfers` JOIN `outer_transaction` on
+  `(block_number, tx_index)` (1:1, no fan-out), or on Arbitrum call `arbitrum.tx_hash(block_number,
+  tx_index)`. Recipe in patterns §4.
+- **Always project a literal `chain_id` column** matching the target network (e.g. `8453 AS chain_id`
+  for base) — the UI uses it to render the default chain for the result. Mapping: ethereum `1`,
+  base `8453`, arbitrum `42161`, optimism `10`, polygon `137`, bnb `56`, avalanche `43114`,
+  blast `81457`. In a cross-network `UNION`, give **each branch its own literal** so rows stay
+  attributable to their chain.
 - Project explicit columns — never `SELECT *` (TOAST: `calldata`, `data`, `returndata`).
+- **No trailing `;`** — the platform UI rejects a query that ends in a semicolon. End on the last
+  token (or a comment). See patterns §3.
 - Value math via `token_ledger.value_delta` (signed) over hand-decoding `logs.data`.
 - Macros where they win: `duration=` for the window; for events, filter the protocol's `topic0`
   directly (the macro adds `committed`) — use `inputs='0x<addr>.Event(...)'` only to anchor a single
@@ -222,8 +285,12 @@ Show the user results + SQL; reuse the same probe next time.
 3. Dispatch the **Reviewer subagent** (`references/agents/reviewer.md`) — **semantic-only** now
    (does it detect the right thing? right threshold/scope/collision family? readable template?).
    It writes `$SESSION_DIR/review_<safe_name>.md`. On REJECT, revise (≤2 rounds) and re-review.
-4. On APPROVE, follow `references/deploy-playbook.md` (`enable-alerts --network <net>` → smoke-test
-   via `get-logs` → set final frequency or park if at the materialization limit).
+4. On APPROVE, **tell the user the look-back window you settled on** — the per-chain default from
+   Step 3 and whether you had to widen it to surface rows (e.g. "validated on Base over the last 24h;
+   widened to 48h to catch a sample event"). This is the scan window the empirical gate ran on; the
+   user should know it before the alert goes live. Then follow `references/deploy-playbook.md`
+   (`enable-alerts --network <net>` → smoke-test via `get-logs` → set final frequency or park if at
+   the materialization limit).
 
 ### Alert mode sub-branch — protocol coverage (suite of alerts)
 
