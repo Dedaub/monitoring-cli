@@ -1,0 +1,87 @@
+name: Release
+
+# Manual, deliberate releases: open the Actions tab -> "Release" -> "Run workflow".
+# It builds the package, publishes it to PyPI (Trusted Publishing / OIDC, no stored
+# token), cuts a GitHub Release with the wheel + sdist attached, then prunes the
+# release list down to the 2 newest. Bump the version (e.g. /bump-version) BEFORE
+# running -- the "tag already exists" guard refuses to re-release an existing version.
+on:
+  workflow_dispatch:
+
+# Never run two releases at once; queue rather than cancel a half-finished publish.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: write # create the GitHub Release + git tag, and prune old ones
+  id-token: write # mint the OIDC token PyPI Trusted Publishing exchanges for an upload token
+
+jobs:
+  release:
+    name: build + publish + prune
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # Scopes the OIDC identity. Set the same name ("pypi") on the PyPI trusted
+    # publisher to lock publishing to this environment, and optionally add
+    # required reviewers here for an approval gate. Auto-created on first run.
+    environment: pypi
+    steps:
+      - uses: actions/checkout@v6.0.2
+        with:
+          fetch-depth: 0 # full history so --generate-notes can diff against the previous tag
+
+      - uses: astral-sh/setup-uv@v8.1.0
+        with:
+          python-version: "3.13"
+          enable-cache: true
+
+      - name: Read version from pyproject.toml
+        id: ver
+        run: |
+          version=$(python3 -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "Releasing v$version"
+
+      - name: Refuse to re-release an existing version
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "v${{ steps.ver.outputs.version }}" >/dev/null 2>&1; then
+            echo "::error::Release v${{ steps.ver.outputs.version }} already exists. Bump the version first (e.g. /bump-version)."
+            exit 1
+          fi
+
+      - name: Test
+        run: uv run pytest
+
+      - name: Build (wheel + sdist)
+        run: uv build
+
+      # Immutable target first: if PyPI rejects the upload we stop before creating
+      # a GitHub Release, keeping the two in sync. Trusted Publishing kicks in
+      # automatically because id-token: write is granted -- no token needed.
+      - name: Publish to PyPI
+        run: uv publish
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "v${{ steps.ver.outputs.version }}" \
+            dist/* \
+            --title "v${{ steps.ver.outputs.version }}" \
+            --generate-notes
+
+      # Keep the 2 newest releases; delete the rest and their git tags.
+      - name: Prune old releases (keep 2 newest)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release list --limit 100 --json tagName,createdAt \
+            --jq 'sort_by(.createdAt) | reverse | .[2:] | .[].tagName' \
+          | while read -r tag; do
+              [ -n "$tag" ] || continue
+              echo "Pruning old release $tag"
+              gh release delete "$tag" --yes --cleanup-tag
+            done
