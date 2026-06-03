@@ -88,7 +88,15 @@ materialize-or-not).**
 
    **(d) Notifications** — pop-up (`multiSelect: true`) with three choices:
    - **Email** (`--email`)
-   - **Webhook** — then collect the integer **webhook ID** (`--webhook-id`) via "Other" or a quick follow-up
+   - **Webhook** — if the user already has a webhook, collect its integer **ID** (`--webhook-id`) via
+     "Other". **If they don't have one, set it up inline** — ask for the destination URL (and an
+     optional signing secret), then:
+     ```bash
+     dedaub-monitoring webhook test --url <URL> [--secret <S>]    # show them it actually fires
+     dedaub-monitoring webhook create --name <AlertName> --url <URL> [--secret <S>]   # prints the new id
+     ```
+     Use the returned id as `--webhook-id` on `enable-alerts`. Only create after the test succeeds.
+     (`webhook list` shows existing webhooks if they're unsure what they already have.)
    - **Don't notify me (refresh only)** — deploy with **no** `--email`/`--webhook-id`. **Tell the user:**
      the alert still goes live and **keeps refreshing on its schedule in the back-end** (it stays
      `INCREMENTAL`, so results keep accumulating and are viewable in the UI) — they just won't be pinged.
@@ -282,15 +290,24 @@ structure. Hard rules (from §3, §8, §9 + macros.md):
 
 ### Empirical gate (replaces mechanical review)
 
-Don't *guess* whether the SQL is correct/cheap — **prove it** before any LLM review:
+Don't *guess* whether the SQL is correct/cheap — **prove it** before any LLM review. The gate is
+**validate-first**: spend the instant compile check before the expensive 30s run, so typos and
+bad-column errors die in <1s and `run-query` is reserved for proving *index performance + row existence*.
 ```bash
-dedaub-monitoring preprocess-query --id <ID>   # see the macro→SQL expansion (sanity, not a plan)
+dedaub-monitoring validate-query --id <ID>     # FAIL-FAST: instant compile check; exits 0 if valid,
+                                               # else prints the exact PG error (line + "syntax error at…")
+dedaub-monitoring preprocess-query --id <ID>   # only when validate fails: see the macro→SQL expansion to debug
 dedaub-monitoring run-query --id <ID> --duration <window> --limit 200 --timeout 30   # execute + return rows, killed at 30s
 ```
-- `run-query` proves it executes (catches missing columns, bad literals, type errors) and its
-  **latency is the index signal** — fast within the window = good lead; slow/timeout = it's scanning,
-  fix the lead. (`explain-query` is **dependency analysis only** — use it to confirm `ref` deps
-  resolve, NOT as a query plan.)
+- **`validate-query` is the first gate** — it compiles the SQL server-side without running it, so it
+  catches syntax errors, unknown columns, type mismatches, and bad macro expansions **instantly and for
+  free**. Iterate `write-query` → `validate-query` on the **same id** until it passes *before* you ever
+  pay for a run. On failure it surfaces the exact Postgres error; if the cause isn't obvious, run
+  `preprocess-query` to inspect the macro→SQL expansion.
+- **`run-query` is the second gate** — only worth its 30s budget on SQL that already compiles. It proves
+  execution end-to-end and its **latency is the index signal** — fast within the window = good lead;
+  slow/timeout = it's scanning, fix the lead. (`explain-query` is **dependency analysis only** — use it
+  to confirm `ref` deps resolve, NOT as a query plan.)
 - Index correctness is *predicted* from §1.1 + the anti-pattern checklist, then *confirmed* by latency.
 
 **Tuning loop — every test run must finish < 30s *and* return ≥1 sample row:**
@@ -328,9 +345,15 @@ Show the user results + SQL; reuse the same probe next time.
 1. **Every alert gets its own dedicated folder — always.** `create-folder "/<AlertName>"` then
    `create-query "/<AlertName>/<QueryName>"`; **never share a folder across alerts** (in the
    protocol-coverage suite below, each alert still gets its own folder). Any VIEW/TABLE lookup it
-   `{{ref()}}`s lives in that **same** folder. `write-query` the SQL, run the **empirical gate** on it.
-   On failure, iterate `write-query` on the **same id** — never spawn siblings (queries can't be
-   deleted; see macros.md CLI notes).
+   `{{ref()}}`s lives in that **same** folder. `write-query` the SQL, run the **empirical gate** on it
+   (`validate-query` first, then `run-query`). On failure, iterate `write-query` on the **same id** —
+   never spawn siblings (queries can't be deleted; see macros.md CLI notes).
+   - **Before `enable-alerts`, prove the alert columns exist.** Run
+     `dedaub-monitoring query-columns --id <ID>` — it returns the query's actual output columns (and
+     also re-validates the SQL). Confirm that **every column in your `--unique-key`** and **every
+     `{{var}}` in your `--alert-template`** appears in that list. This catches the most common deploy
+     failure (a unique-key/template column that the SELECT doesn't actually project) *before* it
+     materializes, not after.
 2. Dispatch the **Reviewer subagent** (`references/agents/reviewer.md`) — **semantic-only** now
    (does it detect the right thing? right threshold/scope/collision family? readable template?).
    Pass the draft **inline in the dispatch prompt** (shape: `references/handoff-schemas.md`) — no

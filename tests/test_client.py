@@ -351,6 +351,127 @@ def test_set_notify_config():
 
 
 @respx.mock
+def test_validate_query_true():
+    mock_token(respx)
+    route = respx.post(f"{BASE}/api/tsql/query/validate").mock(
+        return_value=httpx.Response(200, json=True)
+    )
+    client = MonitoringClient(PROFILE)
+    assert client.validate_query("select 1", query_id=9, entity_id=7) is True
+    body = json.loads(route.calls[0].request.content)
+    assert body["query"] == "select 1"
+    assert body["query_entity_id"] == 7
+
+
+@respx.mock
+def test_validate_query_bad_raises_with_detail():
+    mock_token(respx)
+    respx.post(f"{BASE}/api/tsql/query/validate").mock(
+        return_value=httpx.Response(
+            400, json={"detail": "syntax error at or near SELEKT"}
+        )
+    )
+    client = MonitoringClient(PROFILE)
+    with pytest.raises(httpx.HTTPStatusError, match="syntax error"):
+        client.validate_query("selekt 1", query_id=9, entity_id=7)
+
+
+@respx.mock
+def test_query_columns():
+    mock_token(respx)
+    respx.post(f"{BASE}/api/tsql/query/metadata").mock(
+        return_value=httpx.Response(
+            200,
+            json=[
+                {"column_name": "chain_id", "column_type": "int4"},
+                {"column_name": "amount", "column_type": "int4"},
+            ],
+        )
+    )
+    client = MonitoringClient(PROFILE)
+    cols = client.query_columns("select 1 as chain_id", query_id=9, entity_id=7)
+    assert [c["column_name"] for c in cols] == ["chain_id", "amount"]
+
+
+@respx.mock
+def test_format_query():
+    mock_token(respx)
+    respx.post(f"{BASE}/api/tsql/format").mock(
+        return_value=httpx.Response(200, json="select 1 as a")
+    )
+    client = MonitoringClient(PROFILE)
+    assert client.format_query("select 1 as a") == "select 1 as a"
+
+
+@respx.mock
+def test_get_query_status():
+    mock_token(respx)
+    respx.get(f"{BASE}/api/profile/tsql/status").mock(
+        return_value=httpx.Response(200, json={"query_id": 9, "is_materialized": True})
+    )
+    client = MonitoringClient(PROFILE)
+    status = client.get_query_status(9)
+    assert status["is_materialized"] is True
+
+
+@respx.mock
+def test_materialize_query():
+    mock_token(respx)
+    respx.post(f"{BASE}/api/tsql/query/materialize/9").mock(
+        return_value=httpx.Response(200, json="task-uuid")
+    )
+    client = MonitoringClient(PROFILE)
+    assert client.materialize_query(9) == "task-uuid"
+
+
+@respx.mock
+def test_create_webhook_uses_doubled_prefix_path():
+    mock_token(respx)
+    route = respx.post(f"{BASE}/api/profile/api/profile/webhook").mock(
+        return_value=httpx.Response(
+            200, json={"webhook_id": 3, "name": "n", "url": "u"}
+        )
+    )
+    client = MonitoringClient(PROFILE)
+    result = client.create_webhook("n", "https://example.com/hook")
+    assert result["webhook_id"] == 3
+    body = json.loads(route.calls[0].request.content)
+    assert body["url"] == "https://example.com/hook"
+
+
+@respx.mock
+def test_delete_webhook_uses_doubled_webhook_path():
+    mock_token(respx)
+    route = respx.delete(f"{BASE}/api/profile/api/profile/webhook/webhook/3").mock(
+        return_value=httpx.Response(200, json={})
+    )
+    client = MonitoringClient(PROFILE)
+    client.delete_webhook(3)
+    assert route.called
+
+
+@respx.mock
+def test_move_folder_returns_response_body():
+    mock_token(respx)
+    respx.put(f"{BASE}/api/folder/move/{{folder_id: int}}").mock(
+        return_value=httpx.Response(200, json={"folder_id": 5, "new_parent": 2})
+    )
+    client = MonitoringClient(PROFILE)
+    result = client.move_folder(5, entity_id=7, new_folder_id=2)
+    assert result["folder_id"] == 5
+
+
+@respx.mock
+def test_create_alert_filter_returns_id():
+    mock_token(respx)
+    respx.post(f"{BASE}/api/profile/alert-filter").mock(
+        return_value=httpx.Response(200, json=42)
+    )
+    client = MonitoringClient(PROFILE)
+    assert client.create_alert_filter("my filter", query_ids=[1, 2]) == 42
+
+
+@respx.mock
 def test_update_query_alert_settings():
     mock_token(respx)
     respx.get(f"{BASE}/api/profile/tsql/query/99").mock(

@@ -1,9 +1,9 @@
 # Alert Deploy Playbook (alert mode, after Reviewer APPROVES)
 
 **Precondition (from Step 5):** the real target query `/<AlertName>/<QueryName>` is already
-**created, written, and passed the empirical gate** (`preprocess-query` + `run-query`). Any VIEW/TABLE
-lookup it reads via `{{ref(<id>)}}` is already created and `set-config`'d. So this playbook is mostly
-`enable-alerts` + smoke-test + finalize. Run in order; stop and report on any failure.
+**created, written, and passed the empirical gate** (`validate-query` first, then `run-query`). Any
+VIEW/TABLE lookup it reads via `{{ref(<id>)}}` is already created and `set-config`'d. So this playbook is
+mostly `enable-alerts` + smoke-test + finalize. Run in order; stop and report on any failure.
 
 **Variables:** `QUERY_ID`, `NETWORK` (the chain the query's macros read), `ALERT_TEMPLATE`
 (no backticks), `UNIQUE_KEY` (comma-separated), `FREQUENCY` (seconds), `EMAIL_FLAG`
@@ -21,6 +21,21 @@ SQL
 dedaub-monitoring set-config --id <LOOKUP_ID> --network <NETWORK> --materialize VIEW
 # the alert references it as: FROM {{ref(<LOOKUP_ID>)}}
 ```
+For a **TABLE** lookup (history-spanning), force the first population so the alert's `{{ref()}}` resolves
+to real rows immediately instead of on the next scheduled cycle:
+```bash
+dedaub-monitoring materialize --id <LOOKUP_ID>          # kicks off a materialization run; prints the task id
+dedaub-monitoring query-status --id <LOOKUP_ID>         # confirm is_materialized=true before relying on the ref
+```
+
+## Prove the alert columns exist (before enable-alerts)
+
+```bash
+dedaub-monitoring query-columns --id <QUERY_ID>   # output columns (name+type); also re-validates the SQL
+```
+Confirm every column in `<UNIQUE_KEY>` and every `{{var}}` in `<ALERT_TEMPLATE>` appears. A unique-key or
+template column the SELECT doesn't project is the most common deploy failure — catch it here, not after
+it materializes.
 
 ## Enable alerts (smoke frequency first)
 
@@ -62,9 +77,12 @@ regardless of what the UI modal renders for its currently-selected network.
 Wait ~60s then poll, up to 3× (30s apart):
 ```bash
 dedaub-monitoring get-logs --id <QUERY_ID>     # proves it RAN; get-alerts --id <QUERY_ID> proves it FIRED
+dedaub-monitoring query-status --id <QUERY_ID> # direct materialization health: is_materialized, last_time_run, message
 ```
 - **SUCCESS** → set final frequency (below).
 - **TIMEOUT/FAIL** → Timeout Diagnosis; do not move on.
+- `query-status` is the most direct check that the query actually materialized — `is_materialized=true`
+  with a recent `last_time_run` confirms it; a `message` field surfaces the materialization error if not.
 
 ### Timeout Diagnosis (stop at first cause)
 1. **Single timeout, first run** — scheduler warm-up. Wait one cycle, recheck.

@@ -126,7 +126,14 @@ If you use [Claude Code](https://claude.ai/code), install the `/monitoring-cli` 
 dedaub-monitoring install-skill
 ```
 
-Then type `/monitoring-cli` in Claude Code to start a session. The skill guides you through researching a protocol, writing alert queries, reviewing them, and deploying them.
+The skill ships in the shared "Agent Skills" format, so it can install to more than just Claude. With no flags, in a terminal you get a checkbox picker; otherwise it installs to Claude plus any other supported agent already present on the machine. Choose targets explicitly with `--agent`, or install everywhere with `--all`:
+
+```bash
+dedaub-monitoring install-skill --agent claude --agent codex   # specific agents
+dedaub-monitoring install-skill --all                          # claude, codex, cursor, .agents
+```
+
+Then type `/monitoring-cli` in Claude Code (or your agent) to start a session. The skill guides you through researching a protocol, writing alert queries, reviewing them, and deploying them.
 
 ## Commands
 
@@ -151,7 +158,7 @@ Then type `/monitoring-cli` in Claude Code to start a session. The skill guides 
 | `get-alerts` | Show fired alert events |
 | `preprocess-query` | Expand DedaubQL macros and print the result |
 | `explain-query` | Print query dependency analysis |
-| `install-skill` | Install the Claude Code skill |
+| `install-skill` | Install the skill to one or more agents (`--agent`, `--all`) |
 
 ## FAQ
 

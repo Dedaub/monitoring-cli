@@ -68,7 +68,7 @@ def format_query_text(
 
 
 def format_query_metadata(
-    metadata: dict,
+    metadata: dict | list,
     *,
     console: Console | None = None,
 ) -> None:
@@ -219,4 +219,95 @@ def format_query_results(
         table.add_column(h)
     for row in results:
         table.add_row(*[str(row.get(h, "")) for h in headers])
+    c.print(table)
+
+
+def format_columns(
+    columns: list[dict],
+    *,
+    console: Console | None = None,
+) -> None:
+    c = console or _console
+    if not columns:
+        c.print("No columns.")
+        return
+    table = Table(show_header=True)
+    table.add_column("Column")
+    table.add_column("Type")
+    for col in columns:
+        table.add_row(col.get("column_name", ""), col.get("column_type", ""))
+    c.print(table)
+
+
+def format_webhooks(
+    webhooks: list[dict],
+    *,
+    console: Console | None = None,
+) -> None:
+    c = console or _console
+    if not webhooks:
+        c.print("No webhooks.")
+        return
+    table = Table(show_header=True)
+    table.add_column("ID")
+    table.add_column("Name")
+    table.add_column("URL")
+    table.add_column("Description")
+    for w in webhooks:
+        table.add_row(
+            str(w.get("webhook_id", "")),
+            str(w.get("name", "")),
+            str(w.get("url", "")),
+            _truncate(str(w.get("description") or "")),
+        )
+    c.print(table)
+
+
+def format_alert_filters(
+    filters: list[dict],
+    *,
+    console: Console | None = None,
+) -> None:
+    c = console or _console
+    if not filters:
+        c.print("No alert filters.")
+        return
+    table = Table(show_header=True)
+    table.add_column("ID")
+    table.add_column("Name")
+    table.add_column("Queries")
+    table.add_column("Chains")
+    for f in filters:
+        qids = f.get("query_ids") or []
+        cids = f.get("chain_ids") or []
+        table.add_row(
+            str(f.get("search_id", f.get("id", ""))),
+            str(f.get("filter_name", "")),
+            ", ".join(str(q) for q in qids),
+            ", ".join(str(ci) for ci in cids),
+        )
+    c.print(table)
+
+
+def format_query_history(
+    history: list[dict],
+    *,
+    console: Console | None = None,
+) -> None:
+    c = console or _console
+    if not history:
+        c.print("No history.")
+        return
+    table = Table(show_header=True)
+    table.add_column("Version")
+    table.add_column("Saved")
+    table.add_column("Name")
+    table.add_column("Network")
+    for h in history:
+        table.add_row(
+            str(h.get("version", "")),
+            str(h.get("version_ts", "")),
+            str(h.get("query_name", "")),
+            str(h.get("default_network") or ""),
+        )
     c.print(table)

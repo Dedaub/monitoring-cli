@@ -4,9 +4,10 @@ import datetime
 import select
 import shutil
 import sys
+import time
 from importlib.resources import as_file, files
 from pathlib import Path, PurePosixPath
-from typing import Annotated, NoReturn
+from typing import Annotated, NamedTuple, NoReturn
 
 import typer
 from rich.console import Console
@@ -36,6 +37,7 @@ from monitoring_cli.config import (
 
 app = typer.Typer(help="Dedaub Monitoring CLI")
 err = Console(stderr=True)
+out = Console()
 
 # Single network is currently supported across config/alert commands.
 _NETWORK = "ethereum"
@@ -967,26 +969,894 @@ def explain_query(
 
 
 @app.command()
-def install_skill() -> None:
-    """Install the Claude Code /dedaub-monitoring skill (SKILL.md + references/) to ~/.claude/skills/dedaub-monitoring/."""
-    dest = Path.home() / ".claude" / "skills" / "dedaub-monitoring"
+def validate_query(
+    id: Annotated[int, typer.Option(help="Query ID for macro context")],
+    query_text: Annotated[
+        str | None, typer.Argument(help="SQL text (omit to use stored query text)")
+    ] = None,
+    profile: ProfileOption = None,
+    entity_id: Annotated[
+        int | None, typer.Option(help="Entity ID (defaults to your own)")
+    ] = None,
+    network: Annotated[
+        str | None, typer.Option(help="Network name, e.g. ethereum")
+    ] = None,
+) -> None:
+    """Fast compile check (no execution): exits 0 if the SQL is valid, else prints the exact PG error and exits 1. Use as a fail-fast gate before run-query. Omit SQL to use the stored query text."""
+    client, _ = _load_client(profile)
     try:
-        dest.mkdir(parents=True, exist_ok=True)
-        src = files("monitoring_cli.skills")
-        # Install SKILL.md *and* the whole references/ tree: the skill reads those paths
-        # (references/database/…, references/protocols/…) at runtime, so shipping SKILL.md
-        # alone would leave every reference lookup broken.
-        dest.joinpath("SKILL.md").write_text(
-            src.joinpath("SKILL.md").read_text(encoding="utf-8"), encoding="utf-8"
+        query_text, entity_id = _resolve_query_text_and_owner(
+            client, id, query_text, entity_id
         )
-        refs_dest = dest / "references"
-        with as_file(src.joinpath("references")) as refs:
-            # Mirror the packaged tree exactly: clear the managed references/
-            # subtree first so docs dropped/renamed between versions don't linger
-            # as stale orphans. SKILL.md and anything else under dest is untouched.
-            if refs_dest.exists():
-                shutil.rmtree(refs_dest)
-            shutil.copytree(refs, refs_dest)
-    except OSError as e:
+        client.validate_query(query_text, id, entity_id, network)
+    except NotFoundError as e:
+        err.print(str(e))
+        raise typer.Exit(1)
+    except Exception as e:
         _exit_error(e)
-    typer.echo(f"Skill installed to {dest}/ (SKILL.md + references/)")
+    out.print("[green]✓[/] valid")
+
+
+@app.command()
+def query_columns(
+    id: Annotated[int, typer.Option(help="Query ID for macro context")],
+    query_text: Annotated[
+        str | None, typer.Argument(help="SQL text (omit to use stored query text)")
+    ] = None,
+    profile: ProfileOption = None,
+    entity_id: Annotated[
+        int | None, typer.Option(help="Entity ID (defaults to your own)")
+    ] = None,
+    network: Annotated[
+        str | None, typer.Option(help="Network name, e.g. ethereum")
+    ] = None,
+) -> None:
+    """Print the query's output columns (name + type) WITHOUT running it. Also validates the SQL (errors like validate-query on bad SQL). Use in alert mode to prove unique-key/alert-template columns exist. Omit SQL to use the stored query text."""
+    client, _ = _load_client(profile)
+    try:
+        query_text, entity_id = _resolve_query_text_and_owner(
+            client, id, query_text, entity_id
+        )
+        columns = client.query_columns(query_text, id, entity_id, network)
+    except NotFoundError as e:
+        err.print(str(e))
+        raise typer.Exit(1)
+    except Exception as e:
+        _exit_error(e)
+    output.format_columns(columns)
+
+
+@app.command()
+def format_query(
+    query_text: Annotated[
+        str | None, typer.Argument(help="SQL text (omit to read from stdin)")
+    ] = None,
+    profile: ProfileOption = None,
+) -> None:
+    """Pretty-print SQL. Pass SQL as argument or pipe via stdin. Returns input unchanged if it can't parse."""
+    if query_text is None:
+        query_text = _read_ready_stdin()
+        if not query_text.strip():
+            err.print("No query text provided. Pass as argument or pipe via stdin.")
+            raise typer.Exit(1)
+    client, _ = _load_client(profile)
+    try:
+        formatted = client.format_query(query_text)
+    except Exception as e:
+        _exit_error(e)
+    output.format_query_text(formatted)
+
+
+@app.command()
+def query_status(
+    profile: ProfileOption = None,
+    id: Annotated[int | None, typer.Option(help="Query ID")] = None,
+    path: Annotated[str | None, typer.Option(help="Query path")] = None,
+    entity_id: Annotated[
+        int | None, typer.Option(help="Entity ID (for path lookup)")
+    ] = None,
+) -> None:
+    """Show materialization/backfill status for a query as JSON. Specify with --id <query_id> or --path /Folder/QueryName."""
+    client, _ = _load_client(profile)
+    try:
+        qid = _resolve_query(client, id, path, entity_id)
+        status = client.get_query_status(qid)
+    except NotFoundError as e:
+        err.print(str(e))
+        raise typer.Exit(1)
+    except Exception as e:
+        _exit_error(e)
+    if status is None:
+        typer.echo("No status (query not materialized).")
+        return
+    output.format_query_metadata(status)
+
+
+@app.command()
+def query_history(
+    profile: ProfileOption = None,
+    id: Annotated[int | None, typer.Option(help="Query ID")] = None,
+    path: Annotated[str | None, typer.Option(help="Query path")] = None,
+    entity_id: Annotated[
+        int | None, typer.Option(help="Entity ID (for path lookup)")
+    ] = None,
+    limit: Annotated[int, typer.Option(help="Number of versions")] = 25,
+) -> None:
+    """List a query's saved version history. Specify with --id <query_id> or --path /Folder/QueryName."""
+    client, _ = _load_client(profile)
+    try:
+        qid = _resolve_query(client, id, path, entity_id)
+        history = client.get_query_history(qid, limit=limit)
+    except NotFoundError as e:
+        err.print(str(e))
+        raise typer.Exit(1)
+    except Exception as e:
+        _exit_error(e)
+    output.format_query_history(history)
+
+
+@app.command()
+def materialize(
+    profile: ProfileOption = None,
+    id: Annotated[int | None, typer.Option(help="Query ID")] = None,
+    path: Annotated[str | None, typer.Option(help="Query path")] = None,
+    entity_id: Annotated[
+        int | None, typer.Option(help="Entity ID (for path lookup)")
+    ] = None,
+) -> None:
+    """Trigger a materialization run for a query (e.g. to populate a TABLE+ref lookup). Specify with --id <query_id> or --path /Folder/QueryName."""
+    client, _ = _load_client(profile)
+    try:
+        qid = _resolve_query(client, id, path, entity_id)
+        task_id = client.materialize_query(qid)
+    except NotFoundError as e:
+        err.print(str(e))
+        raise typer.Exit(1)
+    except Exception as e:
+        _exit_error(e)
+    typer.echo(f"Materialization started for query {qid} (task {task_id}).")
+
+
+@app.command()
+def active_queries(profile: ProfileOption = None) -> None:
+    """List the task ids of currently-running async queries."""
+    client, _ = _load_client(profile)
+    try:
+        tasks = client.get_active_queries()
+    except Exception as e:
+        _exit_error(e)
+    if not tasks:
+        typer.echo("No active queries.")
+        return
+    for t in tasks:
+        typer.echo(t)
+
+
+@app.command()
+def download_results(
+    task_id: Annotated[
+        str, typer.Option(help="Async task id (printed by run-query when it starts)")
+    ],
+    profile: ProfileOption = None,
+    delimiter: Annotated[str, typer.Option(help="CSV delimiter")] = ",",
+) -> None:
+    """Download a completed async query's results as CSV (to stdout)."""
+    client, _ = _load_client(profile)
+    try:
+        csv_text = client.download_results(task_id, delimiter=delimiter)
+    except Exception as e:
+        _exit_error(e)
+    typer.echo(csv_text)
+
+
+@app.command()
+def move_query(
+    to_folder_id: Annotated[int, typer.Option(help="Destination folder ID")],
+    profile: ProfileOption = None,
+    id: Annotated[int | None, typer.Option(help="Query ID")] = None,
+    path: Annotated[str | None, typer.Option(help="Query path")] = None,
+    entity_id: Annotated[
+        int | None, typer.Option(help="Entity ID (for path lookup)")
+    ] = None,
+) -> None:
+    """Move a query to another folder. Specify with --id <query_id> or --path /Folder/QueryName."""
+    client, _ = _load_client(profile)
+    try:
+        qid = _resolve_query(client, id, path, entity_id)
+        client.move_query(qid, to_folder_id)
+    except NotFoundError as e:
+        err.print(str(e))
+        raise typer.Exit(1)
+    except Exception as e:
+        _exit_error(e)
+    typer.echo(f"Moved query {qid} to folder {to_folder_id}.")
+
+
+@app.command()
+def star_query(
+    profile: ProfileOption = None,
+    id: Annotated[int | None, typer.Option(help="Query ID")] = None,
+    path: Annotated[str | None, typer.Option(help="Query path")] = None,
+    entity_id: Annotated[
+        int | None, typer.Option(help="Entity ID (for path lookup)")
+    ] = None,
+) -> None:
+    """Star (favourite) a query. Specify with --id <query_id> or --path /Folder/QueryName."""
+    client, _ = _load_client(profile)
+    try:
+        qid = _resolve_query(client, id, path, entity_id)
+        client.star_query(qid)
+    except NotFoundError as e:
+        err.print(str(e))
+        raise typer.Exit(1)
+    except Exception as e:
+        _exit_error(e)
+    typer.echo(f"Starred query {qid}.")
+
+
+@app.command()
+def unstar_query(
+    profile: ProfileOption = None,
+    id: Annotated[int | None, typer.Option(help="Query ID")] = None,
+    path: Annotated[str | None, typer.Option(help="Query path")] = None,
+    entity_id: Annotated[
+        int | None, typer.Option(help="Entity ID (for path lookup)")
+    ] = None,
+) -> None:
+    """Remove a query's star. Specify with --id <query_id> or --path /Folder/QueryName."""
+    client, _ = _load_client(profile)
+    try:
+        qid = _resolve_query(client, id, path, entity_id)
+        client.unstar_query(qid)
+    except NotFoundError as e:
+        err.print(str(e))
+        raise typer.Exit(1)
+    except Exception as e:
+        _exit_error(e)
+    typer.echo(f"Unstarred query {qid}.")
+
+
+@app.command()
+def share_query(
+    team_id: Annotated[int, typer.Option(help="Team ID to share with")],
+    perm: Annotated[str, typer.Option(help="Permission to grant, e.g. READ or WRITE")],
+    profile: ProfileOption = None,
+    id: Annotated[int | None, typer.Option(help="Query ID")] = None,
+    path: Annotated[str | None, typer.Option(help="Query path")] = None,
+    entity_id: Annotated[
+        int | None, typer.Option(help="Entity ID (for path lookup)")
+    ] = None,
+) -> None:
+    """Share a query with a team. Specify with --id <query_id> or --path /Folder/QueryName."""
+    client, _ = _load_client(profile)
+    try:
+        qid = _resolve_query(client, id, path, entity_id)
+        client.share_query(qid, team_id, perm)
+    except NotFoundError as e:
+        err.print(str(e))
+        raise typer.Exit(1)
+    except Exception as e:
+        _exit_error(e)
+    typer.echo(f"Shared query {qid} with team {team_id} ({perm}).")
+
+
+@app.command()
+def unshare_query(
+    team_id: Annotated[int, typer.Option(help="Team ID to unshare from")],
+    profile: ProfileOption = None,
+    id: Annotated[int | None, typer.Option(help="Query ID")] = None,
+    path: Annotated[str | None, typer.Option(help="Query path")] = None,
+    entity_id: Annotated[
+        int | None, typer.Option(help="Entity ID (for path lookup)")
+    ] = None,
+) -> None:
+    """Stop sharing a query with a team. Specify with --id <query_id> or --path /Folder/QueryName."""
+    client, _ = _load_client(profile)
+    try:
+        qid = _resolve_query(client, id, path, entity_id)
+        client.unshare_query(qid, team_id)
+    except NotFoundError as e:
+        err.print(str(e))
+        raise typer.Exit(1)
+    except Exception as e:
+        _exit_error(e)
+    typer.echo(f"Unshared query {qid} from team {team_id}.")
+
+
+@app.command()
+def query_by_key(
+    key: Annotated[str, typer.Option(help="Shared query key")],
+    profile: ProfileOption = None,
+) -> None:
+    """Fetch a query's metadata by its share key (JSON)."""
+    client, _ = _load_client(profile)
+    try:
+        query = client.get_query_by_key(key)
+    except NotFoundError as e:
+        err.print(str(e))
+        raise typer.Exit(1)
+    except Exception as e:
+        _exit_error(e)
+    output.format_query_metadata(query)
+
+
+@app.command()
+def move_folder(
+    to_folder_id: Annotated[int, typer.Option(help="Destination parent folder ID")],
+    profile: ProfileOption = None,
+    id: Annotated[int | None, typer.Option(help="Folder ID")] = None,
+    path: Annotated[str | None, typer.Option(help="Folder path")] = None,
+    entity_id: Annotated[
+        int | None, typer.Option(help="Entity ID (defaults to your own)")
+    ] = None,
+) -> None:
+    """Move a folder under another parent folder. Specify with --id <folder_id> or --path /Folder."""
+    client, _ = _load_client(profile)
+    try:
+        if entity_id is None:
+            entity_id = client.get_me()["entity_id"]
+        folder_id = _resolve_folder(client, id, path, entity_id)
+        client.move_folder(folder_id, entity_id, to_folder_id)
+    except NotFoundError as e:
+        err.print(str(e))
+        raise typer.Exit(1)
+    except Exception as e:
+        _exit_error(e)
+    typer.echo(f"Moved folder {folder_id} under {to_folder_id}.")
+
+
+@app.command()
+def subfolders(
+    profile: ProfileOption = None,
+    id: Annotated[int | None, typer.Option(help="Folder ID")] = None,
+    path: Annotated[str | None, typer.Option(help="Folder path")] = None,
+    entity_id: Annotated[
+        int | None, typer.Option(help="Entity ID (for path lookup)")
+    ] = None,
+) -> None:
+    """List the immediate subfolders of a folder (JSON). Specify with --id <folder_id> or --path /Folder."""
+    client, _ = _load_client(profile)
+    try:
+        folder_id = _resolve_folder(client, id, path, entity_id)
+        result = client.get_subfolders(folder_id)
+    except NotFoundError as e:
+        err.print(str(e))
+        raise typer.Exit(1)
+    except Exception as e:
+        _exit_error(e)
+    output.format_query_metadata(result)
+
+
+@app.command()
+def entity(
+    username: Annotated[str, typer.Argument(help="Entity username to look up")],
+    profile: ProfileOption = None,
+) -> None:
+    """Look up an entity by username (JSON)."""
+    client, _ = _load_client(profile)
+    try:
+        result = client.get_entity(username)
+    except Exception as e:
+        _exit_error(e)
+    if not result:
+        typer.echo(f"No entity found for '{username}'.")
+        return
+    output.format_query_metadata(result)
+
+
+@app.command()
+def generate_query(
+    description: Annotated[
+        str, typer.Argument(help="Natural-language description of the query/alert")
+    ],
+    profile: ProfileOption = None,
+    network: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--network", help="Target network(s), repeatable. Default ethereum."
+        ),
+    ] = None,
+    hint: Annotated[
+        list[str] | None,
+        typer.Option("--hint", help="Context hint(s), repeatable."),
+    ] = None,
+    wait: Annotated[
+        bool, typer.Option(help="Poll until the generation job finishes")
+    ] = True,
+) -> None:
+    """Generate DedaubQL from natural language via the platform's own generator. Prints the job result. (The dedaub-monitoring skill generates SQL itself — this is for direct/programmatic use.)"""
+    client, _ = _load_client(profile)
+    networks = network or ["ethereum"]
+    try:
+        job = client.generate_query(description, networks, hint)
+        job_id = job["job_id"]
+        if wait:
+            deadline = time.monotonic() + 300.0
+            while job.get("status") in ("pending", "running"):
+                if time.monotonic() > deadline:
+                    err.print(f"Generation timed out; check later: job {job_id}")
+                    raise typer.Exit(1)
+                time.sleep(2.0)
+                job = client.get_generation_job(job_id)
+            if job.get("status") == "failed":
+                err.print(f"Generation failed: {job.get('error') or 'unknown error'}")
+                raise typer.Exit(1)
+    except typer.Exit:
+        # The timeout / failed branches above already printed their message and
+        # asked to exit; let that propagate instead of being re-wrapped by the
+        # generic handler below (typer.Exit subclasses Exception).
+        raise
+    except Exception as e:
+        _exit_error(e)
+    output.format_query_metadata(job)
+
+
+@app.command()
+def telegram_code(
+    id: Annotated[
+        int, typer.Option(help="Query ID to link Telegram notifications for")
+    ],
+    profile: ProfileOption = None,
+) -> None:
+    """Get the Telegram bot linking code for a query's notifications (JSON)."""
+    client, _ = _load_client(profile)
+    try:
+        result = client.get_telegram_code(id)
+    except Exception as e:
+        _exit_error(e)
+    output.format_query_metadata(result)
+
+
+# --- webhook sub-app ---
+
+webhook_app = typer.Typer(help="Manage notification webhooks.")
+app.add_typer(webhook_app, name="webhook")
+
+
+@webhook_app.command("create")
+def webhook_create(
+    name: Annotated[str, typer.Option(help="Webhook name")],
+    url: Annotated[str, typer.Option(help="Webhook URL")],
+    profile: ProfileOption = None,
+    description: Annotated[str | None, typer.Option(help="Description")] = None,
+    secret: Annotated[str | None, typer.Option(help="Signing secret")] = None,
+) -> None:
+    """Create a webhook. Prints the new webhook ID."""
+    client, _ = _load_client(profile)
+    try:
+        result = client.create_webhook(name, url, description, secret)
+    except Exception as e:
+        _exit_error(e)
+    typer.echo(f"Created webhook (id: {result.get('webhook_id')}).")
+
+
+@webhook_app.command("test")
+def webhook_test(
+    url: Annotated[str, typer.Option(help="Webhook URL to test")],
+    profile: ProfileOption = None,
+    secret: Annotated[str | None, typer.Option(help="Signing secret")] = None,
+) -> None:
+    """Send a test payload to a webhook URL and print the result."""
+    client, _ = _load_client(profile)
+    try:
+        result = client.test_webhook(url, secret)
+    except Exception as e:
+        _exit_error(e)
+    status = result.get("status", "")
+    message = result.get("message") or ""
+    typer.echo(f"{status}: {message}" if message else str(status))
+
+
+@webhook_app.command("list")
+def webhook_list(profile: ProfileOption = None) -> None:
+    """List your webhooks."""
+    client, _ = _load_client(profile)
+    try:
+        result = client.list_webhooks()
+    except Exception as e:
+        _exit_error(e)
+    output.format_webhooks(result)
+
+
+@webhook_app.command("get")
+def webhook_get(
+    id: Annotated[int, typer.Option(help="Webhook ID")],
+    profile: ProfileOption = None,
+) -> None:
+    """Show a webhook by ID (JSON)."""
+    client, _ = _load_client(profile)
+    try:
+        result = client.get_webhook(id)
+    except NotFoundError as e:
+        err.print(str(e))
+        raise typer.Exit(1)
+    except Exception as e:
+        _exit_error(e)
+    output.format_query_metadata(result)
+
+
+@webhook_app.command("update")
+def webhook_update(
+    id: Annotated[int, typer.Option(help="Webhook ID")],
+    name: Annotated[str, typer.Option(help="Webhook name")],
+    url: Annotated[str, typer.Option(help="Webhook URL")],
+    profile: ProfileOption = None,
+    description: Annotated[str | None, typer.Option(help="Description")] = None,
+    secret: Annotated[str | None, typer.Option(help="Signing secret")] = None,
+) -> None:
+    """Update a webhook (name + url required)."""
+    client, _ = _load_client(profile)
+    try:
+        client.update_webhook(id, name, url, description, secret)
+    except NotFoundError as e:
+        err.print(str(e))
+        raise typer.Exit(1)
+    except Exception as e:
+        _exit_error(e)
+    typer.echo(f"Updated webhook {id}.")
+
+
+@webhook_app.command("delete")
+def webhook_delete(
+    id: Annotated[int, typer.Option(help="Webhook ID")],
+    profile: ProfileOption = None,
+) -> None:
+    """Delete a webhook."""
+    client, _ = _load_client(profile)
+    try:
+        client.delete_webhook(id)
+    except NotFoundError as e:
+        err.print(str(e))
+        raise typer.Exit(1)
+    except Exception as e:
+        _exit_error(e)
+    typer.echo(f"Deleted webhook {id}.")
+
+
+# --- alert-filter sub-app ---
+
+alert_filter_app = typer.Typer(help="Manage saved alert filters (alert searches).")
+app.add_typer(alert_filter_app, name="alert-filter")
+
+
+def _split_ints(csv: str | None) -> list[int] | None:
+    if not csv:
+        return None
+    return [int(x.strip()) for x in csv.split(",") if x.strip()]
+
+
+@alert_filter_app.command("create")
+def alert_filter_create(
+    name: Annotated[str, typer.Option(help="Filter name")],
+    profile: ProfileOption = None,
+    query_ids: Annotated[
+        str | None, typer.Option(help="Comma-separated query IDs")
+    ] = None,
+    chain_ids: Annotated[
+        str | None, typer.Option(help="Comma-separated chain IDs")
+    ] = None,
+    colour: Annotated[str | None, typer.Option(help="Display colour")] = None,
+) -> None:
+    """Create a saved alert filter. Prints the new filter ID."""
+    client, _ = _load_client(profile)
+    try:
+        result = client.create_alert_filter(
+            name, _split_ints(query_ids), _split_ints(chain_ids), colour
+        )
+    except Exception as e:
+        _exit_error(e)
+    typer.echo(f"Created alert filter (id: {result}).")
+
+
+@alert_filter_app.command("list")
+def alert_filter_list(profile: ProfileOption = None) -> None:
+    """List your saved alert filters."""
+    client, _ = _load_client(profile)
+    try:
+        result = client.list_alert_filters()
+    except Exception as e:
+        _exit_error(e)
+    output.format_alert_filters(result)
+
+
+@alert_filter_app.command("get")
+def alert_filter_get(
+    id: Annotated[int, typer.Option(help="Alert filter ID")],
+    profile: ProfileOption = None,
+) -> None:
+    """Show a saved alert filter by ID (JSON)."""
+    client, _ = _load_client(profile)
+    try:
+        result = client.get_alert_filter(id)
+    except NotFoundError as e:
+        err.print(str(e))
+        raise typer.Exit(1)
+    except Exception as e:
+        _exit_error(e)
+    output.format_query_metadata(result)
+
+
+@alert_filter_app.command("update")
+def alert_filter_update(
+    id: Annotated[int, typer.Option(help="Alert filter ID")],
+    name: Annotated[str, typer.Option(help="Filter name")],
+    profile: ProfileOption = None,
+    query_ids: Annotated[
+        str | None, typer.Option(help="Comma-separated query IDs")
+    ] = None,
+    chain_ids: Annotated[
+        str | None, typer.Option(help="Comma-separated chain IDs")
+    ] = None,
+    colour: Annotated[str | None, typer.Option(help="Display colour")] = None,
+) -> None:
+    """Update a saved alert filter."""
+    client, _ = _load_client(profile)
+    try:
+        client.update_alert_filter(
+            id, name, _split_ints(query_ids), _split_ints(chain_ids), colour
+        )
+    except NotFoundError as e:
+        err.print(str(e))
+        raise typer.Exit(1)
+    except Exception as e:
+        _exit_error(e)
+    typer.echo(f"Updated alert filter {id}.")
+
+
+@alert_filter_app.command("delete")
+def alert_filter_delete(
+    id: Annotated[int, typer.Option(help="Alert filter ID")],
+    profile: ProfileOption = None,
+) -> None:
+    """Delete a saved alert filter."""
+    client, _ = _load_client(profile)
+    try:
+        client.delete_alert_filter(id)
+    except NotFoundError as e:
+        err.print(str(e))
+        raise typer.Exit(1)
+    except Exception as e:
+        _exit_error(e)
+    typer.echo(f"Deleted alert filter {id}.")
+
+
+_SKILL_NAME = "dedaub-monitoring"
+
+
+class _AgentTarget(NamedTuple):
+    """A place the skill can be installed. Every supported agent reads skills
+    from ``<home>/<home_subdir>/skills/<name>/`` and the SKILL.md + references/
+    payload is the same shared "Agent Skills" format, so one copy works for all.
+    """
+
+    key: str  # --agent value
+    label: str  # display name in the picker
+    home_subdir: str  # dir under $HOME, e.g. ".claude"
+
+
+# claude is always a valid target; the rest are offered when detected (their
+# home dir already exists) or chosen explicitly via --agent/--all/the picker.
+_SKILL_AGENTS: tuple[_AgentTarget, ...] = (
+    _AgentTarget("claude", "Claude Code", ".claude"),
+    _AgentTarget("codex", "Codex", ".codex"),
+    _AgentTarget("cursor", "Cursor", ".cursor"),
+    _AgentTarget("agents", "Universal (.agents)", ".agents"),
+)
+
+
+def _agent_present(target: _AgentTarget) -> bool:
+    """True when this agent's home dir exists, i.e. the agent is installed."""
+    return (Path.home() / target.home_subdir).is_dir()
+
+
+def _dedup_targets(items: list[_AgentTarget]) -> list[_AgentTarget]:
+    seen: set[str] = set()
+    deduped: list[_AgentTarget] = []
+    for t in items:
+        if t.key not in seen:
+            seen.add(t.key)
+            deduped.append(t)
+    return deduped
+
+
+def _prompt_skill_targets(detected: list[_AgentTarget]) -> list[_AgentTarget]:
+    """Interactive multi-select picker (TTY only).
+
+    Nothing starts selected. Enter toggles the highlighted agent; move down to
+    the "Submit" row and press Enter there to install only the agents you
+    checked. Detected agents (home dir already present) are flagged "· detected".
+    """
+    # Imported lazily: prompt_toolkit is heavy and only the interactive path
+    # needs it — keeps the non-interactive paths (CI, bump-version, --agent,
+    # --all) fast to start.
+    from prompt_toolkit.application import Application
+    from prompt_toolkit.key_binding import KeyBindings
+    from prompt_toolkit.key_binding.key_processor import KeyPressEvent
+    from prompt_toolkit.layout import Layout
+    from prompt_toolkit.layout.containers import Window
+    from prompt_toolkit.layout.controls import FormattedTextControl
+    from prompt_toolkit.styles import Style
+
+    agents = list(_SKILL_AGENTS)
+    submit_row = len(agents)  # synthetic row after the agents
+    detected_keys = {t.key for t in detected}
+    label_w = max(len(t.label) for t in agents) + 2
+    selected: set[str] = set()
+    cursor = 0
+
+    def render() -> list[tuple[str, str]]:
+        tokens: list[tuple[str, str]] = [
+            ("class:qmark", "◆ "),
+            ("class:question", "Install the dedaub-monitoring skill to:\n"),
+            (
+                "class:instruction",
+                "  ↑↓ move · enter toggles · Submit + enter to finish\n\n",
+            ),
+        ]
+        for i, t in enumerate(agents):
+            tokens.append(("class:pointer", "❯ ") if i == cursor else ("", "  "))
+            tokens.append(
+                ("class:on", "◉ ") if t.key in selected else ("class:off", "◯ ")
+            )
+            tokens.append(("class:label", t.label.ljust(label_w)))
+            tokens.append(("class:path", f"~/{t.home_subdir}/skills/{_SKILL_NAME}"))
+            if t.key in detected_keys:
+                tokens.append(("class:detected", "  · detected"))
+            tokens.append(("", "\n"))
+        tokens.append(("class:pointer", "❯ ") if cursor == submit_row else ("", "  "))
+        submit_cls = "class:submit" if cursor == submit_row else "class:submit-dim"
+        tokens.append((submit_cls, f"Submit ({len(selected)} selected)"))
+        return tokens
+
+    kb = KeyBindings()
+
+    @kb.add("up")
+    @kb.add("k")
+    def _up(_event: KeyPressEvent) -> None:
+        nonlocal cursor
+        cursor = (cursor - 1) % (submit_row + 1)
+
+    @kb.add("down")
+    @kb.add("j")
+    def _down(_event: KeyPressEvent) -> None:
+        nonlocal cursor
+        cursor = (cursor + 1) % (submit_row + 1)
+
+    def _toggle() -> None:
+        key = agents[cursor].key
+        if key in selected:
+            selected.remove(key)
+        else:
+            selected.add(key)
+
+    @kb.add("space")
+    def _space(_event: KeyPressEvent) -> None:
+        if cursor != submit_row:
+            _toggle()
+
+    @kb.add("enter")
+    def _enter(event: KeyPressEvent) -> None:
+        if cursor == submit_row:
+            event.app.exit(result=[t for t in agents if t.key in selected])
+        else:
+            _toggle()
+
+    @kb.add("c-c")
+    @kb.add("c-q")
+    def _abort(event: KeyPressEvent) -> None:
+        event.app.exit(result=[])
+
+    style = Style(
+        [
+            ("qmark", "fg:#5f87ff bold"),
+            ("question", "bold"),
+            ("instruction", "fg:#808080 italic"),
+            ("pointer", "fg:#5f87ff bold"),
+            ("on", "fg:#5fafff"),
+            ("off", "fg:#808080"),
+            ("path", "fg:#808080"),
+            ("detected", "fg:#5faf5f"),
+            ("submit", "fg:#5f87ff bold"),
+            ("submit-dim", "fg:#808080"),
+        ]
+    )
+    app: Application[list[_AgentTarget]] = Application(
+        layout=Layout(
+            Window(
+                FormattedTextControl(render, focusable=True), always_hide_cursor=True
+            )
+        ),
+        key_bindings=kb,
+        style=style,
+        erase_when_done=True,
+    )
+    return app.run() or []
+
+
+def _resolve_skill_targets(
+    agent: list[str] | None, all_agents: bool
+) -> list[_AgentTarget]:
+    by_key = {t.key: t for t in _SKILL_AGENTS}
+    if all_agents:
+        return list(_SKILL_AGENTS)
+    if agent:
+        chosen: list[_AgentTarget] = []
+        for a in agent:
+            t = by_key.get(a.lower())
+            if t is None:
+                err.print(f"Unknown agent '{a}'. Choices: {', '.join(by_key)}")
+                raise typer.Exit(1)
+            chosen.append(t)
+        return _dedup_targets(chosen)
+    detected = [t for t in _SKILL_AGENTS if _agent_present(t)]
+    # Interactive: let the user pick. Otherwise (CI, bump-version, no TTY) fall
+    # back to a deterministic default so automation never blocks on a prompt.
+    if sys.stdin.isatty() and sys.stdout.isatty():
+        return _prompt_skill_targets(detected)
+    # Non-interactive default: claude always, plus any other detected agent.
+    return _dedup_targets([by_key["claude"], *detected])
+
+
+def _copy_skill_to(dest: Path) -> None:
+    dest.mkdir(parents=True, exist_ok=True)
+    src = files("monitoring_cli.skills")
+    # Install SKILL.md *and* the whole references/ tree: the skill reads those paths
+    # (references/database/…, references/protocols/…) at runtime, so shipping SKILL.md
+    # alone would leave every reference lookup broken.
+    dest.joinpath("SKILL.md").write_text(
+        src.joinpath("SKILL.md").read_text(encoding="utf-8"), encoding="utf-8"
+    )
+    refs_dest = dest / "references"
+    with as_file(src.joinpath("references")) as refs:
+        # Mirror the packaged tree exactly: clear the managed references/
+        # subtree first so docs dropped/renamed between versions don't linger
+        # as stale orphans. SKILL.md and anything else under dest is untouched.
+        if refs_dest.exists():
+            shutil.rmtree(refs_dest)
+        shutil.copytree(refs, refs_dest)
+
+
+@app.command()
+def install_skill(
+    agent: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--agent",
+            "-a",
+            help="Agent(s) to install to: claude, codex, cursor, agents. "
+            "Repeatable. Skips the interactive picker.",
+        ),
+    ] = None,
+    all_agents: Annotated[
+        bool,
+        typer.Option("--all", help="Install to every supported agent target."),
+    ] = False,
+) -> None:
+    """Install the dedaub-monitoring skill (SKILL.md + references/) to one or more agents.
+
+    With no flags: in a TTY you get a checkbox picker; otherwise it installs to
+    Claude plus any other supported agent already present on this machine. Use
+    --agent to choose explicitly or --all for every target.
+    """
+    targets = _resolve_skill_targets(agent, all_agents)
+    if not targets:
+        err.print("[yellow]Nothing selected — no agents to install to.[/]")
+        raise typer.Exit(1)
+    installed: list[tuple[_AgentTarget, Path]] = []
+    for t in targets:
+        dest = Path.home() / t.home_subdir / "skills" / _SKILL_NAME
+        try:
+            _copy_skill_to(dest)
+        except OSError as e:
+            _exit_error(e)
+        installed.append((t, dest))
+
+    label_w = max(len(t.label) for t, _ in installed)
+    out.print(
+        f"\n[green]✓[/] [bold]{_SKILL_NAME}[/] installed to "
+        f"{len(installed)} agent{'s' if len(installed) != 1 else ''} "
+        "[dim](SKILL.md + references/)[/]"
+    )
+    for t, dest in installed:
+        rel = f"~/{dest.relative_to(Path.home())}"
+        out.print(f"  [green]•[/] {t.label.ljust(label_w)}  [dim]{rel}[/]")
