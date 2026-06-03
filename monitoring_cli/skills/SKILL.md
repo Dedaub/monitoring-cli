@@ -86,9 +86,17 @@ materialize-or-not).**
    full enum in the question text** so an "Other" pick stays within the supported set — reject any value
    not in the table.
 
-   **(d) Notifications** — pop-up (`multiSelect: true`): "Email" (`--email`) and/or "Webhook". If they
-   pick Webhook, collect the integer **webhook ID** (`--webhook-id`) via the "Other" field or a quick
-   follow-up; neither selected = no notifications.
+   **(d) Notifications** — pop-up (`multiSelect: true`) with three choices:
+   - **Email** (`--email`)
+   - **Webhook** — then collect the integer **webhook ID** (`--webhook-id`) via "Other" or a quick follow-up
+   - **Don't notify me (refresh only)** — deploy with **no** `--email`/`--webhook-id`. **Tell the user:**
+     the alert still goes live and **keeps refreshing on its schedule in the back-end** (it stays
+     `INCREMENTAL`, so results keep accumulating and are viewable in the UI) — they just won't be pinged.
+     They can flip notifications on/off anytime in the UI; you'll hand them the direct link after deploy
+     (Step 6): `https://app.dedaub.com/tx-monitor?queryId=<query id>`.
+
+   Selecting **"Don't notify me"** (or nothing) ⇒ notify-off; otherwise pass the chosen
+   `--email`/`--webhook-id` flags.
 
 ---
 
@@ -350,7 +358,10 @@ not web research.
 
 **Just summarize to the user in chat — do not write a hand-off / deployment doc.** Alert mode: a table
 of alert | path | query id | network | frequency | status, plus the `query-metadata`/`get-alerts`/
-`get-logs` commands they can run to manage it. Query mode: the results + final SQL.
+`get-logs` commands they can run to manage it. For **every alert**, include the UI link
+`https://app.dedaub.com/tx-monitor?queryId=<query id>` (manage settings / view results) — and call it
+out explicitly for any **notify-off** alert, noting it keeps refreshing in the back-end and they can
+turn notifications on there. Query mode: the results + final SQL.
 The `/_scratch/probe` query is intentionally left in place for reuse (it can't be deleted anyway).
 
 ---
