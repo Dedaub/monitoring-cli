@@ -1,17 +1,25 @@
-# Common Queries — Database Query Patterns
+# Common Queries — Database Query Patterns (hub)
 
 **Audience:** an agent translating a business question into SQL against the blockchain schema.
-**Pairs with:** a protocol knowledge-base doc (e.g. `protocols/uniswap/v2.md`, `protocols/uniswap/v3.md`).
-**Status:** abstracted from x402 detection research on 2026-05-21; verified against PG18 schema for Base mainnet.
+**Pairs with:** a protocol knowledge-base doc (e.g. `protocols/uniswap/v3.md`) for *constants*.
 
-> **How to use.** The protocol doc supplies *constants* (contract addresses, function selectors, event topic0 hashes, asset addresses, special EOAs). This doc supplies *patterns* (which tables, which indexes, which joins, which filters). Pick the pattern by matching the business question to §7; substitute constants from the protocol doc into the SQL template. Never write a query that ignores §3 (indexes) or §8 (edge cases).
+This file is the **rulebook + index**: schema (§1), block-times (§2), perf rules (§3), the pattern
+catalogue (§5 index), routing (§7), edge cases (§8), anti-patterns (§9), checklist (§10). Two heavy
+sections live in siblings and are pulled when you actually write SQL:
 
-> **Macro-wrap for the monitoring engine.** These templates use raw `<chain>.<table>` for clarity, but
-> DedaubQL runs them through table **macros** — `{{logs(...)}}`, `{{outer_transaction(...)}}`,
-> `{{transaction_detail(...)}}`, `{{token_ledger(...)}}`, `{{contracts(...)}}`, … — never bare
-> `<chain>.<table>` (it full-scans and times out). The `block_number BETWEEN (SELECT MAX…) - N AND MAX`
-> predicate (§2) collapses to the macro's `duration=` window. See `../macros.md` for the macro list,
-> `inputs=`, and topic0-first filtering.
+- **`../decode_primitives.md`** (§4) — the decode/enrich cheat-sheet (topics, `hex_to_numeric`, USD, `eth_call`, …).
+- **`../query_patterns.md`** (§5) — the full P1–P16 SQL templates.
+
+> **How to use.** The protocol doc supplies *constants* (addresses, selectors, topic0 hashes, assets).
+> Pick the pattern via §7 (or the §5 index), open `query_patterns.md` for the template, substitute
+> constants, and obey §3 (indexes) + §8 (edge cases). `§N` references resolve here regardless of which
+> sibling file you're reading.
+
+> **Macro-wrap.** Templates show raw `<chain>.<table>` for clarity, but DedaubQL runs them through
+> **macros** — `{{logs(...)}}`, `{{outer_transaction(...)}}`, `{{transaction_detail(...)}}`,
+> `{{token_ledger(...)}}`, … — never bare `<chain>.<table>` (full-scans, times out). The
+> `block_number BETWEEN (SELECT MAX…) - N AND MAX` predicate (§2) collapses to the macro's `duration=`.
+> See `../macros.md`.
 
 ---
 
@@ -22,23 +30,26 @@ Per-chain schema (`base.`, `ethereum.`, `arbitrum.`, `optimism.`, `polygon.`, `b
 | Table | PK | Purpose |
 |-------|----|---------|
 | `<chain>.outer_transaction` | `(block_number, tx_index)` | One row per **top-level tx**. `tx_hash`, `from_a`/`to_a`, `callvalue` (wei → ETH value), `status` (`false` = reverted), `input`. Entry-call / ETH-value detection. |
-| `<chain>.transaction_detail` | `(block_number, tx_index, vm_step_start)` | One row per executed call frame. `from_a` = caller, `to_a` = callee, `calldata` = input bytes. |
+| `<chain>.transaction_detail` | `(block_number, tx_index, vm_step_start)` | One row per executed call frame. `from_a` = caller, `to_a` = callee, `calldata` = input bytes. Also: `callvalue`, `error`, `call_opcode`, and **`caller_vm_step_stack` (int[])** — the call-frame stack, so `coalesce(array_length(caller_vm_step_stack,1),0)` = **call depth** (0 = top-level/EOA-initiated, >0 = nested via router/bundler/contract). |
 | `<chain>.logs` | `(block_number, tx_index, vm_step)` | One row per emitted `LOG*`. `address` = emitter, `topic0..3`, `data`. |
 | `<chain>.token_ledger` | `(address, block_number, tx_index, vm_step_start, vm_step)` | Parsed token balance deltas. One row per side of each transfer; `value_delta` is signed. |
 | `<chain>.token_transfers` | `(block_number, tx_index, vm_step_start, vm_step)` | One row per token transfer: `token_address`, `from_a`, `to_a`, `value` (unsigned). Lighter than `token_ledger` when you don't need signed deltas / counterparty. |
 | `<chain>.contracts` | `(address)` | One row per deployed contract. `deployer`, `block_number`. |
 | `<chain>.block` | `(block_number)` | Block headers; source of truth for tip and timestamps. |
+| `<chain>.token_balance` | `(token_address, owner_address)` | **Current** ERC-20 balance per holder: `value` (numeric, raw units), `block_number` (last update). Indexed on `owner_address` and `token_address`-leading PK → both "holders of token X" and "balances of address Y" are index-fast. Holder/concentration/whale analytics — no log replay needed. Referenced raw (no macro). |
+| `<chain>.protocol_contract` | `(protocol_id, address)` | Maps a contract `address` → `protocol_id` for **Watchdog-supported** protocols. JOIN `token_ledger`/`logs`/`transaction_detail` `USING (address)` to attribute activity to a protocol without hardcoding its address set. Pair with `<chain>.protocol (protocol_id, protocol_name)` for the readable name. Referenced raw. |
 
 ### 1.1 Index inventory (use these as leading predicates)
 
-> **Per-chain caveat:** this table is the **baseline guaranteed on every chain** (verified on Base). Some indexes still vary by chain — but **`logs.topic0` is currently indexed on all 8 supported chains** (`(topic0, block_number, address)` btree), so topic0-first is index-fast everywhere today. Indexes can change: before assuming one is present or missing, run `get-schema --network <chain> --table <t>` (or `\d+ <chain>.<t>` / `pg_indexes`). If an index exists, the matching §9 anti-pattern stops being one — the query is fast.
+> **Per-chain caveat:** indexes vary by chain. **`logs.topic0` is indexed on most chains** (`(topic0, block_number, address)` btree → topic0-first is index-fast) but **Base was observed without it** — there, lead with the `address` index. Before assuming an index is present or missing, run `get-schema --network <chain> --table <t>` (or `\d+ <chain>.<t>`). Where the index exists, the matching §9 anti-pattern stops being one.
 
 | Table | Indexes (baseline, present on every chain) |
 |-------|--------------------------------------------|
 | `transaction_detail` | `(block_number)`, `(from_a, block_number)`, `(to_a, block_number)`, `(common.selector(calldata), block_number)`, **`(to_a, common.selector(calldata), block_number)`** ← workhorse |
-| `logs` | `(address, block_number DESC)`, `(block_number DESC)`, **`(topic0, block_number, address)`** — `topic0` indexed on all 8 chains today (verify per chain) |
+| `logs` | `(address, block_number DESC)`, `(block_number DESC)`, **`(topic0, block_number, address)`** — topic0 indexed on most chains, **not Base** (verify per chain) |
 | `token_ledger` | `(address)`, `(address, block_number, tx_index, vm_step_start, vm_step)`, `(block_number)`, `(block_number, tx_index, vm_step_start, vm_step)` |
 | `contracts` | `(address)` [pkey], `(deployer)`, `(block_number)` |
+| `token_balance` | `(token_address, owner_address)` [pkey], `(owner_address)`, `(block_number)` — lead with `token_address` for holders-of-a-token, `owner_address` for balances-of-an-address |
 
 ### 1.2 Helper functions (PG18+)
 
@@ -47,6 +58,9 @@ Per-chain schema (`base.`, `ethereum.`, `arbitrum.`, `optimism.`, `polygon.`, `b
 | `common.selector(bytea)` | `bytea(4)` | First-4-byte function selector; **indexed** on `transaction_detail`. |
 | `common.hex_to_numeric(text)` | `numeric` | Decode `'0x…'` hex (e.g. `logs.data` payloads) to numeric. |
 | `<chain>.block_timestamp(int8)` | `timestamptz` | Block number → wall clock. Prefer over joining `<chain>.block` for time bucketing. |
+| `<chain>.to_usd_value(numeric, token)` | `numeric` | Raw amount → USD (decimals + price handled). See `decode_primitives.md`. |
+| `<chain>.get_chain_id()` | `int` | Numeric chain id literal. |
+| `<chain>.tx_hash(int8, int)` | `ethword` | `(block_number, tx_index)` → tx hash (confirmed on ethereum/arbitrum). |
 
 ### 1.3 Custom types
 
@@ -94,428 +108,73 @@ WHERE <chain>.block_timestamp(block_number) BETWEEN now() - interval '{{X}}' AND
 |---|------|-----|
 | 1 | **Always lead with an indexed column.** `address`, `to_a`, `from_a`, `common.selector(calldata)`, `block_number`. | Sequential scans over `logs` / `transaction_detail` are minutes-to-hours. |
 | 2 | **Always include a block-range filter.** | Without one, even the best index scans the whole table. |
-| 3 | **For `logs`, `topic0` is indexed on all 8 chains** — `WHERE topic0 = …` alone is index-fast (and is how you catch every fork of an event); add `address = …` to pin one deployment. Re-verify per chain (§1.1) since indexes can change. | A `(topic0, block_number, address)` btree carries it — always pair with a `block_number`/`duration=` bound so the time window is indexed too. |
+| 3 | **For `logs`, `topic0` is indexed on most chains (not Base)** — where present, `WHERE topic0 = …` alone is index-fast (and catches every fork); add `address = …` to pin one deployment. On Base (no topic0 index) lead with `address`. Verify per chain (§1.1). | A `(topic0, block_number, address)` btree carries it — always pair with a `block_number`/`duration=` bound so the window is indexed too. |
 | 4 | **Prefer `transaction_detail` as the driving table for function-call detection.** | The `(to_a, selector, block_number)` composite is the cheapest entry point. |
 | 5 | **Prefer `token_ledger` over decoding `logs.Transfer.data` for value analytics.** | Already parsed, signed, joined to counterparty; no TOAST hit. |
 | 6 | **Don't `SELECT *`.** | `calldata`, `returndata`, `logs.data` are TOAST-stored. Project explicit columns. |
 | 7 | **Join `transaction_detail` ↔ `logs` ↔ `token_ledger` on `(block_number, tx_index)`.** | All three have it indexed (directly or as a prefix). Add `vm_step` / `log_index` only when ordering inside a tx matters (multicall). |
 | 8 | **`committed = true AND error IS NULL` excludes reverts.** Include both. | A revert still produces a `transaction_detail` row but no state effects. |
-| 9 | **Never end a query with a trailing `;`.** End on the last token (or a comment). | The platform UI **rejects** a query terminated by a semicolon — applies to every query and `{{ref()}}`'d lookup we generate. |
-| 10 | **Default the final result to `LIMIT 200`.** End the outer/final `SELECT` with `LIMIT 200` unless the user asks for more (cap 500) or an aggregate returns one row. | Keeps result payloads bounded and the UI responsive; 200 is the house default for the final output (not the inner CTE/lookup scans). |
+| 9 | **Never end a query with a trailing `;`.** End on the last token (or a comment). | The platform UI **rejects** a query terminated by a semicolon — applies to every query and `{{ref()}}`'d lookup. |
+| 10 | **Default the final result to `LIMIT 200`.** End the outer/final `SELECT` with `LIMIT 200` unless the user asks for more (cap 500) or an aggregate returns one row. | Keeps result payloads bounded; 200 is the house default for the final output (not inner CTE/lookup scans). |
 
 ---
 
-## 4. Decode primitives (cheat-sheet)
+## 4. Decode primitives → `../decode_primitives.md`
 
-| Need | Snippet |
-|------|---------|
-| Selector of a call | `common.selector(td.calldata)` |
-| Indexed address from `topic1`/`topic2` | `substring(log.topic1 FROM 13 FOR 20)::bytea` (right-most 20 of 32 bytes) |
-| `uint256` from `log.data` | `common.hex_to_numeric('0x' || encode(log.data, 'hex'))` |
-| `uint` packed in an indexed topic (e.g. UniV3 fee in `topic3`) | `get_byte(topic3::bytea, 29)*65536 + get_byte(topic3::bytea, 30)*256 + get_byte(topic3::bytea, 31)` — cast `ethword`→`bytea`; last 3 bytes = `uint24` |
-| **Readable address/hash in SELECT** | `concat('0x', encode(col, 'hex'))` (or `'0x' \|\| encode(col, 'hex')`) — bare `encode()` has **no `0x`**; output-only, WHERE literals stay `\x` bytea. Verified live. |
-| **`tx_hash` in the result** | `outer_transaction` has it **natively** (`SELECT concat('0x', encode(ot.tx_hash,'hex'))`). `logs` / `transaction_detail` / `token_ledger` / `token_transfers` carry only `(block_number, tx_index)` → **JOIN** `{{outer_transaction(network=…, duration=…)}}` `ot ON ot.block_number = x.block_number AND ot.tx_index = x.tx_index` (1 tx per `(block,tx_index)`, so **no fan-out**; index-cheap when `x` is already block-bounded). **Arbitrum:** skip the JOIN — `concat('0x', encode(arbitrum.tx_hash(x.block_number, x.tx_index),'hex'))`. |
-| Token amount → human units | divide by `pow(10, decimals)`. Source `decimals` from `latest_token_info` (row below); inline a constant only for a single pinned well-known token (USDC=6, WETH=18, WBTC=8, USDT=6). |
-| **ERC20 metadata (`symbol`/`name`/`decimals`)** | **Always** JOIN `<chain>.latest_token_info lti ON lti.token_address = <token_addr_col>` — the up-to-date source of truth. Columns: `symbol`, `token_name`, `decimals` (smallint), `total_supply`. PK is `token_address` → unique index lookup, **1:1, no fan-out**. e.g. `… / pow(10, lti.decimals) AS amount_human, lti.symbol`. Referenced raw (no macro, like `<chain>.block`). |
-| **`chain_id` in the result** | Project a literal matching the network — `8453 AS chain_id` (base), `1` (ethereum), `42161` (arbitrum), `10` (optimism), `137` (polygon), `56` (bnb), `43114` (avalanche), `81457` (blast). The UI reads it to render the default chain; in a cross-network `UNION` each branch carries its own literal. |
-| Time-bucket | `date_trunc('hour', <chain>.block_timestamp(block_number))` |
+Full cheat-sheet in the sibling file. Inventory (what's covered): selector · indexed-topic→address ·
+`uint256`/packed-`uint24` from `data` · readable `0x` output · `tx_hash` in result · amount→human ·
+ERC20 metadata (`latest_token_info`) · **USD `to_usd_value`** · price/logo (`network_token_info`) ·
+**live state `eth_call`** · **holders `token_balance`** · is-contract / contract-creation ·
+`get_chain_id()` · **mint/burn (zero-address)** · **price drift (÷0-safe)** · 1:1 `LATERAL` enrich ·
+**token-not-in-event → resolve in-tx via `token_ledger`** · `chain_id` literal · time-bucket.
 
 ---
 
-## 5. Query patterns
+## 5. Query patterns (P1–P16) → `../query_patterns.md`
 
-Each pattern is a template. Placeholders use `{{UPPER_CASE}}`. The protocol doc tells you what to plug in.
+Full SQL templates in the sibling file. Index (pick via this table or §7, then open `query_patterns.md`):
 
-### P1 — Function-call discovery (`to_a + selector`)
+| P | Pattern | Use when |
+|---|---------|----------|
+| P1 | Function-call discovery (`to_a`+selector) | how often / by whom / against which contracts is fn X called |
+| P2 | Event discovery (`address`+topic0) | how often is event E emitted, what data it carries |
+| P3 | Tx ↔ logs correlation | calldata-side metadata (caller/gas) + an event side-effect in the same tx |
+| P4 | Value movement (`token_ledger`) | amounts of a token moving between actors |
+| P5 | Authorizer attribution | caller ≠ initiator (meta-tx / permit / Permit2 / 4337 / relayer) |
+| P6 | Time-bucketed aggregation | dashboards, time-series, growth |
+| P7 | Top-N actors | leaderboards (top spenders/receivers/contracts/relayers) |
+| P8 | Bipartite graph | sender→receiver edges, churn, repeat-business |
+| P9 | Multi-path / multi-contract | >1 entrypoint — `UNION ALL` per path |
+| P10 | Cross-chain unification | which chains / aggregate across chains — `UNION ALL` per chain |
+| P11 | Contract discovery | who deployed X / contracts by deployer |
+| P12 | Split analytical (VIEW + reader) | sum / total / volume / leaderboard, esp. cross-chain |
+| P13 | Absence / staleness | X hasn't happened in N (oracle stale, keeper/heartbeat missed) |
+| P14 | Protocol drain | net USD out of a protocol in one tx |
+| P15 | Reentrancy (`is_ancestor`) | a call nested inside another call (same callee re-entered) |
+| P16 | Anomaly vs baseline | sudden drop / spike vs recent norm (window `LAG`/rolling `AVG`) |
 
-> Use when: business question is *"how often / by whom / against which contracts is function X being called?"*
-
-Inputs from protocol doc: callee contract address(es), one-or-more 4-byte selectors.
-
-```sql
-SELECT
-    td.block_number,
-    td.tx_index,
-    td.from_a,                                   -- caller (often a relayer, NOT the end user)
-    td.to_a,                                     -- the contract
-    common.selector(td.calldata) AS selector,
-    td.gas_used,
-    td.error
-FROM {{CHAIN}}.transaction_detail td
-WHERE td.to_a = ANY (ARRAY[
-        '{{CONTRACT_1}}'::bytea
-        -- , '{{CONTRACT_2}}'::bytea
-      ])
-  AND common.selector(td.calldata) = ANY (ARRAY[
-        '{{SELECTOR_1}}'::bytea
-        -- , '{{SELECTOR_2}}'::bytea
-      ])
-  AND td.committed AND td.error IS NULL
-  AND td.block_number BETWEEN
-        (SELECT MAX(block_number) FROM {{CHAIN}}.block) - {{N_BLOCKS}}
-        AND (SELECT MAX(block_number) FROM {{CHAIN}}.block)
-ORDER BY td.block_number DESC, td.tx_index DESC;
-```
-
-Hits the `(to_a, selector, block_number)` composite index directly.
-
-### P2 — Event discovery (`address + topic0`)
-
-> Use when: business question is *"how often is event E being emitted, and what data does it carry?"*
-
-Inputs: emitter contract address, topic0 hash; optionally an indexed `topic1`/`topic2` value.
-
-```sql
-SELECT
-    l.block_number,
-    l.tx_index,
-    l.address,
-    substring(l.topic1 FROM 13 FOR 20)::bytea AS indexed_arg_1,   -- if address-typed
-    l.topic2,
-    common.hex_to_numeric('0x' || encode(l.data, 'hex')) AS data_uint256
-FROM {{CHAIN}}.logs l
-WHERE l.address = '{{EMITTER}}'::bytea
-  AND l.topic0  = '{{TOPIC0}}'::bytea
-  AND l.block_number BETWEEN
-        (SELECT MAX(block_number) FROM {{CHAIN}}.block) - {{N_BLOCKS}}
-        AND (SELECT MAX(block_number) FROM {{CHAIN}}.block);
-```
-
-### P3 — Tx ↔ logs correlation
-
-> Use when: you need calldata-side metadata (caller, gas) AND a specific event side-effect in the same tx.
-
-```sql
-WITH calls AS (
-    -- P1 template
-    SELECT td.block_number, td.tx_index, td.from_a, td.to_a
-    FROM {{CHAIN}}.transaction_detail td
-    WHERE td.to_a = '{{CONTRACT}}'::bytea
-      AND common.selector(td.calldata) = '{{SELECTOR}}'::bytea
-      AND td.committed AND td.error IS NULL
-      AND td.block_number BETWEEN
-            (SELECT MAX(block_number) FROM {{CHAIN}}.block) - {{N_BLOCKS}}
-            AND (SELECT MAX(block_number) FROM {{CHAIN}}.block)
-)
-SELECT c.*,
-       substring(l.topic1 FROM 13 FOR 20)::bytea AS event_indexed_addr,
-       l.topic2,
-       l.data
-FROM calls c
-JOIN {{CHAIN}}.logs l
-  ON l.block_number = c.block_number
- AND l.tx_index     = c.tx_index
- AND l.address      = '{{EMITTER}}'::bytea
- AND l.topic0       = '{{TOPIC0}}'::bytea;
-```
-
-The CTE narrows the join; address-leading predicate on `logs` keeps it index-resident.
-
-### P4 — Value movement via `token_ledger`
-
-> Use when: business question involves *amounts of a specific token moving between specific actors*.
-
-Inputs: token address; optionally a tx filter from P1.
-
-```sql
-WITH txs AS (   -- a tx filter (P1 or P3); strip if you want ALL transfers of the token
-    SELECT td.block_number, td.tx_index
-    FROM {{CHAIN}}.transaction_detail td
-    WHERE td.to_a = '{{CONTRACT}}'::bytea
-      AND common.selector(td.calldata) = ANY (ARRAY['{{SELECTOR}}'::bytea])
-      AND td.committed AND td.error IS NULL
-      AND td.block_number BETWEEN
-            (SELECT MAX(block_number) FROM {{CHAIN}}.block) - {{N_BLOCKS}}
-            AND (SELECT MAX(block_number) FROM {{CHAIN}}.block)
-)
-SELECT
-    tl.block_number,
-    tl.tx_index,
-    tl.address              AS sender,            -- the row with value_delta < 0
-    tl.counterparty_address AS recipient,
-    -tl.value_delta / pow(10, {{DECIMALS}}) AS amount_human
-FROM txs
-JOIN {{CHAIN}}.token_ledger tl
-  ON tl.block_number = txs.block_number
- AND tl.tx_index     = txs.tx_index
- AND tl.token_address = '{{TOKEN}}'::bytea
- AND tl.value_delta < 0                          -- one row per Transfer (debit side)
- AND tl.value_delta != 0;                        -- defensive
-```
-
-`token_ledger` records both sides of each transfer; filtering `value_delta < 0` picks the sender row and `counterparty_address` gives you the recipient — no log decoding needed.
-
-### P5 — Authorizer attribution (caller ≠ initiator)
-
-> Use when: the protocol uses meta-transactions, gasless approvals, or any relayer pattern — i.e. `tx.from` is **not** the real user. Examples: EIP-3009 (`transferWithAuthorization`), EIP-2612 (`permit`), Permit2, ERC-4337 user ops, Gelato relays.
-
-The pattern: identify the real initiator from either (a) a side-channel event whose indexed arg is the signer, or (b) the `value_delta < 0` row in `token_ledger`.
-
-```sql
-WITH txs AS (
-    SELECT td.block_number, td.tx_index, td.from_a AS relayer
-    FROM {{CHAIN}}.transaction_detail td
-    WHERE td.to_a = '{{CONTRACT}}'::bytea
-      AND common.selector(td.calldata) = ANY (ARRAY['{{META_TX_SELECTOR}}'::bytea])
-      AND td.committed AND td.error IS NULL
-      AND td.block_number BETWEEN
-            (SELECT MAX(block_number) FROM {{CHAIN}}.block) - {{N_BLOCKS}}
-            AND (SELECT MAX(block_number) FROM {{CHAIN}}.block)
-)
-SELECT
-    t.block_number, t.tx_index, t.relayer,
-    substring(au.topic1 FROM 13 FOR 20)::bytea AS initiator,    -- topic1 of the auth event
-    au.topic2                                  AS auth_nonce    -- correlates to off-chain payload
-FROM txs t
-JOIN {{CHAIN}}.logs au
-  ON au.block_number = t.block_number
- AND au.tx_index     = t.tx_index
- AND au.address      = '{{CONTRACT}}'::bytea
- AND au.topic0       = '{{AUTH_TOPIC0}}'::bytea;
-```
-
-Substitute `au.topic1` → `value_delta < 0` row from `token_ledger` if no auth event exists (e.g. Permit2 path).
-
-### P6 — Time-bucketed aggregation
-
-> Use when: dashboards, time-series, growth metrics.
-
-```sql
-WITH events AS (
-    -- emit one row per "thing" you're measuring (use P1/P3/P4 as appropriate)
-    SELECT
-        date_trunc('{{BUCKET}}', {{CHAIN}}.block_timestamp(td.block_number)) AS bucket,
-        tl.address              AS initiator,
-        tl.counterparty_address AS counterparty,
-        -tl.value_delta / pow(10, {{DECIMALS}}) AS amount_usd
-    FROM {{CHAIN}}.transaction_detail td
-    JOIN {{CHAIN}}.token_ledger tl
-      ON tl.block_number = td.block_number
-     AND tl.tx_index     = td.tx_index
-     AND tl.token_address = '{{TOKEN}}'::bytea
-     AND tl.value_delta < 0
-    WHERE td.to_a = '{{CONTRACT}}'::bytea
-      AND common.selector(td.calldata) = ANY (ARRAY['{{SELECTOR}}'::bytea])
-      AND td.committed AND td.error IS NULL
-      AND td.block_number BETWEEN
-            (SELECT MAX(block_number) FROM {{CHAIN}}.block) - {{N_BLOCKS}}
-            AND (SELECT MAX(block_number) FROM {{CHAIN}}.block)
-)
-SELECT
-    bucket,
-    COUNT(*)                                    AS tx_count,
-    COUNT(DISTINCT initiator)                   AS unique_initiators,
-    COUNT(DISTINCT counterparty)                AS unique_counterparties,
-    ROUND(SUM(amount_usd), 2)                   AS volume,
-    ROUND(AVG(amount_usd), 4)                   AS avg_size,
-    PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY amount_usd) AS median_size
-FROM events
-GROUP BY bucket
-ORDER BY bucket DESC;
-```
-
-`{{BUCKET}}` = `'minute'` | `'hour'` | `'day'` | `'week'`. Widen `{{N_BLOCKS}}` proportionally — see §2.
-
-### P7 — Top-N actors
-
-> Use when: leaderboards (top spenders, top receivers, top contracts).
-
-```sql
-SELECT
-    tl.{{ACTOR_COLUMN}} AS actor,              -- tl.address (sender) | tl.counterparty_address (recipient)
-    SUM(-tl.value_delta) / pow(10, {{DECIMALS}}) AS total_amount,
-    COUNT(*)                  AS event_count,
-    COUNT(DISTINCT tl.{{OPPOSITE_COLUMN}}) AS unique_counterparties
-FROM {{CHAIN}}.transaction_detail td
-JOIN {{CHAIN}}.token_ledger tl
-  ON tl.block_number = td.block_number
- AND tl.tx_index     = td.tx_index
- AND tl.token_address = '{{TOKEN}}'::bytea
- AND tl.value_delta < 0
-WHERE td.to_a = '{{CONTRACT}}'::bytea
-  AND common.selector(td.calldata) = ANY (ARRAY['{{SELECTOR}}'::bytea])
-  AND td.committed AND td.error IS NULL
-  AND td.block_number BETWEEN
-        (SELECT MAX(block_number) FROM {{CHAIN}}.block) - {{N_BLOCKS}}
-        AND (SELECT MAX(block_number) FROM {{CHAIN}}.block)
-GROUP BY tl.{{ACTOR_COLUMN}}
-ORDER BY total_amount DESC
-LIMIT {{N}};
-```
-
-For "top relayers/facilitators/operators", `GROUP BY td.from_a` instead (the caller is the relayer in meta-tx protocols).
-
-### P8 — Bipartite graph (sender → receiver)
-
-> Use when: network/graph analysis, churn, repeat-business rates.
-
-```sql
-SELECT
-    tl.address              AS sender,
-    tl.counterparty_address AS receiver,
-    SUM(-tl.value_delta) / pow(10, {{DECIMALS}}) AS edge_weight_amount,
-    COUNT(*)                AS edge_weight_count,
-    MIN({{CHAIN}}.block_timestamp(tl.block_number)) AS first_interaction,
-    MAX({{CHAIN}}.block_timestamp(tl.block_number)) AS last_interaction
-FROM {{CHAIN}}.transaction_detail td
-JOIN {{CHAIN}}.token_ledger tl
-  ON tl.block_number = td.block_number
- AND tl.tx_index     = td.tx_index
- AND tl.token_address = '{{TOKEN}}'::bytea
- AND tl.value_delta < 0
-WHERE td.to_a = '{{CONTRACT}}'::bytea
-  AND common.selector(td.calldata) = ANY (ARRAY['{{SELECTOR}}'::bytea])
-  AND td.committed AND td.error IS NULL
-  AND td.block_number BETWEEN
-        (SELECT MAX(block_number) FROM {{CHAIN}}.block) - {{N_BLOCKS}}
-        AND (SELECT MAX(block_number) FROM {{CHAIN}}.block)
-GROUP BY sender, receiver;
-```
-
-### P9 — Multi-path / multi-contract detection
-
-> Use when: the protocol has more than one on-chain entrypoint (e.g. x402 has Path A direct EIP-3009 + Path B Permit2 proxies; Uniswap has SwapRouter v1 + SwapRouter02 + Universal Router).
-
-Treat each path independently (different `to_a` + `selector` set), `UNION ALL` the per-path queries, label rows with a `path` column. Aggregate downstream.
-
-```sql
-SELECT 'path_a' AS path, td.block_number, td.tx_index, td.from_a
-FROM {{CHAIN}}.transaction_detail td
-WHERE td.to_a = '{{CONTRACT_A}}'::bytea
-  AND common.selector(td.calldata) = ANY (ARRAY['{{SEL_A1}}'::bytea, '{{SEL_A2}}'::bytea])
-  AND td.committed AND td.error IS NULL
-  AND td.block_number BETWEEN
-        (SELECT MAX(block_number) FROM {{CHAIN}}.block) - {{N_BLOCKS}}
-        AND (SELECT MAX(block_number) FROM {{CHAIN}}.block)
-
-UNION ALL
-
-SELECT 'path_b' AS path, td.block_number, td.tx_index, td.from_a
-FROM {{CHAIN}}.transaction_detail td
-WHERE td.to_a = ANY (ARRAY['{{CONTRACT_B1}}'::bytea, '{{CONTRACT_B2}}'::bytea])
-  AND common.selector(td.calldata) = ANY (ARRAY['{{SEL_B1}}'::bytea])
-  AND td.committed AND td.error IS NULL
-  AND td.block_number BETWEEN
-        (SELECT MAX(block_number) FROM {{CHAIN}}.block) - {{N_BLOCKS}}
-        AND (SELECT MAX(block_number) FROM {{CHAIN}}.block);
-```
-
-### P10 — Cross-chain unification
-
-> Use when: business question is *"on which chains is protocol X live?"* or *"what's the aggregate across all chains?"*
-
-Same patterns, different schemas. The protocol doc must give you the per-chain address/selector triplet — typically selectors are chain-agnostic (a contract's ABI is the same wherever it's deployed), but addresses differ unless deployed via the deterministic `0x4e59b…` deployer.
-
-```sql
-SELECT 'ethereum' AS chain, /* P1 against ethereum.* */
-UNION ALL
-SELECT 'base'     AS chain, /* P1 against base.* */
-UNION ALL
-SELECT 'arbitrum' AS chain, /* P1 against arbitrum.* */
--- …
-```
-
-Wrap downstream aggregation outside the UNION. Note: `block_number` is **not** comparable across chains — convert to `block_timestamp(block_number)` first for any time-aligned join.
-
-### P11 — Contract discovery
-
-> Use when: business question is *"who deployed X?"* or *"find all contracts deployed by address Y."*
-
-```sql
-SELECT cc.address, cc.block_number, {{CHAIN}}.block_timestamp(cc.block_number) AS deployed_at
-FROM {{CHAIN}}.contracts cc
-WHERE cc.deployer = '{{DEPLOYER}}'::bytea;
-```
-
-The `(deployer)` index keeps this cheap. For a deployer/relayer **allowlist** (the §7 "new contracts by
-relayers" row), swap the equality for `WHERE cc.deployer = ANY(ARRAY['\x…'::bytea, '\x…'::bytea])`.
-
-### P12 — Split analytical query (row-level VIEW + aggregating reader)
-
-> Use when: the business question is an **aggregate** (sum / total / volume / leaderboard) over a large
-> row set — especially **cross-chain**. Don't compute the row scan and the aggregate in one query;
-> **split them into two**.
-
-The split:
-
-1. **Principal VIEW (the row scan)** — one query that emits the **full per-row result, `--materialize VIEW`,
-   and carries NO `LIMIT`** (the §3-rule-10 / §10-rule-11 `LIMIT 200` default is **waived here** — the
-   reader must see every row to sum correctly; a `LIMIT` would silently truncate the total). This is the
-   query whose id you reference (e.g. `123142`). It still obeys every other rule: indexed lead,
-   `block_number`/`duration=` bound, `committed AND error IS NULL`, explicit columns, no trailing `;`.
-2. **Aggregating reader (the sum)** — a **separate** query that does `FROM {{ref(query_id=123142)}}` and applies the
-   `SUM`/`GROUP BY`/`ORDER BY … LIMIT`. The reader is where the `LIMIT 200` final-output default lives.
-
-```sql
--- Principal VIEW (id 123142): full rows, NO limit, materialize VIEW.
--- One UNION ALL branch per chain; each carries its own literal chain_id + chain_name (cross-chain PK rule below).
-SELECT 8453  AS chain_id, 'base'     AS chain_name, tl.token_address, -tl.value_delta AS amount_raw, lti.decimals, lti.symbol
-FROM {{token_ledger(network='base', duration='24h')}} tl
-JOIN base.latest_token_info lti ON lti.token_address = tl.token_address
-WHERE tl.value_delta < 0 AND tl.value_delta != 0
-UNION ALL
-SELECT 42161 AS chain_id, 'arbitrum' AS chain_name, tl.token_address, -tl.value_delta AS amount_raw, lti.decimals, lti.symbol
-FROM {{token_ledger(network='arbitrum', duration='3h')}} tl
-JOIN arbitrum.latest_token_info lti ON lti.token_address = tl.token_address
-WHERE tl.value_delta < 0 AND tl.value_delta != 0
--- no LIMIT
-```
-
-```sql
--- Aggregating reader (separate query): sums every row of the VIEW. PK = (token_address, chain_id).
--- Project BOTH chain_id (canonical, UI-rendered) and chain_name (human-readable) in the output.
-SELECT
-    r.chain_id,
-    r.chain_name,
-    concat('0x', encode(r.token_address, 'hex')) AS token_address,
-    r.symbol,
-    SUM(r.amount_raw / pow(10, r.decimals)) AS total_amount
-FROM {{ref(query_id=123142)}} r
-GROUP BY r.chain_id, r.chain_name, r.token_address, r.symbol
-ORDER BY total_amount DESC
-LIMIT 200
-```
-
-**Why split instead of one query:** the row scan is reusable and independently testable (one VIEW feeds
-many readers — totals, top-N, time-buckets), and the reader stays cheap and re-runnable without
-re-scanning. It also keeps the unbounded row set out of any single result payload — only the aggregate
-is returned.
-
-**Cross-chain primary key — `address + chain_id`.** When the VIEW spans chains (`UNION ALL` per chain,
-P10), the same token/contract address appears once **per chain**, and the same 20-byte address can even
-belong to **different** tokens on different chains. So the row's identity — the **`GROUP BY` key in the
-reader and the unique key of any alert built on it** — is **`(address, chain_id)`** (token *or* other
-entity address + the chain literal), never `address` alone. Every branch must project its own literal
-`chain_id` (§4) so rows stay attributable; collapsing on bare `address` over-sums across chains and
-mislabels rows.
-
-**Project `chain_name` alongside `chain_id` for readable output.** `chain_id` is the canonical literal the
-UI renders and the one that belongs in the unique/group key — but a bare integer (`8453`, `42161`) is hard
-to read in an aggregate table. So **carry a literal `chain_name` next to `chain_id` in every VIEW branch**
-(`8453 AS chain_id, 'base' AS chain_name`) and project **both** in the reader's output. Group by both (they
-are 1:1, so it doesn't change the grouping) so the human-readable name rides along with each summed row.
-Mapping: `1` ethereum, `8453` base, `42161` arbitrum, `10` optimism, `137` polygon, `56` bnb,
-`43114` avalanche, `81457` blast.
+§4 primitives also stand alone as "patterns" for: holders/concentration (`token_balance`), live state
+(`eth_call`), mint/burn, price drift.
 
 ---
 
 ## 6. What to extract from a protocol doc
 
-To plug into the patterns above, the agent should pull the following from the paired knowledge-base doc:
+To plug into the patterns, pull the following from the paired knowledge-base doc:
 
 | Variable | Source in knowledge-base doc | Plug into |
 |----------|------------------------------|-----------|
 | `{{CHAIN}}` | The "Scope" or "Addresses" section | All patterns |
-| `{{CONTRACT}}` (callee) | "Addresses" table — pick the entrypoint(s) the user is asking about | P1, P3, P4, P5, P6, P7, P9 |
+| `{{CONTRACT}}` (callee) | "Addresses" table — pick the entrypoint(s) asked about | P1, P3, P4, P5, P6, P7, P9 |
 | `{{SELECTOR}}` (4 bytes, `'\x........'`) | "Function selectors" / "Function signatures" table | P1, P3, P4, P5, P6, P7 |
 | `{{EMITTER}}` (event source) | Usually same as the callee, occasionally a downstream proxy | P2, P3, P5 |
 | `{{TOPIC0}}` (32 bytes) | "Event signatures & topic0 hashes" table | P2, P3, P5 |
-| `{{TOKEN}}` + `{{DECIMALS}}` | "Addresses" — asset row (USDC=6, WETH=18, USDT=6, WBTC=8, etc.) | P4, P6, P7, P8 |
-| `{{AUTH_TOPIC0}}` (signer-revealing event) | Look for an event whose `topic1` is the off-chain signer (e.g. `AuthorizationUsed`, `OrderFilled`, `UserOperationEvent`) | P5 |
-| Multi-path contract set | "Protocol architecture" section — Path A / Path B / Universal Router / etc. | P9 |
-| Deny-list contracts / noise | "Edge cases" / "Open questions" section — e.g. Coinbase Commerce, MEV bots | §8 noise filter |
+| `{{TOKEN}}` + `{{DECIMALS}}` | "Addresses" — asset row (USDC=6, WETH=18, USDT=6, WBTC=8, …) | P4, P6, P7, P8 |
+| `{{AUTH_TOPIC0}}` (signer-revealing event) | An event whose `topic1` is the off-chain signer (`AuthorizationUsed`, `OrderFilled`, `UserOperationEvent`) | P5 |
+| Multi-path contract set | "Protocol architecture" — Path A / Path B / Universal Router / etc. | P9 |
+| Deny-list contracts / noise | "Edge cases" / "Open questions" — e.g. Coinbase Commerce, MEV bots | §8 noise filter |
 
-If the protocol doc does not provide a value, **stop and ask** — never guess a selector or topic0; both are 1-in-2^32 / 2^256 collision spaces but the wrong constant returns silent zero rows.
+If the protocol doc lacks a value, **stop and ask** — never guess a selector or topic0; the wrong constant returns silent zero rows.
 
 ---
 
@@ -539,6 +198,14 @@ If the protocol doc does not provide a value, **stop and ask** — never guess a
 | "When was contract X first active?" | P11 + P1 with `ORDER BY block_number ASC LIMIT 1` | callee |
 | "Match an off-chain event ID to an on-chain settlement" | P5 (use `auth_nonce` from `topic2`) | callee, auth-event topic0 |
 | "Detect new contracts being deployed by relayers" | P11 with `WHERE deployer = ANY(known_relayers)` | known relayer EOAs |
+| "X hasn't happened in N hours" (oracle stale, keeper missed, heartbeat) | **P13** (absence / anti-join) | watched addresses, expected selector/topic0, SLA window |
+| "Protocol drained / lost >$N in one tx" | **P14** (drain, net USD per tx) | protocol_id (via `protocol_contract`) or its addresses, USD threshold |
+| "Reentrancy / call nested inside another call" | **P15** (`is_ancestor`) | callee address + the re-entered selector |
+| "Sudden drop / spike vs recent norm" (TVL, withdrawals, volume) | **P16** (window LAG / rolling AVG) | the metric + bucket + threshold |
+| "Holders / concentration / whale balance" | `token_balance` (§4) | token address (+ N) |
+| "Live contract state (supply, price, config)" | `eth_call` (§4) | contract + view-fn signature |
+| "Mint / burn / supply change" | §4 zero-address `token_ledger` | token address |
+| "Oracle/price drift between two sources" | §4 drift formula + `to_usd_value`/`eth_call` | the two price sources |
 
 ---
 
@@ -554,58 +221,39 @@ If the protocol doc does not provide a value, **stop and ask** — never guess a
 | 6 | Protocol noise (e.g. Coinbase Commerce mixed into x402) | Maintain a deny-list of `seller`/`counterparty` contracts; or filter `relayer` to a known allowlist |
 | 7 | Sequential vs random nonces | EIP-3009 nonce is **random `bytes32`**; ERC-2612 / smart-account nonces are sequential `uint256` |
 | 8 | Path-specific events | Path B / aggregator paths may emit no auth event → fall back to `token_ledger` (P4) for initiator |
-| 9 | Sequencer drift | Block-window predicates are approximate; if exact wall-clock matters, use `block_timestamp(...)` predicate (see §2) |
+| 9 | Sequencer drift | Block-window predicates are approximate; if exact wall-clock matters, use `block_timestamp(...)` predicate (§2) |
 
 ---
 
 ## 9. Anti-patterns (will be slow or wrong)
 
-> **Network-dependent caveat:** some rows below are anti-patterns **only on chains where the underlying index is missing**. The baseline (verified on Base) is the assumption — but on chains where the relevant index exists (see §1.1), the pattern is fine. Confirm via `\d+ {{CHAIN}}.<table>` before assuming a query will be slow. Rows tagged *"chain-dependent"* below have known per-chain variance.
+> Some rows are anti-patterns **only where the underlying index is missing** (see §1.1) — confirm via `get-schema --network <c> --table <t>` before assuming a query is slow.
 
 | Anti-pattern | Why it's bad | Use instead |
 |--------------|-------------|-------------|
-| `WHERE topic0 = '\x…'` (alone on `logs`) **without a block-range** | `topic0` is indexed on all 8 chains, so the topic0 lookup is fine — but with no `block_number`/`duration=` bound it still scans all history for that topic0. | Keep `WHERE topic0 = …` (it's the all-forks pattern) **plus** a `block_number BETWEEN …`/`duration=` bound; add `address = …` only to pin one deployment. |
+| `WHERE topic0 = '\x…'` (alone on `logs`) **without a block-range** | where topic0 is indexed the lookup is fine, but with no `block_number`/`duration=` bound it still scans all history for that topic0 (and on Base there's no topic0 index at all). | Keep `WHERE topic0 = …` (all-forks pattern) **plus** a `block_number`/`duration=` bound; add `address = …` to pin one deployment (and as the lead on Base). |
 | `SELECT *` from `logs` / `transaction_detail` | `data`/`calldata` are TOAST; bloats network | Project explicit columns |
 | `WHERE tx_hash = '\x…'` | `tx_hash` may not be indexed on every table | Use `(block_number, tx_index)` if known |
 | Decoding `logs.Transfer.data` for amounts | Slow + complicated when `token_ledger` has it parsed | P4 |
-| Treating `td.from_a` as the end user | Wrong in any relayer/meta-tx protocol | P5 (use auth event or `token_ledger` initiator) |
-| `JOIN` without `block_number` predicate on both sides | Joins explode; PG may pick a bad plan | Push `block_number BETWEEN …` into both subqueries (or apply once in a CTE used on both sides) |
+| Treating `td.from_a` as the end user | Wrong in any relayer/meta-tx protocol | P5 (auth event or `token_ledger` initiator) |
+| `JOIN` without `block_number` predicate on both sides | Joins explode; PG may pick a bad plan | Push `block_number BETWEEN …` into both subqueries (or a shared CTE) |
 | Querying without a block-range filter | Full table scan | Always include `block_number BETWEEN …` |
 | Reading the impl contract's logs to attribute to the proxy | Impl never emits; proxies do | Filter `address` by the proxy |
 | Trusting `Transfer.to == authorization.to` | True on direct paths; false on aggregator/witness paths | Trust `Transfer.to` from `token_ledger` |
+| **Casting/wrapping an indexed column in `WHERE`** (`block_number::text=…`, `lower(addr)=…`, `address::bytea` when already bytea) | A function/cast on the **column side** defeats its btree index → seq scan. | Cast the **literal** instead (`addr = '\x…'::bytea`); compare same types (addresses are already `bytea`). |
+| Embedding external API calls (`http_get_json`/`http_post`) for prices in an alert | Couples to a rate-limited external service, bakes a secret into SQL, non-deterministic (demo-grade). | `to_usd_value` / `network_token_info.last_price` for USD, `eth_call` for state. Reserve `http_*` for genuine off-chain data, never secrets. |
 
 ---
 
 ## 10. Sanity checklist before running a generated query
 
-1. Every `WHERE` column either has an index (§1.1) or sits inside an indexed range.
-2. There is a `block_number BETWEEN …` filter.
-3. `committed AND error IS NULL` is present (unless you specifically want reverts).
-4. Addresses are lowercase `bytea` literals; topic hashes are full 32-byte literals. SELECT output
-   for addresses/hashes is `concat('0x', encode(col,'hex'))` (the `0x` prefix; bare `encode()` omits it).
-5. For value math: `tl.value_delta < 0` selects sender rows; otherwise you'll double-count.
-6. For aggregations: time-bucket via `<chain>.block_timestamp(block_number)`, not by joining `<chain>.block`.
-7. Cross-chain queries `UNION ALL` per chain — they never JOIN on `block_number` directly, and the
-   row key / `GROUP BY` is **`(address, chain_id)`**, never bare `address` (P12 cross-chain PK rule).
-8. **No trailing `;`** — the platform UI rejects a query that ends in a semicolon (§3 rule 9).
-9. **`tx_hash`** and a **literal `chain_id`** are projected (§4) — actionable click-through + UI default-chain render.
-10. **No `duration=`/block-range exceeds 30d** — 30d is the max look-back; history beyond it belongs in a materialized TABLE, not a wide inline scan (`duration='1000d'` is wrong).
-11. **Final `SELECT` ends with `LIMIT 200`** (house default; cap 500) — unless the user asked otherwise or it's a single-row aggregate (§3 rule 10). **Exception:** a P12 principal **VIEW** (the row scan a `{{ref()}}` reader sums) carries **NO `LIMIT`** — the `LIMIT 200` lives on the aggregating reader, not the VIEW.
-
----
-
-## Appendix A — Quick recipe lookup
-
-| If the user asks… | Run pattern |
-|-------------------|-------------|
-| "find tx" / "find call" / "find function" | P1 |
-| "find event" / "find log" / "emits" | P2 |
-| "who paid / sent / signed" | P5 |
-| "amount" / "volume" / "USD" | P4 |
-| "by hour/day/week" / "growth" / "trend" | P6 |
-| "top" / "leaderboard" / "ranking" | P7 |
-| "network" / "graph" / "edges" | P8 |
-| "multiple paths" / "all variants" | P9 |
-| "across chains" | P10 |
-| "total" / "sum" / "aggregate" (esp. cross-chain) | P12 |
-| "deployer" / "first deployed" | P11 |
+1. Every `WHERE` column has an index (§1.1) or sits in an indexed range; no cast on the column side (§9).
+2. There is a `block_number BETWEEN …` / `duration=` filter, and it's **≤ 30d** (history beyond 30d → materialized TABLE, not a wide scan).
+3. `committed AND error IS NULL` present (unless you want reverts).
+4. Addresses are lowercase `\x` bytea literals; topics full 32-byte; SELECT output for addresses/hashes is `concat('0x', encode(col,'hex'))`.
+5. Value math: `tl.value_delta < 0` selects sender rows (don't double-count).
+6. Aggregations time-bucket via `<chain>.block_timestamp(block_number)`, not by joining `<chain>.block`.
+7. Cross-chain → `UNION ALL` per chain; never JOIN on `block_number`; row key / `GROUP BY` is **`(address, chain_id)`** (P12).
+8. **No trailing `;`** (§3 rule 9).
+9. **`tx_hash`** and a literal **`chain_id`** are projected (§4).
+10. **Final `SELECT` ends with `LIMIT 200`** (cap 500) — unless single-row aggregate. **Exception:** a P12 principal VIEW carries **NO `LIMIT`** (the reader has it).

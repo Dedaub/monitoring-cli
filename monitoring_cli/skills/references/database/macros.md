@@ -1,128 +1,111 @@
 # DedaubQL Macros — the query surface
 
-The monitoring engine is **one Postgres**. Queries use DedaubQL: SQL with macros that wrap each
-table for **time-bounded incremental execution**. The README is explicit: use macros, never raw
-`<chain>.<table>` (raw tables full-scan and time out). There is **no "dialect A vs B"** — every
-table below is real and macro-wrapped; `common_query_patterns.md`'s patterns are all valid.
+One Postgres. DedaubQL = SQL + macros that wrap each table for time-bounded incremental execution.
+**Always use macros, never raw `<chain>.<table>`** (raw = full-scan + timeout). Every table is real and
+macro-wrapped; every `common_query_patterns.md` pattern is valid.
 
-Get the live list any time: `dedaub-monitoring get-schema --macros`. See any macro's expansion:
 ```bash
-dedaub-monitoring preprocess-query --id <ID> <<'SQL'
-SELECT * FROM {{logs(network='ethereum', duration='5m', inputs='0x<addr>.Transfer(address,address,uint256)')}}
-SQL
+dedaub-monitoring get-schema --macros          # live macro/table list
+dedaub-monitoring preprocess-query --id <ID>   # render macro→SQL (settle "what does this do" empirically)
 ```
-`preprocess-query` renders macro → SQL (settle any "what does this do" empirically). `explain-query`
-is **dependency analysis** (which queries this references via `ref`) — **not** a PG plan.
+`explain-query` = dependency analysis (which queries this `ref`s), **not** a PG plan.
 
-> **Companion doc — `common_query_patterns.md`** (in `sample_queries/`). This file is the *macro surface*;
-> that one is the *SQL craft*, and most real queries need both. Reach for it for: **§1.1** index inventory
-> (which column to lead with, per chain) · **§2** block-time table (`duration=` ↔ blocks per min/hour/day,
-> per chain) · **§3** performance rules · **§4** decode primitives (`substring` topics, `hex_to_numeric`,
-> readable `concat('0x', encode(…))`) · **§5** ready-made patterns **P1–P11** · **§8** edge cases (multicall
-> → unique key on `log_index`; exclude reverts) · **§9** anti-patterns (incl. the chain-dependent
-> `topic0`-alone caveat).
+**Companion — `common_query_patterns.md`** (the SQL craft to this file's macro surface; most queries need
+both): §1 schema/indexes · §2 block-times · §3 perf rules · §7 question→pattern · §8 edge cases · §9
+anti-patterns. Its two siblings hold the bulk: **`query_patterns.md`** (§5 P1–P16 templates) and
+**`decode_primitives.md`** (§4 decode/enrich cheat-sheet).
 
-## Table macros (pick by what you need)
+## Table macros
 
 | Macro | Grain | Use for |
 |-------|-------|---------|
-| `{{outer_transaction(network=,duration=)}}` | one row per top-level tx | `tx_hash`, `callvalue`, `status`, `from_a`/`to_a`, `input` — entry-call detection, ETH value |
-| `{{transaction_detail(...)}}` | one row per **internal call frame** | call-frame `from_a`/`to_a`/`calldata` — internal calls, selector detection |
-| `{{logs(network=,duration=,inputs=)}}` | one row per emitted log | events by topic0 + emitter |
-| `{{token_ledger(...)}}` / `{{token_transfers(...)}}` | parsed token deltas | value analytics (`value_delta` signed) — beats decoding `logs.data` |
+| `{{outer_transaction(network=,duration=)}}` | 1 / top-level tx | `tx_hash`,`callvalue`,`status`,`from_a`/`to_a`,`input` — entry-call, ETH value |
+| `{{transaction_detail(network=,duration=,inputs=)}}` | 1 / call frame | `from_a`/`to_a`/`calldata`/`callvalue`/`error`/`caller_vm_step_stack` — internal calls, selectors. Takes `duration=` + `inputs=` like `logs`. |
+| `{{logs(network=,duration=,inputs=)}}` | 1 / emitted log | events by topic0 + emitter |
+| `{{token_ledger(...)}}` / `{{token_transfers(...)}}` | parsed token deltas | value analytics (`value_delta` signed) > decoding `logs.data` |
 | `{{contracts(...)}}` / `{{contract_list(...)}}` | deployed contracts | deployer / is-contract lookups |
 | `{{block(...)}}` | block headers | tip, timestamps |
 
-`outer_transaction` vs `transaction_detail` are **different granularities, not rivals** — that's why
-their columns differ (`status` vs `committed`/`error`). Use the one the question needs.
+`outer_transaction` (`status`) vs `transaction_detail` (`committed`/`error`) = granularities, not rivals.
 
 ## Structural macros
 
-- **`{{ref(query_id=<id>)}}`** — reference another query's output (a VIEW or TABLE) by its integer
-  query id. The id is **named** (`query_id=`), not positional — e.g. `FROM {{ref(query_id=4930)}}`.
-  This is how a final INCREMENTAL alert (or a P12 aggregating reader) pulls in a reusable lookup layer.
-  (See Step 4: CTE / VIEW+ref / TABLE+ref.)
-- `{{param(...)}}` / `{{params(...)}}` — parameterize.
-- `{{is_backfilling}}` / `{{is_ancestor}}` / `{{is_parent}}` — incremental-execution control.
+- **`{{ref(query_id=<id>)}}`** / **`{{ref(table="/Folder/Name")}}`** — pull another query's output
+  (VIEW/TABLE) by id or path (path form = shared `/lib/...` lists). How an INCREMENTAL alert or P12 reader
+  gets a reusable lookup. Resolves on the **ethereum slot** (deploy-playbook §"Execution slot").
+- **`{{eth_call("<addr>.fn(argtype arg)", outputs="( rettype output0 )", network='<c>')}}`** — live
+  on-chain view call at tip → `<chain>.eth_call(addr,'sig(returns)',args_jsonb)`; returns a tuple
+  (`output0`/`[0]`). **One RPC/row** → small sets only; for balances use `token_balance`.
+- **`{{is_ancestor("a","b")}}` / `{{is_parent("a","b")}}`** — call-frame ancestry predicates joining two
+  `transaction_detail` aliases in one tx (`a` is ancestor / direct parent of `b`). Reentrancy / nested-call
+  (§5 P15). *Not incremental control.*
+- **`{{is_backfilling}}`** — true during a backfill run (incremental control).
+- **Parameterized queries** — `{{param}}`/`{{params}}` + the template system for user-configurable alerts:
+  header `/* Parameters: … Category: ALERT|VIEW|MATERIALIZED */` declares typed params (`address`,
+  `array<address>`, `array<function>`, `array<log>`, `number`, …); `{{net_config(ethereum={…}, base={…})}}`
+  sets per-network defaults (incl. per-chain constant maps);
+  `{% for network in networks('ethereum','base') %} … {% if not loop.last %}union all{% endif %} {% endfor %}`
+  expands per network. Read `{{network.param("x")}}`, chain literal `{{network.get_chain_id()}}`,
+  address→bytea via `address_to_bytea(x)::ethaddress` or `| to_address`. The hand-written per-chain
+  `UNION ALL` (§5 P10) is the param-free equivalent.
+- **Off-chain HTTP** (`http_get_json`, `common.http_post`) exists but is demo-grade (external dependency,
+  secrets-in-SQL) — prefer `to_usd_value`/`network_token_info` for price, `eth_call` for state; reserve for
+  genuine off-chain data, never secrets (§9).
 
-## When the macro features win
+## Event filtering: lead with `topic0` (no `inputs=` needed)
 
-| Feature | Beats | Why |
-|---------|-------|-----|
-| `duration='5m'` | `block_number BETWEEN (SELECT MAX(block_number) FROM <chain>.block) - N AND MAX` | one param, tied to refresh cadence |
-| `inputs='0x<addr>.Event(types)'` | address scan + topic0 filter | uses the ABI index to pre-filter logs at storage level |
-
-### Filtering events: lead with the `topic0` constant (no `inputs=` needed)
-
-Monitoring queries decode fields by hand (`substring`/`get_byte` over `topic1..3`/`data` — see the
-companion doc **§4** for the decode primitives), so they don't need the macro to decode anything. The lean, robust default is to filter on **`topic0`** — the
-event-signature hash your protocol ref already lists — and let `{{logs(...)}}` supply `committed` + the
-window:
-
+Monitoring queries decode by hand (`substring`/`get_byte`/`hex_to_numeric` — §4), so the lean default is to
+filter `topic0` and let `{{logs}}` add `committed` + the window:
 ```sql
 FROM {{logs(network='arbitrum', duration='7d')}} l
-WHERE l.topic0 = '\x<event_topic0_hash>'::bytea     -- the constant straight from the protocol doc
+WHERE l.topic0 = '\x<event_topic0>'::bytea
 ```
+This sidesteps the `indexed` footgun, is lighter than `inputs=` (which expands to the same `topic0=` plus an
+unused `decode_event` join), and catches a protocol **and all forks** at once (one `PoolCreated` topic0
+surfaced 6 V3 forks on Arbitrum).
 
-This consumes the topic0 the refs already carry (no per-doc churn), sidesteps the `indexed` footgun
-entirely (no decoder to match), and is strictly lighter — `inputs=` expands to the **same** `topic0 =`
-filter **plus** a `decode_event(...)` join you don't use. It's also how you catch a protocol **and all
-its forks** at once: every contract emitting that exact signature matches (one `PoolCreated` topic0
-surfaced 6 V3-fork factories on Arbitrum).
+**topic0 index — verify per chain.** Most chains carry a `(topic0, block_number, address)` btree on `logs`
+(topic0-first is index-fast); **Base was observed without it** → on Base lead with `address`. Check with
+`get-schema --network <c> --table logs` (or §1.1). Pair topic0 with a `duration=`/block bound regardless.
 
-**Chain note — `topic0` is indexed on all 8 chains today.** Every supported chain (`ethereum`, `base`,
-`arbitrum`, `optimism`, `polygon`, `binance`, `avalanche`, `blast`) carries a `(topic0, block_number,
-address)` btree on `logs`, so topic0-first is index-fast everywhere — just pair it with a
-`duration=`/block-range bound so the time window is indexed too. Indexes can change: verify with
-`get-schema --network <chain> --table logs` (or `common_query_patterns.md` §1.1) before assuming. If a
-chain ever lacks it, add `address = '\x<contract>'` as the leading predicate. `EXPLAIN` is blocked
-through the CLI; confirm the plan in the web console **Visualize** tab.
+### `inputs=` — three forms (when you want the ABI decoder or a single-contract anchor)
+1. `inputs='0x<addr>.Event(types)'` — contract-specific; adds `address=` → index-fast everywhere. Go-to for one known contract.
+2. `inputs='Event(type indexed,…)'` — global topic0 form; mostly redundant with raw `topic0=` (extra `decode_event`). Prefer raw topic0.
+3. Not indexed anywhere → proxy: filter a co-occurring indexed event (e.g. an incoming ERC-20 `Transfer`); note it in a comment.
 
-### `inputs=` — when you actually want it (three forms)
-Reach for `inputs=` when you want the ABI **decoder** (`e.input` typed fields), or a single-contract
-anchor that stays fast even on chains without a `topic0` index:
-1. `inputs='0x<contractaddr>.EventName(type1,type2,...)'` — contract-specific; adds `address =`, so it's
-   index-fast on every chain. The go-to for **one** known contract.
-2. `inputs='EventName(type1 indexed,type2,...)'` — global topic0 form. Mostly redundant with a raw
-   `topic0 =` filter (same index, extra `decode_event` overhead) — prefer raw topic0 unless you want the
-   decoded record.
-3. Not indexed anywhere → **proxy approach**: filter a co-occurring efficiently-indexed event (e.g. an
-   incoming ERC-20 `Transfer` to the contract). Document the proxy in a comment.
+**`indexed` is load-bearing in `inputs=`:** the macro maps params to topic vs `data` by the `indexed` flag.
+Omit it on an indexed param → macro folds `topicN IS NULL` → **silent 0 rows**. Confirm with
+`preprocess-query` (render must show `topicN is not null` + `"indexed": true`). Another reason raw `topic0=`
+is the safer default.
 
-**If you use `inputs=`, `indexed` is load-bearing — not cosmetic.** The macro maps each param to a topic
-vs `data` by its `indexed` flag, so the signature must match the ABI exactly. Omit `indexed` on a param
-that *is* indexed and the macro assumes that topic is unused and folds `topic1/2/3 IS NULL` into the
-WHERE — **silently returning 0 rows, no error**. Confirm with `preprocess-query`: the render must show
-`topicN is not null` + `decode_event('… "indexed": true …')`, never `topicN is null`. (One more reason
-the raw `topic0 =` filter above is the safer default.)
+## Materialization (`set-config --materialize`)
 
-## Materialization (set via `set-config --materialize`)
+- **`VIEW`** — non-materialized, re-evaluated each run. The reusable lookup layer (with `ref`).
+- **`TABLE`** — materialized snapshot, refreshed on schedule. For history-spanning sets. **Caveat:**
+  materialization + `{{ref()}}` resolution run on the **ethereum/chain_id=1 slot** — a TABLE/VIEW configured
+  only on a non-ethereum slot won't materialize and its `ref` fails. Prefer the in-tx `token_ledger` lookup
+  (§4) where the datum is in the triggering tx. See deploy-playbook §"Execution slot".
+- **`INCREMENTAL`** — incremental block processing + dedup on the unique key. The alert output
+  (`enable-alerts` forces it; `--incrementalization IGNORE`|`UPSERT`).
 
-- **`VIEW`** — non-materialized; re-evaluated each run. The reusable lookup layer (pair with `ref`).
-- **`TABLE`** — materialized snapshot, refreshed on a schedule. For expensive history-spanning sets.
-- **`INCREMENTAL`** — incremental block processing + dedup on the unique key. **The alert output.**
-  `enable-alerts` forces this; `--incrementalization IGNORE` (skip dup keys) or `UPSERT` (update).
-
-`tx_hash` in results: `outer_transaction` has it natively; `logs` / `transaction_detail` /
-`token_ledger` / `token_transfers` carry only `(block_number, tx_index)`, so JOIN `outer_transaction`
-on `(block_number, tx_index)` (1:1, no fan-out) — or on Arbitrum use
-`arbitrum.tx_hash(block_number, tx_index)` to skip the JOIN. Readable `0x` SELECT output: see
-`common_query_patterns.md` §4 (`concat('0x', encode(col,'hex'))`). Full recipe in §4.
+`tx_hash` in results: native on `outer_transaction`; the others carry `(block_number,tx_index)` → JOIN
+`outer_transaction` (1:1) or Arbitrum `arbitrum.tx_hash(block_number,tx_index)`. Readable `0x`:
+`concat('0x', encode(col,'hex'))` (§4).
 
 ## CLI behavior notes (verified live)
 
-- `run-query`/`preprocess-query`/`explain-query` **require `--id`**; omit SQL to use stored text. They
-  read piped SQL only when bytes are actually waiting on stdin, so an `--id`-only call from an agent or
-  subprocess returns immediately instead of blocking on an idle stdin. A macro's explicit `duration='…'`
-  **overrides** `run-query --duration` (the flag is only a default for macros with no window).
-- **No `delete-query` exists**, and `delete-folder` (use `--path`, not positional) **refuses non-empty
-  folders** → a query can't be cleaned up. Fix wrong queries **in place** via `write-query`; for
-  query-mode probing reuse one persistent `/_scratch/probe`. (`create-folder` takes a **positional**
-  PATH; `delete-folder`/`rename-folder` use `--path`/`--new-path`.)
-- Materialization/notify config is **per-network**; pass `--network` on `set-config`/`get-config`/
-  `enable-alerts`/`disable-alerts`/`list-alerts` to match the chain your query's macros read.
-- `run-query --timeout <s>` **kills** a long run at the deadline by **revoking the server task** (not
-  just local polling), printing the task id at start. **Ctrl-C** during a run revokes it too, as does
-  `cancel-query --task-id <id>`. Use `--timeout 30` for the empirical-gate tuning loop (SKILL Step 5);
-  raise to **120 max** only with the user's OK. Default `--timeout` (no flag) stays long (30m) for
-  normal runs.
+- `run-query`/`preprocess-query`/`explain-query` require `--id`; omit SQL to use stored text (an `--id`-only
+  call returns immediately rather than blocking on idle stdin). A macro's explicit `duration='…'`
+  **overrides** `run-query --duration`.
+- **No `delete-query`**; `delete-folder` (`--path`) refuses non-empty folders → can't clean up. Fix in place
+  via `write-query`; reuse one `/_scratch/probe` for probing. (`create-folder` = positional PATH;
+  `delete-folder`/`rename-folder` = `--path`/`--new-path`.)
+- Materialization/notify config is **per-network** (`--network` on `set-config`/`get-config`/`enable-alerts`/
+  `disable-alerts`/`list-alerts`). For a **network-agnostic** query (no `network=` — slot injects the chain)
+  `--network` is the data chain. But a query hard-coding `network=` (incl. cross-chain `UNION`) fixes its data
+  chain in SQL while the materializer/scheduler runs on **chain_id=1** → deploy on the **`ethereum` slot** or
+  it silently never runs (`Unable to locate query … chain_id=1`). `materialize` takes no `--network` (always
+  chain_id=1); `reset-materialization` is broken (POSTs no body → 422). See deploy-playbook §"Execution slot".
+- `run-query --timeout <s>` kills the run by revoking the **server** task (prints task id). **Ctrl-C** or
+  `cancel-query --task-id <id>` also revokes. `--timeout 30` for the gate (Step 5), 120 max with user OK;
+  default (no flag) is long (30m).

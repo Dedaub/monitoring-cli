@@ -72,6 +72,26 @@ dedaub-monitoring get-config --id <QUERY_ID> --network <NETWORK>   # expect mate
 If `get-config` on the alert's network shows `INCREMENTAL` + your frequency, the config is live
 regardless of what the UI modal renders for its currently-selected network.
 
+### Execution slot — explicit-`network=` / cross-chain queries deploy on `ethereum` (chain_id=1)
+
+`--network` = data chain holds **only for network-agnostic macros** (no `network=`; the slot injects the
+chain). When the SQL **hard-codes `network=`** (the skill's norm), and for any **cross-chain `UNION`**, the
+data chain is fixed in the SQL, so the slot is just an execution identity — and the materializer/scheduler
+**defaults it to `chain_id=1`**. Deploy on any other slot and `materialize`/`query-status` fail with
+`Unable to locate query … chain_id=1` and **no run ever fires**. **Fix: `enable-alerts --network ethereum`**
+(macros still read their own chains). Confirm:
+```bash
+dedaub-monitoring materialize  --id <QUERY_ID>     # force a run
+dedaub-monitoring query-status --id <QUERY_ID>     # expect is_materialized=true + recent last_time_run
+dedaub-monitoring get-logs     --id <QUERY_ID>     # expect a SUCCESS row
+```
+Park any stray data-chain slot so it stops FAIL-ing: `set-config --id <QUERY_ID> --network <data-chain>
+--materialize TABLE`. (`materialize` takes no `--network` — always chain_id=1; `reset-materialization` is
+broken — POSTs no body → 422.) Same for a TABLE+`{{ref()}}` lookup (won't materialize off-slot, `ref`
+fails) — so prefer resolving history-spanning data **in-tx** when possible (e.g. a Morpho liquidation's
+seized collateral from `token_ledger` — the singleton's `value_delta = +seizedAssets` row — over a
+backfilled `CreateMarket` registry).
+
 ## Smoke-test (critical — a non-materializing query silently never alerts)
 
 Wait ~60s then poll, up to 3× (30s apart):
