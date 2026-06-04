@@ -128,6 +128,11 @@ or the event isn't listed. Dispatch `references/agents/web-fallback.md`. Never r
 - **Specific deployment** → filter `topic0` AND `address` (and/or `to_a` + selector). Collisions harmless.
 - **All-forks** → `topic0` alone (every fork hashes identically — you want them all). If the chain's
   `logs` has no topic0 index (§1.1), add a `block_number` range so the block index carries it.
+- **Whole category** ("all lending / all DEXs") → **triage members by USD-fidelity**: keep events whose
+  value leg is priceable (underlying token + raw amount, or in-tx-recoverable per §4); **exclude the rest
+  with a one-line reason** (wrapper/share/ID units, token neither emitted nor moved, not really the
+  category, no such event). A sum that folds in unpriceable/wrong-unit rows is wrong — transparency beats
+  false completeness.
 
 **Per-chain default look-back** (scaled inversely with block time → ~50k blocks ≈ constant scan cost):
 
@@ -169,6 +174,8 @@ Lead the alert's own scan with the `address` index.
 per-row scan as `--materialize VIEW` with **NO `LIMIT`**, then a separate reader does `SUM`/`GROUP BY`
 (+ `LIMIT 200`). Cross-chain key = **`(address, chain_id)`**, never bare `address` (same address recurs —
 even as a different token — per chain). Carry literal `chain_id` + `chain_name` per branch. See §5 P12.
+**Query mode does this inline in ONE query** — inner CTE for the per-row `UNION ALL` scan, outer `SELECT`
+with `GROUP BY`/`SUM` + final `LIMIT 200`; the VIEW/reader split is an alert-mode materialization concern.
 
 **Combine signals with `UNION ALL`.** Multiple topic0s/addresses/selectors and/or chains → one query, one
 branch per signal (same columns, own indexed lead + window + literal `chain_id`). `block_number` is **not**
@@ -285,7 +292,9 @@ slug+folder. Show results + SQL + the query path/id + UI link (Step 6).
    - *Signal* ∈ {`Liquidations`, `LargeTransfers`, `Drains`, `AdminChange`, `RoleChange`,
      `OracleDeviation`, `PauseUpgrade`, `Mints`, `Swaps`} (extend in the same style only when none fit).
    - *Subject* = protocol **with version, no spaces/inner hyphens** (`AaveV3`, `MorphoBlue`, `CompoundV2`,
-     `Chainlink`); for a protocol-agnostic ask use the asset instead (`USDC`, `WETH`).
+     `Chainlink`); for a protocol-agnostic ask use the asset instead (`USDC`, `WETH`); for a
+     **cross-protocol category** ask ("all lending / all DEXs") use the category noun (`Lending`, `DEX`,
+     `Bridge`), not an enumerated `+`-join.
    - *Chain* = canonical Title-case name (`Ethereum`/`Base`/`Arbitrum`/`Optimism`/`Polygon`/`BNB`/
      `Avalanche`) — **never** ad-hoc abbreviations (`Arbitrum`, not `Arb`/`ArbBase`); multi-chain →
      priority-ordered `+`-join in the Step 0(b) order (`Base+Arbitrum`).
