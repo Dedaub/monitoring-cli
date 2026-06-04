@@ -953,7 +953,10 @@ def explain_query(
         str | None, typer.Option(help="Network name, e.g. ethereum")
     ] = None,
 ) -> None:
-    """Print the query explanation (dependency analysis). Omit SQL to use the stored query text."""
+    """Print the query's real PostgreSQL EXPLAIN plan (the same plan app.dedaub.com shows) — it plans but
+    does not execute, so it's free. Read it for index choice / Seq-Scan-vs-index-scan; its cost/row
+    estimates are inflated (the planner can't prune chunks for get_historical_block_number(), so it assumes
+    all chunks). Omit SQL to use the stored query text."""
     client, _ = _load_client(profile)
     try:
         query_text, entity_id = _resolve_query_text_and_owner(

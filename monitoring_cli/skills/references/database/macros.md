@@ -8,7 +8,9 @@ macro-wrapped; every `common_query_patterns.md` pattern is valid.
 dedaub-monitoring get-schema --macros          # live macro/table list
 dedaub-monitoring preprocess-query --id <ID>   # render macro→SQL (settle "what does this do" empirically)
 ```
-`explain-query` = dependency analysis (which queries this `ref`s), **not** a PG plan.
+`explain-query --id <ID>` = the **real PG `EXPLAIN` plan** (same plan app.dedaub.com shows), free — it plans
+but doesn't execute. Read it for *index lead / `Seq Scan` vs index scan*, not its inflated `cost=`/`rows=`
+(§9). ({{ref()}} dependency analysis is a separate backend call, not a CLI command.)
 
 **Companion — `common_query_patterns.md`** (the SQL craft to this file's macro surface; most queries need
 both): §1 schema/indexes · §2 block-times · §3 perf rules · §7 question→pattern · §8 edge cases · §9

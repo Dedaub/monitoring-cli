@@ -199,8 +199,10 @@ Write PG SQL from the §5 skeleton + grepped constants + scope guard + Step 4 st
   column; continued `AND`/`OR` indent +2 under `WHERE`; nested CTE/subquery bodies indent +2 from their `(`.
   **Blank line before each `UNION ALL`.** Never crowd several columns onto one line or collapse the query to
   save space (long single expressions like a wrapped `round(...)` may stay on their own one line).
-- **Always project `tx_hash`** (actionable + unique-key part): native on `outer_transaction`; else JOIN it
-  on `(block_number,tx_index)` (1:1), or Arbitrum `arbitrum.tx_hash(block_number,tx_index)`.
+- **Always project `tx_hash`** (actionable + unique-key part): native on `outer_transaction`; on
+  `logs`/`token_ledger`/`transaction_detail` prefer **`<chain>.tx_hash(block_number,tx_index)`** (verified on
+  all 7 chains — avoids a JOIN *and* keeps the large `outer_transaction` out of the cold set), falling back to
+  a `{{outer_transaction}}` JOIN on `(block_number,tx_index)` (1:1) only if that function is ever absent.
 - **Always project literal `chain_id`** (UI default chain): eth 1, base 8453, arb 42161, op 10,
   polygon 137, bnb 56, avax 43114, blast 81457. Per-branch literal in a UNION.
 - No `SELECT *` (TOAST: `calldata`/`data`/`returndata`). **No trailing `;`** (UI rejects it). **Final
@@ -227,16 +229,28 @@ Write PG SQL from the §5 skeleton + grepped constants + scope guard + Step 4 st
 ### Empirical gate (prove, don't guess) — validate first, then run
 ```bash
 dedaub-monitoring validate-query   --id <ID>     # instant compile check: syntax/columns/types/macros
+dedaub-monitoring explain-query    --id <ID>     # FREE real PG plan (plans, doesn't run) — verify index lead + no seq-scans BEFORE paying for a run
 dedaub-monitoring preprocess-query --id <ID>     # only if validate fails: macro→SQL expansion
 dedaub-monitoring run-query --id <ID> --duration <w> --limit 200 --timeout 30   # exec; killed at 30s
 ```
 Iterate `write-query` → `validate-query` on the **same id** until valid before paying for a run.
-`run-query` latency *is* the index signal (fast = good lead; slow/timeout = scanning). `explain-query` =
-dependency analysis only, not a plan. Predict index correctness from §1.1 + §9, confirm by latency.
+**`explain-query --id <ID>` returns the real PG plan** (the same one app.dedaub.com shows) — run it in the
+gate right after `validate`: it's **free** (plans, doesn't execute) and catches the planner mistakes that
+otherwise cost you a run. **Read it for STRUCTURE, not magnitudes:** confirm each branch leads with the
+intended index (`Index Scan using …logs_topic0…` / `…_address…` / selector) and that no big table gets a
+`Seq Scan` (especially `latest_token_info`); the `cost=`/`rows=` numbers are **inflated** — the planner
+can't constant-fold `get_historical_block_number()` so it assumes *all* chunks (§9) — so never read runtime
+off them. Quick scan: `explain-query --id <ID> | grep -iE 'Seq Scan|Index Scan using logs_'`. Then confirm
+real runtime with `run-query` latency + cheap `count(*)` probes.
 
 **Tuning loop (each run <30s and ≥1 row):**
-1. `--timeout 30`. If killed, **re-run once** — first-run timeouts are often cold cache (seen: 30s cold →
-   ~7s warm). Only a *second* timeout means scanning → fix the lead (§3), or shrink `--duration` until sub-30s.
+1. `--timeout 30`. If killed, **re-run** — first-run timeouts are usually cold cache (seen: 30s cold →
+   ~5–7s warm). **Multi-chain UNIONs warm slowly:** the cold working set is ~K× a single-chain query
+   (K chains' log chunks + each chain's `latest_token_info`/`outer_transaction`), so the *first 1–2* runs
+   can both exceed 30s while the query is actually fine. Warm each branch first with a cheap `count(*)`
+   probe (this also gives you the row counts), **or** use `--timeout 120` on the first run, then time the
+   warm run. Shrink the cold set too: prefer `<chain>.tx_hash()` over an `outer_transaction` JOIN (§4).
+   Only a timeout that **persists once warm** means scanning → fix the lead (§3), or shrink `--duration`.
 2. Sub-30s: ≥1 row → gate passed (that's your validated window). 0 rows → window too narrow for a rare
    event; **ask the user** before widening `--duration` + `--timeout` (120s / 30d max).
 3. Still 0 at 120s/30d → genuinely quiet; tell the user (valid, just hasn't fired).
