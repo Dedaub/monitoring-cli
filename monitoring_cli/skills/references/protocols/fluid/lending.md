@@ -1,6 +1,7 @@
 # Fluid (Instadapp) — Lending (fTokens) — Topics, Selectors, Addresses
 
-**Status:** verified against the canonical `Instadapp/fluid-contracts-public` (branch `main`) source and live RPC on every listed chain on 2026-05-29. All topic0/selector hashes computed locally with keccak; all addresses confirmed via `eth_getCode`.
+**Status:** verified against the canonical `Instadapp/fluid-contracts-public` (branch `main`) source and live RPC on every listed chain (built 2026-05-29; fTokens re-enumerated via `allTokens()` + counts re-verified **2026-06-05**). All topic0/selector hashes computed locally with keccak; all addresses confirmed via `eth_getCode`. Index: [`README.md`](README.md). Reward/staking periphery: [`periphery.md`](periphery.md).
+> **Re-verification 2026-06-05:** live `allTokens()` counts = ETH 7, Base 6, Arbitrum **9** (incl. new **fPYUSD**), Polygon 6, BNB **5** (incl. new **fETH**). Two new fTokens since the original build (added below); all previously-documented fTokens unchanged.
 **Scope:** Fluid **Lending** ("Lend & Earn": fTokens, the ERC-4626 deposit side) on **Ethereum (1), Base (8453), Arbitrum One (42161), Polygon PoS (137), BNB Smart Chain (56)**. fTokens are pure suppliers to the shared Liquidity Layer — see [`liquidity-layer.md`](liquidity-layer.md) for the core, `LogOperate`, the InfiniteProxy and per-chain modules. Other modules: [`vaults.md`](vaults.md), [`dex.md`](dex.md).
 **Key fact:** an fToken is an ERC-20 + **ERC-4626** wrapper over a Liquidity-Layer supply position — it never custodies funds (a deposit flows straight through to Liquidity via `liquidityCallback`). It emits standard ERC-4626 `Deposit`/`Withdraw`, each mirrored by a Liquidity `LogOperate` in the same tx (`user = fToken address`). Yield (incl. rewards) accrues into the fToken→underlying **exchange price**, not via per-user claim events.
 
@@ -188,6 +189,7 @@ All fToken addresses verified `eth_getCode` non-empty. Standard `"fToken"` runti
 | fARB | `0xbE3860FD4c3facDf8ad57Aa8c1A36D6dc4390a49` | ARB `0x912CE591…49E6548` | — |
 | fGHO | `0x037dFf1C12805707d7c29F163E0F09fC9102657A` | GHO `0x7dfF7269…7c8B33` | — |
 | fsUSDS | `0x3459fcc94390C3372c0F7B4cD3F8795F0E5aFE96` | sUSDS `0xdDb46999…16d7610` | — |
+| fPYUSD *(new 2026-06)* | `0x24bb6c093e15658acE2c34bee9aC16f0A6ED2b01` | PYUSD `0x46850aD61C2B7d64d08c9C754F45254596696984` | — |
 
 #### Polygon PoS (137)
 
@@ -210,6 +212,7 @@ All fToken addresses verified `eth_getCode` non-empty. Standard `"fToken"` runti
 | fUSDC | `0xfE60462E93cee34319F48Cfc6AcFbc13c2882Df9` | USDC `0x8AC76a51…32Cd580d` | `0x149747813e1A5b04B5F17869b9d6603022B591fd` |
 | fUSDT | `0xA5b8FCa32E5252B0B58EAbf1A8c79d958F8EE6A2` | USDT(BSC-USD) `0x55d39832…3197955` | `0xBE02b3DA446BF1B5CB271553F162A0f7C92E90bD` |
 | fWBNB *(native)* | `0x527C2a0B8A3eDD9696B4A9443ef66Ec30fD7B84a` | WBNB `0xbb4CdB9C…73bc095c` | — |
+| fETH *(new 2026-06)* | `0x8d711Fc6cc96B94F32c3F8eEEb6e75a765fbcfe6` | Binance-Peg ETH `0x2170Ed0880ac9A755fd29B2688956BD959F933F8` | — |
 
 BNB RewardsRateModel runtime is larger (`5547 B` vs `1820 B` elsewhere) — a newer model build; same `getRate`/`getConfig` interface.
 
@@ -325,6 +328,7 @@ ARB_FWEETH                       = '\x0d00c4a2f766b7afe2cc8f6467e296400a32b239'
 ARB_FARB                         = '\xbe3860fd4c3facdf8ad57aa8c1a36d6dc4390a49'
 ARB_FGHO                         = '\x037dff1c12805707d7c29f163e0f09fc9102657a'
 ARB_FSUSDS                       = '\x3459fcc94390c3372c0f7b4cd3f8795f0e5afe96'
+ARB_FPYUSD                       = '\x24bb6c093e15658ace2c34bee9ac16f0a6ed2b01'  -- new 2026-06
 -- ===== fTokens — Polygon PoS (137) =====
 POL_FAUSD                        = '\xd70dd80bc39d56e21a4475f72021bc6c5b0e4518'
 POL_FUSDC                        = '\x571d456b578fdc34e26e6d636736ed7c0cdb9d89'
@@ -337,6 +341,7 @@ BNB_FU                           = '\x007df53cda786450cf8145a73b2748b241a0069c'
 BNB_FUSDC                        = '\xfe60462e93cee34319f48cfc6acfbc13c2882df9'
 BNB_FUSDT                        = '\xa5b8fca32e5252b0b58eabf1a8c79d958f8ee6a2'
 BNB_FWBNB                        = '\x527c2a0b8a3edd9696b4a9443ef66ec30fd7b84a'
+BNB_FETH                         = '\x8d711fc6cc96b94f32c3f8eeeb6e75a765fbcfe6'  -- new 2026-06
 ```
 
 ---
