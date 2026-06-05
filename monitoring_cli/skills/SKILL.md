@@ -149,6 +149,18 @@ Alert mode: this is the macro `duration=`. Query mode: the `block_number BETWEEN
 matched", not "wrong SQL" — widen until rows appear or it's genuinely quiet. Report the window that
 produced rows; surface it before deploy. Each test run <30s (120s max, only with user OK).
 
+**High-volume-token caveat (value/threshold scans).** A `≥\$X`/percentile filter on a busy token
+(USDC/USDT/WETH) is **not index-backed** — you scan *every* transfer of that token in the window to find
+the large ones, so **token volume, not window length, is the limiter**. On the busiest chains this blows the
+**120s cap well inside 30d**: USDC ≥\$1M over **7d times out on Base & Arbitrum** (ETH 7d ≈94s; Base ≈125k
+USDC transfers/h ≈21M/7d). **Warm doesn't save you** — only ~the latest day of chunks stays cached, so Base
+**24h ≈9s but 7d still times out** (super-linear). Won't fit → **shrink the window** to what one run clears,
+**split per-chain** (separate runs, merge in chat), **materialize** (P12 incremental TABLE), or hand the
+user the validated SQL for the **web UI** (no 120s cap). Also: the planner often **won't take the
+`(address,block_number)` composite** for a dominant token (it flips to `block_number_idx` at short windows;
+on Base at *any* window) and OFFSET-0/VALUES-join/`inputs=`/literal-bounds don't reliably force it — don't
+burn runs fighting it.
+
 **Hard ceiling 30d** (platform max; `1000d` is wrong). If a lookup needs >30d (e.g. every market ever
 created): **first try to recover it from the triggering tx** — a token moved in the event's own tx is in
 `token_ledger` for that block (Step 5 / §4), no history needed. Only if truly unrecoverable, promote to
@@ -257,7 +269,10 @@ real runtime with `run-query` latency + cheap `count(*)` probes.
    can both exceed 30s while the query is actually fine. Warm each branch first with a cheap `count(*)`
    probe (this also gives you the row counts), **or** use `--timeout 120` on the first run, then time the
    warm run. Shrink the cold set too: prefer `<chain>.tx_hash()` over an `outer_transaction` JOIN (§4).
-   Only a timeout that **persists once warm** means scanning → fix the lead (§3), or shrink `--duration`.
+   Only a timeout that **persists once warm** means real work, not cold cache → fix the lead (§3), shrink
+   `--duration`, **or** recognise that a combined cross-chain UNION's runtime ≈ **sum** of its branch scans
+   (shared worker pool, not the max), so one heavy branch (a busy-token value scan) busts 120s even warm →
+   **split per-chain** (separate runs, merge in chat) or shrink the window.
 2. Sub-30s: ≥1 row → gate passed (that's your validated window). 0 rows → window too narrow for a rare
    event; **ask the user** before widening `--duration` + `--timeout` (120s / 30d max).
 3. Still 0 at 120s/30d → genuinely quiet; tell the user (valid, just hasn't fired).
