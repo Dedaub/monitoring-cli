@@ -16,10 +16,22 @@ cd monitoring-cli
 uv tool install . # or: pipx install .
 ```
 
+### Quick start (Makefile)
+
+From a clone, `make setup` runs the whole onboarding in one shot — it (re)installs the CLI with `uv`, installs the agent skill, and logs you in:
+
+```bash
+git clone https://github.com/Dedaub/monitoring-cli.git
+cd monitoring-cli
+make setup   # uv tool install . --force  +  install-skill  +  login
+```
+
+The skill picker and the login browser flow are interactive, so you stay in control of those two steps. Re-authenticate any time with `make login`.
+
 ## Authentication
 
 ```bash
-dedaub-monitoring login
+dedaub-monitoring login   # or: make login
 ```
 
 This opens a browser-based OAuth2 device flow. Your credentials are stored locally and reused across sessions.
