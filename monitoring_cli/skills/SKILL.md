@@ -31,7 +31,9 @@ repo root. Decide once, reuse all session.
    `get-schema` is authoritative for tables/columns; refs supply *constants only*. Verify per chain
    (coverage varies). For money/token asks: `network_token_info` (PK `token_address`) carries
    `last_price`+`symbol`+`decimals`+`logo_*`+`presentation_symbol` — **the only USD-price source**
-   (`latest_token_info` is metadata, no price). `logs.topic0` is indexed on most chains but **not Base** →
+   (`latest_token_info` is metadata, no price), but `last_price` is **NULL for stablecoins** (USDC/USDT/DAI
+   are the USD quote unit → `to_usd_value` returns **0** for them; pin to \$1 by address — §5 USD rule).
+   `logs.topic0` is indexed on most chains but **not Base** →
    on Base lead with `address`, never bare `topic0`.
 3. **Pick mode** — query (run + show) vs alert (deploy on schedule). **If the user didn't explicitly name
    the mode, ask via `AskUserQuestion` — do not infer it from phrasing.** "summarize …", "show me …",
@@ -238,7 +240,11 @@ Write PG SQL from the §5 skeleton + grepped constants + scope guard + Step 4 st
 - **Metadata:** `latest_token_info` (PK, 1:1) → `symbol`/`token_name`/`decimals`. **USD:**
   `<chain>.to_usd_value(raw, token)` (decimals + price in one call) or `network_token_info.last_price` when
   you need the fields — `round((… * last_price)::numeric, 2)` (last_price is double). LEFT JOIN so rows
-  survive a missing price.
+  survive a missing price. **Stablecoins carry NO price** — `last_price` is **NULL** for USDC/USDT/DAI (the
+  USD quote unit), so `to_usd_value` returns **0** for them (silently zeroing the commonest collateral). Pin
+  stables to \$1 **by address**: `COALESCE(last_price::numeric, CASE WHEN token = ANY(ARRAY['\x…usdc…'::bytea,
+  '\x…usdt…'::bytea]) THEN 1.0 END)` — **never** a blanket `COALESCE(…, 1)` (misvalues a genuinely unpriced
+  *volatile* token at \$1). Verify per chain which collaterals are NULL before trusting a USD sum.
 - **Token not in the event** → resolve in-tx from `token_ledger` (the moved token's row whose
   `value_delta` = the event amount), not a registry. Prefer this over TABLE+ref.
 - Macros: `duration=` for the window; filter `topic0` directly (macro adds `committed`); `inputs='0x<addr>.Event(...)'`
