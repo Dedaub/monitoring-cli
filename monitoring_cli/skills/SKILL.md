@@ -41,7 +41,12 @@ repo root. Decide once, reuse all session.
 4. **Alert mode — collect prefs once (reuse all session), in order. `AskUserQuestion` for all but (a):**
 
    **(a) Condition** — free text. User types protocol + event/threshold (e.g. "USDC transfers > \$1M",
-   "Aave v3 admin change", "Morpho liquidations"). The one thing you can't enumerate.
+   "Aave v3 admin change", "Morpho liquidations"). The one thing you can't enumerate. **Invite specifics:**
+   they may paste a **contract address / event sig / topic0 / function sig / selector**, or **name a whole
+   protocol** for a 3–6 alert suite (Step 5 sub-branch). A supplied **signal identity** (topic0 / event sig /
+   selector) means you already hold the constant → **skip Step 2**, feed it into Step 3/5 (identity-only →
+   all-forks; identity + address → pinned; bare address alone doesn't skip). Trust it; the Step 5 gate catches
+   a wrong constant.
 
    **(b) Network** — pop-up only if not already named; `multiSelect`. Slugs: `ethereum, base, arbitrum,
    optimism, polygon, bnb, avalanche`. Surface the 4 most relevant (the protocol's chains, else
@@ -100,7 +105,10 @@ Needs protocol constants → Step 2. Protocol-agnostic → Step 4.
 
 ## Step 2 — Protocol constants (grep the least)
 
-Local refs authoritative; web only as fallback (2c).
+Local refs authoritative; web only as fallback (2c). **Skip this whole step** when the user supplied a
+**signal identity** at intake (Step 0(4a)) — topic0 / event sig / selector — you already hold the constant;
+go straight to Step 3 with it. (A bare contract address doesn't skip: it pins the deployment but you still
+need the event/call identity, so look that up here.)
 
 **2a. Find the file:** `ls references/protocols/<name>/`
 - Multi-version dir (curve, morpho, aave, uniswap, lido, fluid, sushiswap, euler, balancer, compound,

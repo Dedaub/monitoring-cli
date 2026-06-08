@@ -110,7 +110,7 @@ dedaub-monitoring query-status --id <QUERY_ID> # direct materialization health: 
 3. **Consistent (2+ in a row)** — too expensive. The empirical gate should have caught this; re-check
    `run-query` latency, reduce `duration=`/block-range, `write-query`, recheck.
 4. **Still slow** — confirm the indexed lead is used (`preprocess-query` to see the expansion; predict
-   against §1.1). `topic0` is indexed on all chains, so the culprit is usually a **missing
+   against §1.1). `topic0` is indexed on most chains (**not Base** — there, lead with `address`), so where indexed the culprit is usually a **missing
    `block_number`/`duration=` bound** (the topic0 lookup still scans all history) or `SELECT *` — not topic0 itself.
 5. **Still slow with a tight window** — add `address = '\x…'` to pin the emitter (turns an all-forks
    scan into a single-contract one), or split a multi-event `UNION` into one query per event.

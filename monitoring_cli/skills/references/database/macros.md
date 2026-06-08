@@ -73,7 +73,12 @@ surfaced 6 V3 forks on Arbitrum).
 ### `inputs=` — three forms (when you want the ABI decoder or a single-contract anchor)
 1. `inputs='0x<addr>.Event(types)'` — contract-specific; adds `address=` → index-fast everywhere. Go-to for one known contract.
 2. `inputs='Event(type indexed,…)'` — global topic0 form; mostly redundant with raw `topic0=` (extra `decode_event`). Prefer raw topic0.
-3. Not indexed anywhere → proxy: filter a co-occurring indexed event (e.g. an incoming ERC-20 `Transfer`); note it in a comment.
+3. **Not indexed anywhere → proxy.** Scan a **co-occurring indexed event** in the same tx as the trigger. Usual proxy = the ERC-20 `Transfer` the action moves *into* the contract — index-fast on the standard `Transfer` topic0, contract pinned as recipient in `topic2`:
+   ```sql
+   WHERE l.topic0 = '\xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef'::bytea  -- Transfer(address,address,uint256)
+     AND l.topic2 = '\x000000000000000000000000<contract_40hex>'::bytea                       -- recipient = watched contract
+   ```
+   Each incoming transfer proxies one user action; **note the proxy assumption in a comment**. Especially useful on **Base** (no topic0 index) when there's no emitter to anchor.
 
 **`indexed` is load-bearing in `inputs=`:** the macro maps params to topic vs `data` by the `indexed` flag.
 Omit it on an indexed param → macro folds `topicN IS NULL` → **silent 0 rows**. Confirm with
