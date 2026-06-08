@@ -8,17 +8,39 @@ Use it to monitor on-chain activity and get notified about large transfers, fund
 
 ## Installation
 
-Requires Python 3.13. Install from source (recommended via [uv](https://docs.astral.sh/uv/)):
+Pick the path that matches what you already have — all three end with the same installed `dedaub-monitoring` command.
+
+### From scratch — one command (recommended)
+
+The bootstrap installer does the whole setup: it installs [uv](https://docs.astral.sh/uv/) if it's missing (uv also provides the right Python, so you don't install Python yourself), installs the CLI, installs the agent skill, and starts login. Works on macOS, Linux, and Windows. It assumes `git` is already present (uv uses it to fetch the package) and will tell you if it isn't; everything else it handles.
+
+**macOS / Linux:**
 
 ```bash
-git clone https://github.com/Dedaub/monitoring-cli.git
-cd monitoring-cli
-uv tool install . # or: pipx install .
+curl -LsSf https://raw.githubusercontent.com/Dedaub/monitoring-cli/main/install.sh | sh
 ```
 
-### Quick start (Makefile)
+**Windows (PowerShell):**
 
-From a clone, `make setup` runs the whole onboarding in one shot — it (re)installs the CLI with `uv`, installs the agent skill, and logs you in:
+```powershell
+powershell -ExecutionPolicy ByPass -c "irm https://raw.githubusercontent.com/Dedaub/monitoring-cli/main/install.ps1 | iex"
+```
+
+Re-run any time to upgrade. The only step that isn't automated is the browser login, which prints a URL for you to open.
+
+### Already have uv — one line
+
+uv installs the CLI straight from the public repo over HTTPS — no clone, no SSH keys, and uv fetches the pinned Python for you:
+
+```bash
+uv tool install git+https://github.com/Dedaub/monitoring-cli
+dedaub-monitoring install-skill
+dedaub-monitoring login
+```
+
+### Contributors — from a clone
+
+If you're hacking on the CLI, work from a checkout. From a clone, `make setup` runs the whole onboarding against your working tree:
 
 ```bash
 git clone https://github.com/Dedaub/monitoring-cli.git
