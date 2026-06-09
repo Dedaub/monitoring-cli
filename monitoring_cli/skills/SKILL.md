@@ -22,6 +22,12 @@ repo root. Decide once, reuse all session.
 
 ## Step 0 — Session setup (always)
 
+**Must-read first — protocol map.** Skim `references/protocols/INDEX.md`: the category/chain → protocol
+lookup (which slugs are bridges / DEXs / lending / LST / restaking / perps / oracle, and which of the 7
+chains each covers). Use it to turn a **category or chain** ask ("bridge volume X→Y", "all DEXs on Base",
+"lending on Arbitrum") into the right `<slug>/` set before Step 2. It's an index only — never a source of
+constants; always open the named `<slug>/<file>.md` for the actual topics/selectors/addresses.
+
 1. **Auth:** `dedaub-monitoring entities` — if it fails, ask the user to `login` and stop.
 2. **Schema (don't WebFetch):**
    ```bash
@@ -112,7 +118,9 @@ Local refs authoritative; web only as fallback (2c). **Skip this whole step** wh
 go straight to Step 3 with it. (A bare contract address doesn't skip: it pins the deployment but you still
 need the event/call identity, so look that up here.)
 
-**2a. Find the file:** `ls references/protocols/<name>/`
+**2a. Find the file.** Category/chain ask (not a named protocol)? Resolve the slug set via
+`references/protocols/INDEX.md` first (§1 category→protocols reverse-map + §2 chain table). Then:
+`ls references/protocols/<name>/`
 - Multi-version dir (curve, morpho, aave, uniswap, lido, fluid, sushiswap, euler, balancer, compound,
   maple, chainlink, pancakeswap, rocketpool, aerodrome, native): read `README.md` first (version→file
   table, chain coverage, topic0 collisions), then pick the version file.
@@ -364,6 +372,7 @@ final SQL + the query's folder path & id + its UI link `https://app.dedaub.com/t
 
 | File | When |
 |------|------|
+| `…/protocols/INDEX.md` | **Step 0 (startup) + Step 2a** — category & chain → protocol(slug) lookup map; resolve a category/chain ask to the right `<slug>/` |
 | `…/sample_queries/common_query_patterns.md` | always (Step 1) — hub: schema, indexes, perf rules, pattern index, anti-patterns, checklist |
 | `…/database/query_patterns.md` | Step 5 — full P1–P16 SQL templates (indexed by the hub §5) |
 | `…/database/decode_primitives.md` | Step 5 — decode/enrich cheat-sheet (hub §4) |
