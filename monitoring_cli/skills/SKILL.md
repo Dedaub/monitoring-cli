@@ -163,9 +163,12 @@ or the event isn't listed. Dispatch `references/agents/web-fallback.md`. Never r
 
 Alert mode: this is the macro `duration=`. Query mode: the `block_number BETWEEN MAX-N AND MAX` predicate (§2).
 
-**Start at the default, escalate stepwise** (×2 → ×4: Base 24h→48h→96h). 0 rows usually means "nothing
-matched", not "wrong SQL" — widen until rows appear or it's genuinely quiet. Report the window that
-produced rows; surface it before deploy. Each test run <30s (120s max, only with user OK).
+**Start at the default, escalate stepwise autonomously up to ×4** (Base 24h→48h→96h); beyond ×4 — toward
+the 30d cap — only with user OK (Step 5 tuning loop). 0 rows usually means "nothing matched", not "wrong
+SQL". **Look-back ≠ semantic interval:** a condition like "upgraded within 5s of deploy" is a WHERE
+predicate, not the window — a *rare* conjunction needs **more** look-back to ever see an instance, and
+**0 rows can be its valid steady state** for a deployed alert. Report the window that produced rows;
+surface it before deploy. Each test run <30s (120s max, only with user OK).
 
 **High-volume-token caveat (value/threshold scans).** A `≥\$X`/percentile filter on a busy token
 (USDC/USDT/WETH) is **not index-backed** — you scan *every* transfer of that token in the window to find
@@ -202,7 +205,8 @@ Lead the alert's own scan with the `address` index.
 
 **Aggregates → split (P12).** For any total/sum/leaderboard, esp. cross-chain: materialize the full
 per-row scan as `--materialize VIEW` with **NO `LIMIT`**, then a separate reader does `SUM`/`GROUP BY`
-(+ `LIMIT 200`). Cross-chain key = **`(address, chain_id)`**, never bare `address` (same address recurs —
+(`ORDER BY … LIMIT N` only when top-N is the semantics — Step 5 mode-scoped rule).
+Cross-chain key = **`(address, chain_id)`**, never bare `address` (same address recurs —
 even as a different token — per chain). Carry literal `chain_id` + `chain_name` per branch. See §5 P12.
 **Query mode does this inline in ONE query** — inner CTE for the per-row `UNION ALL` scan, outer `SELECT`
 with `GROUP BY`/`SUM` + final `LIMIT 200`; the VIEW/reader split is an alert-mode materialization concern.
@@ -229,6 +233,16 @@ Write PG SQL from the §5 skeleton + grepped constants + scope guard + Step 4 st
 - Addresses lowercase `\x` bytea in WHERE; topics full 32-byte; even hex digits (40 addr / 64 word).
 - **Readable output:** `concat('0x', encode(col,'hex'))` for addresses/hashes (bare `encode` lacks `0x`;
   WHERE literals stay `\x`).
+- **Signal identity — prefer signature form; annotate any raw literal.** Write event/call filters with the
+  signature-string macro forms (`inputs='0x<addr>.Event(type indexed name,…)'`,
+  `{{<chain>.transaction_detail("fnName(type name,…)")}}`) so the SQL names what it watches — `indexed`
+  flags must be exact (macros.md footgun). Raw `\x` topic0/selector literals stay for **all-forks** scans
+  (one topic0 = every fork) — but EVERY raw literal carries an inline `-- EventName(types)` /
+  `-- fnName(types)` comment, no exceptions.
+- **Call monitoring filters `call_opcode = 'CALL'`** by default (`transaction_detail` has one row per
+  *frame*: a proxy call also yields a DELEGATECALL frame with the same calldata → double-counted proxies,
+  implementation addresses matched). Drop it deliberately — and say so in the header comment — when the
+  delegatecall surface (self-upgrades, diamond facets) is in scope (§8).
 - **Layout — expanded, never minified.** Reproduce the §5 templates' vertical style; the engine preserves
   whitespace and humans read these. `SELECT` sits alone on its line; **one projected column/expression per
   line**, indented 4 spaces past the `SELECT` keyword's column (so a `SELECT` at 2-space CTE indent has
@@ -242,8 +256,13 @@ Write PG SQL from the §5 skeleton + grepped constants + scope guard + Step 4 st
   a `{{outer_transaction}}` JOIN on `(block_number,tx_index)` (1:1) only if that function is ever absent.
 - **Always project literal `chain_id`** (UI default chain): eth 1, base 8453, arb 42161, op 10,
   polygon 137, bnb 56, avax 43114, blast 81457. Per-branch literal in a UNION.
-- No `SELECT *` (TOAST: `calldata`/`data`/`returndata`). **No trailing `;`** (UI rejects it). **Final
-  `LIMIT 200`** (cap 500; not on inner CTEs, not on a P12 VIEW).
+- No `SELECT *` (TOAST: `calldata`/`data`/`returndata`). **No trailing `;`** (UI rejects it).
+- **`LIMIT 200` / `ORDER BY` are mode-scoped.** Query mode + gate/test runs: final `SELECT` ends with
+  `LIMIT 200` (cap 500; + `ORDER BY` for display; never on inner CTEs). **Deployed alerts and materialized
+  queries carry NEITHER** — a `LIMIT` silently drops alert rows in a busy refresh / truncates a registry,
+  and the sort is wasted work; dedup is the unique-key's job, bounding is the frequency window's job.
+  Strip both before deploy. Exception: top-N-by-design (leaderboard reader) keeps `ORDER BY … LIMIT N` —
+  there it IS the semantics.
 - Value math via `token_ledger.value_delta` (signed), not decoding `logs.data`.
 - **Metadata:** `latest_token_info` (PK, 1:1) → `symbol`/`token_name`/`decimals`. **USD:**
   `<chain>.to_usd_value(raw, token)` (decimals + price in one call) or `network_token_info.last_price` when
@@ -255,8 +274,8 @@ Write PG SQL from the §5 skeleton + grepped constants + scope guard + Step 4 st
   *volatile* token at \$1). Verify per chain which collaterals are NULL before trusting a USD sum.
 - **Token not in the event** → resolve in-tx from `token_ledger` (the moved token's row whose
   `value_delta` = the event amount), not a registry. Prefer this over TABLE+ref.
-- Macros: `duration=` for the window; filter `topic0` directly (macro adds `committed`); `inputs='0x<addr>.Event(...)'`
-  only to anchor one contract or get typed `decode_event` output.
+- Macros: `duration=` for the window; signature forms preferred (the signal-identity rule above; macro adds
+  `committed`); raw `topic0` filtering for all-forks scans, always annotated.
 - Every unique-key / template column must appear in SELECT.
 - **Header comment (provenance) on every created query — both modes.** Lead the SQL with a comment:
   ```sql
@@ -295,8 +314,12 @@ real runtime with `run-query` latency + cheap `count(*)` probes.
    `--duration`, **or** recognise that a combined cross-chain UNION's runtime ≈ **sum** of its branch scans
    (shared worker pool, not the max), so one heavy branch (a busy-token value scan) busts 120s even warm →
    **split per-chain** (separate runs, merge in chat) or shrink the window.
-2. Sub-30s: ≥1 row → gate passed (that's your validated window). 0 rows → window too narrow for a rare
-   event; **ask the user** before widening `--duration` + `--timeout` (120s / 30d max).
+2. Sub-30s: ≥1 row → gate passed (that's your validated window). 0 rows → **auto-widen stepwise to ×4 of
+   the per-chain default (Step 3), then STOP and ask the user**, offering: (a) widen further (toward
+   120s / 30d max), (b) temporarily loosen the rare qualifiers to prove the *base* event fires — e.g. drop
+   the "≤5s after deploy" / "non-deployer" predicates, confirm `upgradeToAndCall` calls appear, restore
+   them — or (c) accept 0 rows and deploy: for a rare conjunction, **0 rows IS the expected steady state**,
+   not a broken query. Don't burn run after run optimizing toward a row that may not exist.
 3. Still 0 at 120s/30d → genuinely quiet; tell the user (valid, just hasn't fired).
 
 Mid-run **Ctrl-C** / `cancel-query --task-id <id>` revokes the server task.

@@ -30,7 +30,7 @@ Per-chain schema (`base.`, `ethereum.`, `arbitrum.`, `optimism.`, `polygon.`, `b
 | Table | PK | Purpose |
 |-------|----|---------|
 | `<chain>.outer_transaction` | `(block_number, tx_index)` | One row per **top-level tx**. `tx_hash`, `from_a`/`to_a`, `callvalue` (wei → ETH value), `status` (`false` = reverted), `input`. Entry-call / ETH-value detection. |
-| `<chain>.transaction_detail` | `(block_number, tx_index, vm_step_start)` | One row per executed call frame. `from_a` = caller, `to_a` = callee, `calldata` = input bytes. Also: `callvalue`, `error`, `call_opcode`, and **`caller_vm_step_stack` (int[])** — the call-frame stack, so `coalesce(array_length(caller_vm_step_stack,1),0)` = **call depth** (0 = top-level/EOA-initiated, >0 = nested via router/bundler/contract). |
+| `<chain>.transaction_detail` | `(block_number, tx_index, vm_step_start)` | One row per executed call frame. `from_a` = caller, `to_a` = callee, `calldata` = input bytes. Also: `callvalue`, `error`, `call_opcode` (`'CALL'`/`'DELEGATECALL'`/`'STATICCALL'`/… — default-filter `'CALL'` for call monitoring, §8.10), and **`caller_vm_step_stack` (int[])** — the call-frame stack, so `coalesce(array_length(caller_vm_step_stack,1),0)` = **call depth** (0 = top-level/EOA-initiated, >0 = nested via router/bundler/contract). |
 | `<chain>.logs` | `(block_number, tx_index, vm_step)` | One row per emitted `LOG*`. `address` = emitter, `topic0..3`, `data`. |
 | `<chain>.token_ledger` | `(address, block_number, tx_index, vm_step_start, vm_step)` | Parsed token balance deltas. One row per side of each transfer; `value_delta` is signed. |
 | `<chain>.token_transfers` | `(block_number, tx_index, vm_step_start, vm_step)` | One row per token transfer: `token_address`, `from_a`, `to_a`, `value` (unsigned). Lighter than `token_ledger` when you don't need signed deltas / counterparty. |
@@ -115,7 +115,7 @@ WHERE <chain>.block_timestamp(block_number) BETWEEN now() - interval '{{X}}' AND
 | 7 | **Join `transaction_detail` ↔ `logs` ↔ `token_ledger` on `(block_number, tx_index)`.** | All three have it indexed (directly or as a prefix). Add `vm_step` / `log_index` only when ordering inside a tx matters (multicall). |
 | 8 | **`committed = true AND error IS NULL` excludes reverts.** Include both. | A revert still produces a `transaction_detail` row but no state effects. |
 | 9 | **Never end a query with a trailing `;`.** End on the last token (or a comment). | The platform UI **rejects** a query terminated by a semicolon — applies to every query and `{{ref()}}`'d lookup. |
-| 10 | **Default the final result to `LIMIT 200`.** End the outer/final `SELECT` with `LIMIT 200` unless the user asks for more (cap 500) or an aggregate returns one row. | Keeps result payloads bounded; 200 is the house default for the final output (not inner CTE/lookup scans). |
+| 10 | **`LIMIT 200` / `ORDER BY` are for interactive output only.** Query mode + gate/test runs: end the final `SELECT` with `LIMIT 200` (cap 500; never inner CTE/lookup scans). **Deployed alerts and materialized queries carry NEITHER** — a `LIMIT` silently drops alert rows in a busy refresh / truncates a registry; the sort is wasted work. Exception: top-N-by-design (leaderboard) keeps `ORDER BY … LIMIT N`. | Bounded payloads for humans; complete rows for the platform. Dedup is the unique-key's job, bounding is the frequency window's job. |
 
 ---
 
@@ -206,6 +206,7 @@ If the protocol doc lacks a value, **stop and ask** — never guess a selector o
 | "Live contract state (supply, price, config)" | `eth_call` (§4) | contract + view-fn signature |
 | "Mint / burn / supply change" | §4 zero-address `token_ledger` | token address |
 | "Oracle/price drift between two sources" | §4 drift formula + `to_usd_value`/`eth_call` | the two price sources |
+| "How similar are two contracts / did an upgrade really change the code?" (suspicious proxy upgrade) | §4 contract-similarity primitive + P2 on `Upgraded(address indexed implementation)` + `LAG` per proxy | proxy address(es) or the Upgraded topic0 |
 
 ---
 
@@ -222,6 +223,8 @@ If the protocol doc lacks a value, **stop and ask** — never guess a selector o
 | 7 | Sequential vs random nonces | EIP-3009 nonce is **random `bytes32`**; ERC-2612 / smart-account nonces are sequential `uint256` |
 | 8 | Path-specific events | Path B / aggregator paths may emit no auth event → fall back to `token_ledger` (P4) for initiator |
 | 9 | Sequencer drift | Block-window predicates are approximate; if exact wall-clock matters, use `block_timestamp(...)` predicate (§2) |
+| 10 | Proxy calls produce TWO `transaction_detail` frames — a `CALL` (`to_a` = proxy) and a `DELEGATECALL` (`to_a` = implementation, **same calldata**) | Default `AND td.call_opcode = 'CALL'` on every `to_a`/selector monitor — else proxies double-count and implementation addresses match. Drop it deliberately (and say so in the header comment) when the delegatecall surface — self-upgrades, diamond facets — is in scope |
+| 11 | Nullable address columns (`contracts.eoa_deployer`, `contracts.deployer`) | Compare with `IS [NOT] DISTINCT FROM`, never `!=`/`=` — a NULL deployer silently drops the row from a `!=` filter. For "not the original deployer" asks, check **both** `eoa_deployer` AND `deployer` |
 
 ---
 
@@ -245,6 +248,7 @@ If the protocol doc lacks a value, **stop and ask** — never guess a selector o
 | **Bare `address = <single>` to pin a rare event on a busy contract** (lending pool, AMM router) | Planner leads with the `(address, block_number)` index → reads *every* log that contract emitted in the window; the inflated row-estimate also seq-scans 1:1 metadata joins. | **≥2 addresses:** `address = ANY(ARRAY[…])` (multi-element keeps `topic0` the lead). **One address:** a 1-element `IN` **folds to `=`** — fence it instead: `FROM (SELECT … FROM {{logs(…)}} WHERE topic0 = … OFFSET 0) l … WHERE l.address = '\x…'` (topic0-led inner scan; the outer `address` filter still excludes fork emitters sharing the topic0). Measured: 3.2 s addr-led → 2.9 s fenced, and the metadata seq-scan disappears. |
 | **Adding `WITH … AS MATERIALIZED` to "fix" a scary-looking EXPLAIN** | A materialize fence has real overhead and usually *slows* small-result-set enrichment (measured: flat **5 s** vs materialized **11.7 s** for the same liquidation feed). | Keep the flat query; **measure with `run-query` latency**, not EXPLAIN cost. Reserve materialization for true cross-row reuse / P12 aggregates. |
 | **Optimizing off EXPLAIN `cost=` / `rows=` magnitudes** | The engine can't constant-fold `<chain>.get_historical_block_number('Nd', now())` at plan time → no static chunk pruning → costs and row-estimates assume *all* chunks (seen: `cost≈400k`, `rows=48738` for a branch returning **268 rows in 3 s**). `Chunks excluded during startup: N` = runtime, not plan-time, exclusion. | Trust **`run-query` latency + `count(*)` probes**. Read EXPLAIN for *index choice / seq-scan vs index-scan*, ignore its absolute numbers. |
+| **Silently adding precision filters the user didn't ask for** (e.g. pinning `pancakeCall` callers to factory-deployed pairs) | Narrows recall below the literal ask — in security monitoring the dropped rows are often **exactly the attack case** (a fake pair invoking the callback). | Implement the literal ask; propose the tightening as a commented-out predicate or a question to the user. The reverse direction is fine: **broadening a vague ask** ("any admin function" → the standard Ownable/AccessControl/Pausable/UUPS surface) is encouraged — but **declare it** in the header comment and the chat summary, never silently. |
 
 ---
 
@@ -259,5 +263,6 @@ If the protocol doc lacks a value, **stop and ask** — never guess a selector o
 7. Cross-chain → `UNION ALL` per chain; never JOIN on `block_number`; row key / `GROUP BY` is **`(address, chain_id)`** (P12).
 8. **No trailing `;`** (§3 rule 9).
 9. **`tx_hash`** and a literal **`chain_id`** are projected (§4).
-10. **Final `SELECT` ends with `LIMIT 200`** (cap 500) — unless single-row aggregate. **Exception:** a P12 principal VIEW carries **NO `LIMIT`** (the reader has it).
+10. **`LIMIT 200` / `ORDER BY` mode-scoped (§3 rule 10):** query mode / test runs → final `SELECT` ends with `LIMIT 200` (cap 500, unless single-row aggregate); **deployed alerts & materialized queries → NEITHER** (top-N-by-design excepted; a P12 principal VIEW is always bare).
 11. **Expanded layout (§5 house style), never minified:** `SELECT` alone on its line, **one projected item per line** (4-space indent past the `SELECT` keyword), `FROM`/`JOIN`/`WHERE`/`GROUP BY`/`ORDER BY`/`LIMIT` left-aligned to that `SELECT`, continued `AND`/`OR` indented +2, and a **blank line before each `UNION ALL`**. Never crowd multiple columns onto one shared line.
+12. **Signal identity readable:** signature-form macros preferred; every raw `\x` topic0/selector literal carries its `-- EventName(types)` / `-- fnName(types)` comment. `transaction_detail` call monitors filter `call_opcode = 'CALL'` unless the delegatecall surface is deliberately in scope (§8.10).
