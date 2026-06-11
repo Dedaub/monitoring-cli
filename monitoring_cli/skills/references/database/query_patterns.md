@@ -8,6 +8,12 @@ the protocol doc supplies the constants. Pick via the hub's §7 map or the quick
 > alone on its line, **one projected item per line** (4-space indent past the `SELECT` keyword), keywords
 > (`FROM`/`JOIN`/`WHERE`/`GROUP BY`/`ORDER BY`/`LIMIT`) left-aligned to the `SELECT`, continued `AND`/`OR`
 > indented +2, and a **blank line before each `UNION ALL`**. Don't minify columns onto shared lines.
+>
+> **Two more normative rules baked into every template:** (1) every raw `\x` topic0/selector literal
+> carries an inline `-- EventName(types)` / `-- fnName(types)` comment (prefer the signature-form macros
+> outright — `macros.md`); (2) `transaction_detail` call monitors filter `td.call_opcode = 'CALL'`
+> (§8.10 — a proxy call also yields a DELEGATECALL frame with the same calldata; drop the filter only
+> deliberately, stating why in the header comment).
 
 **Quick-pick** — "find tx/call/function"→P1 · "find event/log/emits"→P2 · "who paid/sent/signed"→P5 ·
 "amount/volume/USD"→P4 · "by hour/day/week, trend"→P6 · "top/leaderboard"→P7 · "network/graph/edges"→P8 ·
@@ -36,9 +42,10 @@ WHERE td.to_a = ANY (ARRAY[
         -- , '{{CONTRACT_2}}'::bytea
       ])
   AND common.selector(td.calldata) = ANY (ARRAY[
-        '{{SELECTOR_1}}'::bytea
-        -- , '{{SELECTOR_2}}'::bytea
+        '{{SELECTOR_1}}'::bytea          -- {{FN_SIG_1}}, e.g. upgradeToAndCall(address,bytes)
+        -- , '{{SELECTOR_2}}'::bytea     -- {{FN_SIG_2}}
       ])
+  AND td.call_opcode = 'CALL'            -- §8.10: exclude DELEGATECALL frames (impl addrs, proxy self-calls)
   AND td.committed AND td.error IS NULL
   AND td.block_number BETWEEN
         (SELECT MAX(block_number) FROM {{CHAIN}}.block) - {{N_BLOCKS}}
@@ -46,7 +53,9 @@ WHERE td.to_a = ANY (ARRAY[
 ORDER BY td.block_number DESC, td.tx_index DESC;
 ```
 
-Hits the `(to_a, selector, block_number)` composite index directly.
+Hits the `(to_a, selector, block_number)` composite index directly. The `call_opcode = 'CALL'` default and
+the `-- fnName(types)` annotation next to each selector apply to **every** `to_a`/selector filter below
+(P3–P9) — they're shown here once and kept terse in the other templates.
 
 ### P2 — Event discovery (`address + topic0`)
 
@@ -64,7 +73,7 @@ SELECT
     common.hex_to_numeric('0x' || encode(l.data, 'hex')) AS data_uint256
 FROM {{CHAIN}}.logs l
 WHERE l.address = '{{EMITTER}}'::bytea
-  AND l.topic0  = '{{TOPIC0}}'::bytea
+  AND l.topic0  = '{{TOPIC0}}'::bytea    -- {{EVENT_SIG}}, e.g. Upgraded(address indexed implementation)
   AND l.block_number BETWEEN
         (SELECT MAX(block_number) FROM {{CHAIN}}.block) - {{N_BLOCKS}}
         AND (SELECT MAX(block_number) FROM {{CHAIN}}.block);
@@ -80,7 +89,8 @@ WITH calls AS (
     SELECT td.block_number, td.tx_index, td.from_a, td.to_a
     FROM {{CHAIN}}.transaction_detail td
     WHERE td.to_a = '{{CONTRACT}}'::bytea
-      AND common.selector(td.calldata) = '{{SELECTOR}}'::bytea
+      AND common.selector(td.calldata) = '{{SELECTOR}}'::bytea   -- {{FN_SIG}}
+      AND td.call_opcode = 'CALL'
       AND td.committed AND td.error IS NULL
       AND td.block_number BETWEEN
             (SELECT MAX(block_number) FROM {{CHAIN}}.block) - {{N_BLOCKS}}
@@ -95,7 +105,7 @@ JOIN {{CHAIN}}.logs l
   ON l.block_number = c.block_number
  AND l.tx_index     = c.tx_index
  AND l.address      = '{{EMITTER}}'::bytea
- AND l.topic0       = '{{TOPIC0}}'::bytea;
+ AND l.topic0       = '{{TOPIC0}}'::bytea;   -- {{EVENT_SIG}}
 ```
 
 The CTE narrows the join; address-leading predicate on `logs` keeps it index-resident.
@@ -111,7 +121,8 @@ WITH txs AS (   -- a tx filter (P1 or P3); strip if you want ALL transfers of th
     SELECT td.block_number, td.tx_index
     FROM {{CHAIN}}.transaction_detail td
     WHERE td.to_a = '{{CONTRACT}}'::bytea
-      AND common.selector(td.calldata) = ANY (ARRAY['{{SELECTOR}}'::bytea])
+      AND common.selector(td.calldata) = ANY (ARRAY['{{SELECTOR}}'::bytea])   -- {{FN_SIG}}
+      AND td.call_opcode = 'CALL'
       AND td.committed AND td.error IS NULL
       AND td.block_number BETWEEN
             (SELECT MAX(block_number) FROM {{CHAIN}}.block) - {{N_BLOCKS}}
@@ -145,7 +156,8 @@ WITH txs AS (
     SELECT td.block_number, td.tx_index, td.from_a AS relayer
     FROM {{CHAIN}}.transaction_detail td
     WHERE td.to_a = '{{CONTRACT}}'::bytea
-      AND common.selector(td.calldata) = ANY (ARRAY['{{META_TX_SELECTOR}}'::bytea])
+      AND common.selector(td.calldata) = ANY (ARRAY['{{META_TX_SELECTOR}}'::bytea])   -- {{FN_SIG}}
+      AND td.call_opcode = 'CALL'
       AND td.committed AND td.error IS NULL
       AND td.block_number BETWEEN
             (SELECT MAX(block_number) FROM {{CHAIN}}.block) - {{N_BLOCKS}}
@@ -160,7 +172,7 @@ JOIN {{CHAIN}}.logs au
   ON au.block_number = t.block_number
  AND au.tx_index     = t.tx_index
  AND au.address      = '{{CONTRACT}}'::bytea
- AND au.topic0       = '{{AUTH_TOPIC0}}'::bytea;
+ AND au.topic0       = '{{AUTH_TOPIC0}}'::bytea;   -- {{AUTH_EVENT_SIG}}
 ```
 
 Substitute `au.topic1` → `value_delta < 0` row from `token_ledger` if no auth event exists (e.g. Permit2 path).
@@ -184,7 +196,8 @@ WITH events AS (
      AND tl.token_address = '{{TOKEN}}'::bytea
      AND tl.value_delta < 0
     WHERE td.to_a = '{{CONTRACT}}'::bytea
-      AND common.selector(td.calldata) = ANY (ARRAY['{{SELECTOR}}'::bytea])
+      AND common.selector(td.calldata) = ANY (ARRAY['{{SELECTOR}}'::bytea])   -- {{FN_SIG}}
+      AND td.call_opcode = 'CALL'
       AND td.committed AND td.error IS NULL
       AND td.block_number BETWEEN
             (SELECT MAX(block_number) FROM {{CHAIN}}.block) - {{N_BLOCKS}}
@@ -222,7 +235,8 @@ JOIN {{CHAIN}}.token_ledger tl
  AND tl.token_address = '{{TOKEN}}'::bytea
  AND tl.value_delta < 0
 WHERE td.to_a = '{{CONTRACT}}'::bytea
-  AND common.selector(td.calldata) = ANY (ARRAY['{{SELECTOR}}'::bytea])
+  AND common.selector(td.calldata) = ANY (ARRAY['{{SELECTOR}}'::bytea])   -- {{FN_SIG}}
+  AND td.call_opcode = 'CALL'
   AND td.committed AND td.error IS NULL
   AND td.block_number BETWEEN
         (SELECT MAX(block_number) FROM {{CHAIN}}.block) - {{N_BLOCKS}}
@@ -253,7 +267,8 @@ JOIN {{CHAIN}}.token_ledger tl
  AND tl.token_address = '{{TOKEN}}'::bytea
  AND tl.value_delta < 0
 WHERE td.to_a = '{{CONTRACT}}'::bytea
-  AND common.selector(td.calldata) = ANY (ARRAY['{{SELECTOR}}'::bytea])
+  AND common.selector(td.calldata) = ANY (ARRAY['{{SELECTOR}}'::bytea])   -- {{FN_SIG}}
+  AND td.call_opcode = 'CALL'
   AND td.committed AND td.error IS NULL
   AND td.block_number BETWEEN
         (SELECT MAX(block_number) FROM {{CHAIN}}.block) - {{N_BLOCKS}}
@@ -271,7 +286,8 @@ Treat each path independently (different `to_a` + `selector` set), `UNION ALL` t
 SELECT 'path_a' AS path, td.block_number, td.tx_index, td.from_a
 FROM {{CHAIN}}.transaction_detail td
 WHERE td.to_a = '{{CONTRACT_A}}'::bytea
-  AND common.selector(td.calldata) = ANY (ARRAY['{{SEL_A1}}'::bytea, '{{SEL_A2}}'::bytea])
+  AND common.selector(td.calldata) = ANY (ARRAY['{{SEL_A1}}'::bytea, '{{SEL_A2}}'::bytea])   -- {{FN_SIG_A1}}, {{FN_SIG_A2}}
+  AND td.call_opcode = 'CALL'
   AND td.committed AND td.error IS NULL
   AND td.block_number BETWEEN
         (SELECT MAX(block_number) FROM {{CHAIN}}.block) - {{N_BLOCKS}}
@@ -282,7 +298,8 @@ UNION ALL
 SELECT 'path_b' AS path, td.block_number, td.tx_index, td.from_a
 FROM {{CHAIN}}.transaction_detail td
 WHERE td.to_a = ANY (ARRAY['{{CONTRACT_B1}}'::bytea, '{{CONTRACT_B2}}'::bytea])
-  AND common.selector(td.calldata) = ANY (ARRAY['{{SEL_B1}}'::bytea])
+  AND common.selector(td.calldata) = ANY (ARRAY['{{SEL_B1}}'::bytea])   -- {{FN_SIG_B1}}
+  AND td.call_opcode = 'CALL'
   AND td.committed AND td.error IS NULL
   AND td.block_number BETWEEN
         (SELECT MAX(block_number) FROM {{CHAIN}}.block) - {{N_BLOCKS}}
@@ -328,12 +345,14 @@ relayers" row), swap the equality for `WHERE cc.deployer = ANY(ARRAY['\x…'::by
 The split:
 
 1. **Principal VIEW (the row scan)** — one query that emits the **full per-row result, `--materialize VIEW`,
-   and carries NO `LIMIT`** (the §3-rule-10 / §10-rule-11 `LIMIT 200` default is **waived here** — the
+   and carries NO `LIMIT`** (the §3-rule-10 interactive `LIMIT 200` never applies here — the
    reader must see every row to sum correctly; a `LIMIT` would silently truncate the total). This is the
    query whose id you reference (e.g. `123142`). It still obeys every other rule: indexed lead,
    `block_number`/`duration=` bound, `committed AND error IS NULL`, explicit columns, no trailing `;`.
 2. **Aggregating reader (the sum)** — a **separate** query that does `FROM {{ref(query_id=123142)}}` and applies the
-   `SUM`/`GROUP BY`/`ORDER BY … LIMIT`. The reader is where the `LIMIT 200` final-output default lives.
+   `SUM`/`GROUP BY`. `ORDER BY … LIMIT N` belongs on the reader **only when top-N is the semantics**
+   (leaderboard); a deployed totals reader carries neither (§3 rule 10 — interactive runs may still cap
+   display at 200).
 
 ```sql
 -- Principal VIEW (id 123142): full rows, NO limit, materialize VIEW.
@@ -399,7 +418,7 @@ WHERE NOT EXISTS (
 )
 ```
 
-The platform's flagship oracle-staleness alert uses the equivalent `… EXCEPT SELECT to_a FROM {{transaction_detail('transmit(…)', duration='24 hour')}}`. Unique key `(address, date_error)` → at most one alert per address per day. Bound the window to the staleness SLA (24h here), not the per-chain default.
+The platform's flagship oracle-staleness alert uses the equivalent `… EXCEPT SELECT to_a FROM {{transaction_detail('transmit(…)', duration='24 hour')}}`. Unique key `(address, date_error)` → at most one alert per address per day. Bound the window to the staleness SLA (24h here), not the per-chain default. **No `call_opcode = 'CALL'` here** — for absence semantics, a frame of *any* opcode counts as "it happened"; filtering would fabricate false staleness alerts for delegatecall-driven keepers.
 
 ### P14 — Protocol drain (net USD moved in one tx)
 

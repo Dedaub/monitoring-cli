@@ -17,6 +17,15 @@ semantic faults below.
 6. **Materialization fit.** History-spanning lookup is TABLE+ref, not a windowed CTE; reusable lookup
    is VIEW+ref; final alert is INCREMENTAL.
 7. **Frequency / window** suit urgency and match (`duration=` vs frequency).
+8. **Scope discipline (directional — §9).** No silently-added precision filter that narrows recall below
+   the literal ask (e.g. pinning callback callers to factory-deployed pairs) — such tightenings must be a
+   commented-out option or a user question. Broadening a vague ask (standard admin surface, all forks) is
+   fine **only if declared** in the header comment + summary.
+9. **Production hygiene.** A deployed alert / materialized query carries **no `ORDER BY`/`LIMIT`**
+   (top-N-by-design excepted). Signal identity readable: signature-form macros, or every raw `\x`
+   topic0/selector literal annotated with its `-- EventName(types)` / `-- fnName(types)`. Call monitoring
+   on `transaction_detail` filters `call_opcode = 'CALL'`, or the header comment says why the
+   delegatecall surface is in scope (absence/P13 checks legitimately omit it).
 
 **Style — Suggestions only, never block:** descriptive aliases; rationale present; a suspected
 mechanical issue the gate missed → suggest re-running `preprocess-query`/`run-query`, don't block.
