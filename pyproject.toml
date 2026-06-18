@@ -1,6 +1,6 @@
 [project]
 name = "monitoring-cli"
-version = "0.3.10"
+version = "0.3.11"
 description = "CLI for Dedaub Monitoring API"
 requires-python = ">=3.13,<3.14"
 dependencies = [

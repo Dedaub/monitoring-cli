@@ -23,9 +23,10 @@ in the doc (some entries are bridged representations / decoys — the docs flag 
   `hyperliquid` `layerzero` `lighter` `nitro` `orbiter` `polygon_native` `rainbow` `ronin_native`
   `symbiosis` `synapse` `tether` `zkbridge` `zksync_native` — *(+`radiant` is omnichain lending)*
 - **Messaging (generic interop):** `layerzero` `axelar` `celer` `connext` `zkbridge`
-- **DEX / AMM:** `aerodrome` `balancer` `bancor` `blackhole` `camelot` `curve` `dodo` `ekubo` `fluid`
-  `fraxswap` `izumi` `metric` `native` `pancakeswap` `pharaoh` `quickswap` `sushiswap` `tessera`
-  `topaz` `traderjoe` `uniswap` `velodrome`
+- **DEX / AMM:** `aerodrome` `angstrom` `apeswap` `balancer` `bancor` `beets` `biswap` `blackhole`
+  `camelot` `curve` `dodo` `dooar` `ekubo` `fluid` `fraxswap` `izumi` `metric` `native` `pancakeswap`
+  `pharaoh` `quickswap` `ramses` `shibaswap` `sushiswap` `swaap` `tessera` `topaz` `traderjoe`
+  `uniswap` `velodrome`
 - **Aggregator (routing):** `dodo` (smartroute) · `native` (RFQ)
 - **Lending / money-market:** `40acres` `aave` `agave` `benqi` `compound` `euler` `fluid` `fluxfinance`
   `granary` `justlend` `layerbank` `lodestar` `maple` `moola` `moonwell` `morpho` `native` `pike`
@@ -37,7 +38,7 @@ in the doc (some entries are bridged representations / decoys — the docs flag 
 - **Perps / derivatives:** `gmx` `synthetix` `hyperliquid` `lighter`
 - **ALM (liquidity mgmt):** `arrakis`
 - **Oracle / data infra:** `chainlink`
-- **Token / stablecoin issuer:** `tether` (USDT0) · `maple` (SYRUP)
+- **Token / stablecoin issuer:** `tether` (USDT0) · `maple` (SYRUP) · `biswap` (BSW OFT on ETH/Base/Arb)
 
 *Not staking docs (no EVM contract): the beacon-chain entity tags `bitcoin_suisse`, `chorusone`,
 `darma_capital` are validator/operator labels only — stake via the shared ETH2 deposit contract or
@@ -56,6 +57,8 @@ third-party protocols (Liquid Collective / StakeWise). No `<slug>/` dir exists f
 | `agave` | Lending | +Other (Gnosis) | core.md | Aave-V2 fork, Gnosis-only; absent all 7 |
 | `agglayer` | Bridge | ETH +Other | core.md | Polygon AggLayer unified LxLy bridge (L1 anchor) |
 | `allbridge` | Bridge | 7 +Other | classic.md, core.md | Allbridge Core + Classic cross-chain |
+| `angstrom` | DEX | ETH | core.md | UniV4 hook batch-auction MEV-protect order flow; ETH-only, log0 swaps |
+| `apeswap` | DEX | BNB·ETH·Arb·Poly | core.md | UniV2 fork + MasterApe farms + BANANA; BNB primary, no Base/Avax/OP |
 | `arbitrum_native` | Bridge | ETH·Arb | core.md | Arbitrum canonical Nitro bridge (L1↔Arb/Nova) |
 | `arrakis` | ALM | ETH·Poly·Arb·OP·Base·BNB | v1/v2/modular.md | Uniswap-V3 liquidity-management vaults; not Avalanche |
 | `avalanche_c_bitcoin` | Bridge | Avax +Other (BTC) | core.md | Avalanche Bridge BTC.b wrapped Bitcoin |
@@ -64,8 +67,10 @@ third-party protocols (Liquid Collective / StakeWise). No `<slug>/` dir exists f
 | `balancer` | DEX | ETH·Base·Arb·OP·Avax +Gnosis | v2.md, v3.md | Weighted/boosted-pool AMM + vault |
 | `bancor` | DEX | ETH | v3.md | Omnipool single-sided AMM, ETH-only |
 | `beamer` | Bridge | ETH·OP·Base·Arb +Other | core.md | Optimistic rollup-to-rollup bridge |
+| `beets` | DEX | OP | core.md | Beethoven X; Balancer-V2 fork, shared Vault; OP-only of 7 |
 | `benqi` | Lending·LST | Avax | core.md | Compound-V2 fork + sAVAX liquid staking; Avalanche-only |
 | `binance` | LST | ETH·BNB | wbeth.md | WBETH (yield-in-price) + BETH (1:1 receipt) |
+| `biswap` | DEX·Token | BNB (+BSW ETH·Base·Arb) | core.md | UniV2 fork + iZi-style V3; BNB-only DEX, BSW OFT bridged to 3 |
 | `blackhole` | DEX | Avax | classic.md, cl.md | ve(3,3) + concentrated-liquidity AMM, Avalanche |
 | `blast_native` | Bridge | ETH +Other (Blast) | core.md | Blast OP-Stack bridge + YieldManager |
 | `butter` | Bridge | 7 +Other | mos-v2/v3.md, router.md | MAP Omnichain Service (MOS) cross-chain |
@@ -78,6 +83,7 @@ third-party protocols (Liquid Collective / StakeWise). No `<slug>/` dir exists f
 | `connext` | Bridge·Messaging | ETH·Base·BNB·Arb·OP·Poly | amarok.md, core.md | Connext/Everclear intent clearing |
 | `curve` | DEX·CDP | 7 | curve.md, crvusd.md | StableSwap/crypto AMM + crvUSD LLAMMA CDP |
 | `dodo` | DEX·Aggregator | 7 | v1/v2/v3.md, smartroute.md | PMM AMM + SmartRoute aggregator |
+| `dooar` | DEX | ETH·BNB | core.md | DooarSwap (STEPN); tiny UniV2 fork, ETH+BSC only |
 | `eigenlayer` | Restaking | ETH | core.md | Restaking core (Delegation/Strategy/EigenPod) + EIGEN; ETH-only |
 | `ekubo` | DEX | ETH·Base·Arb | v2.md, v3.md | UniV4-like singleton AMM; anonymous log0 swaps |
 | `euler` | Lending | ETH·Base·Arb·BNB·Avax·Poly | v1.md, v2.md | V1 module-dispatch (dead post-hack) → V2 EVC+EVK vaults |
@@ -111,15 +117,18 @@ third-party protocols (Liquid Collective / StakeWise). No `<slug>/` dir exists f
 | `quickswap` | DEX | Poly·Base | v2/v3/v4.md | UniV2 fork + Algebra V1/Integral; Polygon + Base |
 | `radiant` | Lending·Bridge | Arb·BNB·ETH·Base | v1.md, v2.md | Aave-V2 omnichain (LayerZero); ~$50M Oct-2024 key compromise |
 | `rainbow` | Bridge | ETH +Other (NEAR) | core.md | NEAR Rainbow Bridge (legacy), ETH L1 |
+| `ramses` | DEX | Arb | cl.md, legacy.md | Solidly ve(3,3) + UniV3-style CL (fee-keyed); Arbitrum-only |
 | `realt_rmm` | Lending | +Other (Gnosis) | core.md | RealToken Aave fork, Gnosis-only; RWA reserves |
 | `rocketpool` | LST | ETH +L2 bridged | core.md, l2.md | rETH decentralized-validator staking; L2 = bridged rETH |
 | `ronin_native` | Bridge | ETH +Other (Ronin) | core.md | Ronin gaming-chain bridge, ETH L1 |
 | `seamlessprotocol` | Lending·Restaking | Base·ETH | v1.md, leveragetokens.md | Aave-V3 lending (Base) + Morpho-powered leverage tokens |
+| `shibaswap` | DEX | ETH | core.md | UniV2 fork (SSLP) + TopDog farm + BONE/Bury staking; ETH-only |
 | `sonne_finance` | Lending | OP·Base | core.md | Compound-V2 fork; wound down post ~$20M Base exploit |
 | `spark` | Lending·CDP | ETH +Gnosis | sparklend.md | Aave-V3 fork; D3M-supplied fixed-$1 DAI |
 | `stakewise` | LST | ETH +Gnosis | v2.md, v3.md | V2 pooled sETH2/rETH2 → V3 osETH vaults; ETH-only of 7 |
 | `strike` | Lending | ETH | core.md | Compound-V2 fork (STRK), ETH-only |
 | `sushiswap` | DEX | 7 | v2/v3/trident.md | UniV2/V3 fork + Trident; all 7 |
+| `swaap` | DEX | 7 | core.md | Swaap V2; Balancer-V2-fork Vault + signed-RfQ SafeguardPools; all 7 |
 | `swell` | LST·Restaking | ETH +Other (Swellchain) | core.md | swETH (LST) + rswETH (LRT) + Earn vaults; ETH + Swellchain |
 | `symbiosis` | Bridge | 7 | core.md | Cross-chain AMM/stableswap liquidity bridge |
 | `synapse` | Bridge | 7 | synapse.md, rfq.md | nUSD/nETH liquidity bridge + RFQ |
