@@ -49,7 +49,11 @@ anti-patterns. Its two siblings hold the bulk: **`query_patterns.md`** (§5 P1�
   `{% for network in networks('ethereum','base') %} … {% if not loop.last %}union all{% endif %} {% endfor %}`
   expands per network. Read `{{network.param("x")}}`, chain literal `{{network.get_chain_id()}}`,
   address→bytea via `address_to_bytea(x)::ethaddress` or `| to_address`. The hand-written per-chain
-  `UNION ALL` (§5 P10) is the param-free equivalent. **Param names are role-bearing** (`token_address`,
+  `UNION ALL` (§5 P10) is the param-free equivalent. **The `{% if not loop.last %}union all{% endif %}`
+  separator is mandatory** — drop it and the loop emits adjacent `SELECT`s with no `UNION ALL` between them →
+  invalid SQL the moment a 2nd network is configured. It is **invisible on a single-network test** (`loop.last`
+  is immediately true, so the gate passes); always `preprocess-query`-expand with ≥2 networks before deploy.
+  **Param names are role-bearing** (`token_address`,
   `pool_addresses`), never generic (`address`, `addresses`) — the name is the only documentation a user
   editing the param sees.
 - **Off-chain HTTP** (`http_get_json`, `common.http_post`) exists but is demo-grade (external dependency,

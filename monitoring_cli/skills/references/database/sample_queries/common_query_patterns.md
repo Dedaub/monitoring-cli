@@ -34,7 +34,7 @@ Per-chain schema (`base.`, `ethereum.`, `arbitrum.`, `optimism.`, `polygon.`, `b
 | `<chain>.logs` | `(block_number, tx_index, vm_step)` | One row per emitted `LOG*`. `address` = emitter, `topic0..3`, `data`. |
 | `<chain>.token_ledger` | `(address, block_number, tx_index, vm_step_start, vm_step)` | Parsed token balance deltas. One row per side of each transfer; `value_delta` is signed. |
 | `<chain>.token_transfers` | `(block_number, tx_index, vm_step_start, vm_step)` | One row per token transfer: `token_address`, `from_a`, `to_a`, `value` (unsigned). Lighter than `token_ledger` when you don't need signed deltas / counterparty. |
-| `<chain>.contracts` | `(address)` | One row per deployed contract. `deployer`, `block_number`. |
+| `<chain>.contracts` | `(address)` | One row per deployed contract. `deployer`, `eoa_deployer` (both nullable — §8.11), `block_number`, `md5_bytecode` (→ code-similarity via §4 embeddings). |
 | `<chain>.block` | `(block_number)` | Block headers; source of truth for tip and timestamps. |
 | `<chain>.token_balance` | `(token_address, owner_address)` | **Current** ERC-20 balance per holder: `value` (numeric, raw units), `block_number` (last update). Indexed on `owner_address` and `token_address`-leading PK → both "holders of token X" and "balances of address Y" are index-fast. Holder/concentration/whale analytics — no log replay needed. Referenced raw (no macro). |
 | `<chain>.protocol_contract` | `(protocol_id, address)` | Maps a contract `address` → `protocol_id` for **Watchdog-supported** protocols. JOIN `token_ledger`/`logs`/`transaction_detail` `USING (address)` to attribute activity to a protocol without hardcoding its address set. Pair with `<chain>.protocol (protocol_id, protocol_name)` for the readable name. Referenced raw. |
@@ -123,7 +123,7 @@ WHERE <chain>.block_timestamp(block_number) BETWEEN now() - interval '{{X}}' AND
 
 Full cheat-sheet in the sibling file. Inventory (what's covered): selector · indexed-topic→address ·
 `uint256`/packed-`uint24` from `data` · readable `0x` output · `tx_hash` in result · amount→human ·
-ERC20 metadata (`latest_token_info`) · **USD `to_usd_value`** · price/logo (`network_token_info`) ·
+ERC20 metadata (`latest_token_info`) · **USD price — JOIN `network_token_info.last_price`** · one-call `to_usd_value` (silent-0 if unpriced) ·
 **live state `eth_call`** · **holders `token_balance`** · is-contract / contract-creation ·
 `get_chain_id()` · **mint/burn (zero-address)** · **price drift (÷0-safe)** · 1:1 `LATERAL` enrich ·
 **token-not-in-event → resolve in-tx via `token_ledger`** · `chain_id` literal · time-bucket.
@@ -225,6 +225,7 @@ If the protocol doc lacks a value, **stop and ask** — never guess a selector o
 | 9 | Sequencer drift | Block-window predicates are approximate; if exact wall-clock matters, use `block_timestamp(...)` predicate (§2) |
 | 10 | Proxy calls produce TWO `transaction_detail` frames — a `CALL` (`to_a` = proxy) and a `DELEGATECALL` (`to_a` = implementation, **same calldata**) | Default `AND td.call_opcode = 'CALL'` on every `to_a`/selector monitor — else proxies double-count and implementation addresses match. Drop it deliberately (and say so in the header comment) when the delegatecall surface — self-upgrades, diamond facets — is in scope |
 | 11 | Nullable address columns (`contracts.eoa_deployer`, `contracts.deployer`) | Compare with `IS [NOT] DISTINCT FROM`, never `!=`/`=` — a NULL deployer silently drops the row from a `!=` filter. For "not the original deployer" asks, check **both** `eoa_deployer` AND `deployer` |
+| 12 | `token_balance` keeps fully-exited holders as stale `value = 0` rows (never pruned) | `AND value > 0` on every holder-count / concentration / registry / supply read — else dead rows inflate the count and get scanned. Omit only when a zero balance is the point (ex-holders, or a specific token↔wallet combo that holds nothing) |
 
 ---
 
@@ -249,6 +250,7 @@ If the protocol doc lacks a value, **stop and ask** — never guess a selector o
 | **Adding `WITH … AS MATERIALIZED` to "fix" a scary-looking EXPLAIN** | A materialize fence has real overhead and usually *slows* small-result-set enrichment (measured: flat **5 s** vs materialized **11.7 s** for the same liquidation feed). | Keep the flat query; **measure with `run-query` latency**, not EXPLAIN cost. Reserve materialization for true cross-row reuse / P12 aggregates. |
 | **Optimizing off EXPLAIN `cost=` / `rows=` magnitudes** | The engine can't constant-fold `<chain>.get_historical_block_number('Nd', now())` at plan time → no static chunk pruning → costs and row-estimates assume *all* chunks (seen: `cost≈400k`, `rows=48738` for a branch returning **268 rows in 3 s**). `Chunks excluded during startup: N` = runtime, not plan-time, exclusion. | Trust **`run-query` latency + `count(*)` probes**. Read EXPLAIN for *index choice / seq-scan vs index-scan*, ignore its absolute numbers. |
 | **Silently adding precision filters the user didn't ask for** (e.g. pinning `pancakeCall` callers to factory-deployed pairs) | Narrows recall below the literal ask — in security monitoring the dropped rows are often **exactly the attack case** (a fake pair invoking the callback). | Implement the literal ask; propose the tightening as a commented-out predicate or a question to the user. The reverse direction is fine: **broadening a vague ask** ("any admin function" → the standard Ownable/AccessControl/Pausable/UUPS surface) is encouraged — but **declare it** in the header comment and the chat summary, never silently. |
+| **`{% for network in networks(…) %}` loop missing the `{% if not loop.last %}union all{% endif %}` separator** | For >1 network the loop emits adjacent `SELECT`s with no `UNION ALL` between them → invalid SQL. **Invisible on a single-network test** (`loop.last` is immediately true → the gate passes), then breaks the moment a 2nd network is configured. | Always end the loop body with `{% if not loop.last %}union all{% endif %}` (macros.md); `preprocess-query`-expand with ≥2 networks before deploy. |
 
 ---
 
@@ -266,3 +268,4 @@ If the protocol doc lacks a value, **stop and ask** — never guess a selector o
 10. **`LIMIT 200` / `ORDER BY` mode-scoped (§3 rule 10):** query mode / test runs → final `SELECT` ends with `LIMIT 200` (cap 500, unless single-row aggregate); **deployed alerts & materialized queries → NEITHER** (top-N-by-design excepted; a P12 principal VIEW is always bare).
 11. **Expanded layout (§5 house style), never minified:** `SELECT` alone on its line, **one projected item per line** (4-space indent past the `SELECT` keyword), `FROM`/`JOIN`/`WHERE`/`GROUP BY`/`ORDER BY`/`LIMIT` left-aligned to that `SELECT`, continued `AND`/`OR` indented +2, and a **blank line before each `UNION ALL`**. Never crowd multiple columns onto one shared line.
 12. **Signal identity readable:** signature-form macros preferred; every raw `\x` topic0/selector literal carries its `-- EventName(types)` / `-- fnName(types)` comment. `transaction_detail` call monitors filter `call_opcode = 'CALL'` unless the delegatecall surface is deliberately in scope (§8.10).
+13. **`networks()` loop has its `UNION ALL` separator:** every `{% for network in networks(…) %}` body ends with `{% if not loop.last %}union all{% endif %}` (§9) — confirmed by `preprocess-query`-expanding to ≥2 networks; a single-network test silently passes a missing separator.

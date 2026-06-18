@@ -36,9 +36,10 @@ constants; always open the named `<slug>/<file>.md` for the actual topics/select
    ```
    `get-schema` is authoritative for tables/columns; refs supply *constants only*. Verify per chain
    (coverage varies). For money/token asks: `network_token_info` (PK `token_address`) carries
-   `last_price`+`symbol`+`decimals`+`logo_*`+`presentation_symbol` — **the only USD-price source**
-   (`latest_token_info` is metadata, no price), but `last_price` is **NULL for stablecoins** (USDC/USDT/DAI
-   are the USD quote unit → `to_usd_value` returns **0** for them; pin to \$1 by address — §5 USD rule).
+   `last_price`+`symbol`+`decimals`+`logo_*`+`presentation_symbol` — **the canonical USD-price source, kept
+   up to date; LEFT JOIN it for prices** (`latest_token_info` is metadata, no price), but `last_price` is
+   **NULL for stablecoins** (USDC/USDT/DAI are the USD quote unit → `to_usd_value` returns **0** for them;
+   pin to \$1 by address — §5 USD rule).
    `logs.topic0` is indexed on most chains but **not Base** →
    on Base lead with `address`, never bare `topic0`.
 3. **Pick mode** — query (run + show) vs alert (deploy on schedule). **If the user didn't explicitly name
@@ -46,7 +47,15 @@ constants; always open the named `<slug>/<file>.md` for the actual topics/select
    "what are the …" can be a one-off read *or* the spec for a recurring feed; the same protocol+event ask
    is valid in both modes. Skip the question only when the words pick the mode ("alert me", "notify",
    "set up monitoring", "every N min" → alert; "run a query", "show me now", "one-off" → query).
-4. **Alert mode — collect prefs once (reuse all session), in order. `AskUserQuestion` for all but (a):**
+
+   **Explicit choices win.** When the user names a network/chain, mode, address, threshold, or window, use it
+   verbatim — don't re-identify or override it. If on-chain identity suggests otherwise (e.g. the address
+   resolves as an Arbitrum pool, not the Ethereum one asked for), surface the conflict **once** in chat and
+   proceed on the user's stated value unless they correct you — never silently switch or silently re-ask.
+4. **Alert mode — collect prefs once (reuse all session), in order. `AskUserQuestion` for all but (a).**
+   These (a)–(d) are the **complete clarifying set — invent no others**; in particular the materialization
+   tier (CTE / VIEW+`ref` / TABLE+`ref`) is **agent-decided from the Step 4 table, never a user pop-up** —
+   apply it the same way every run.
 
    **(a) Condition** — free text. User types protocol + event/threshold (e.g. "USDC transfers > \$1M",
    "Aave v3 admin change", "Morpho liquidations"). The one thing you can't enumerate. **Invite specifics:**
@@ -264,12 +273,15 @@ Write PG SQL from the §5 skeleton + grepped constants + scope guard + Step 4 st
   Strip both before deploy. Exception: top-N-by-design (leaderboard reader) keeps `ORDER BY … LIMIT N` —
   there it IS the semantics.
 - Value math via `token_ledger.value_delta` (signed), not decoding `logs.data`.
-- **Metadata:** `latest_token_info` (PK, 1:1) → `symbol`/`token_name`/`decimals`. **USD:**
-  `<chain>.to_usd_value(raw, token)` (decimals + price in one call) or `network_token_info.last_price` when
-  you need the fields — `round((… * last_price)::numeric, 2)` (last_price is double). LEFT JOIN so rows
-  survive a missing price. **Stablecoins carry NO price** — `last_price` is **NULL** for USDC/USDT/DAI (the
+- **Metadata:** `latest_token_info` (PK, 1:1) → `symbol`/`token_name`/`decimals`. **USD price — LEFT JOIN
+  `network_token_info`:** `LEFT JOIN <chain>.network_token_info nti ON nti.token_address = token`, read
+  `nti.last_price` (double, **kept up to date — the canonical price source**):
+  `round((raw / pow(10, nti.decimals) * nti.last_price)::numeric, 2)`. LEFT JOIN so rows survive a missing
+  price (NULL, not a silent 0). `<chain>.to_usd_value(raw, token)` is the one-call convenience (decimals +
+  price internally) but **silently returns 0 for any unpriced token** — reserve it for quick one-offs where
+  every token is known-priced. **Stablecoins carry NO price** — `last_price` is **NULL** for USDC/USDT/DAI (the
   USD quote unit), so `to_usd_value` returns **0** for them (silently zeroing the commonest collateral). Pin
-  stables to \$1 **by address**: `COALESCE(last_price::numeric, CASE WHEN token = ANY(ARRAY['\x…usdc…'::bytea,
+  stables to \$1 **by address**: `COALESCE(nti.last_price::numeric, CASE WHEN token = ANY(ARRAY['\x…usdc…'::bytea,
   '\x…usdt…'::bytea]) THEN 1.0 END)` — **never** a blanket `COALESCE(…, 1)` (misvalues a genuinely unpriced
   *volatile* token at \$1). Verify per chain which collaterals are NULL before trusting a USD sum.
 - **Token not in the event** → resolve in-tx from `token_ledger` (the moved token's row whose
