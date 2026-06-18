@@ -284,6 +284,9 @@ Write PG SQL from the §5 skeleton + grepped constants + scope guard + Step 4 st
   stables to \$1 **by address**: `COALESCE(nti.last_price::numeric, CASE WHEN token = ANY(ARRAY['\x…usdc…'::bytea,
   '\x…usdt…'::bytea]) THEN 1.0 END)` — **never** a blanket `COALESCE(…, 1)` (misvalues a genuinely unpriced
   *volatile* token at \$1). Verify per chain which collaterals are NULL before trusting a USD sum.
+  **Now vs then:** `last_price` is *current* price; for value **at the time of an event** or **over time**
+  (historical/backtested USD, stablecoin depeg, mcap/supply trends) use `common.historical_token_price`
+  (as-of nearest-prior `ts`, §4) — which **does** price stablecoins.
 - **Token not in the event** → resolve in-tx from `token_ledger` (the moved token's row whose
   `value_delta` = the event amount), not a registry. Prefer this over TABLE+ref.
 - Macros: `duration=` for the window; signature forms preferred (the signal-identity rule above; macro adds

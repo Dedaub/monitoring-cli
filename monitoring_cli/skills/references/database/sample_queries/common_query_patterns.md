@@ -38,6 +38,7 @@ Per-chain schema (`base.`, `ethereum.`, `arbitrum.`, `optimism.`, `polygon.`, `b
 | `<chain>.block` | `(block_number)` | Block headers; source of truth for tip and timestamps. |
 | `<chain>.token_balance` | `(token_address, owner_address)` | **Current** ERC-20 balance per holder: `value` (numeric, raw units), `block_number` (last update). Indexed on `owner_address` and `token_address`-leading PK → both "holders of token X" and "balances of address Y" are index-fast. Holder/concentration/whale analytics — no log replay needed. Referenced raw (no macro). |
 | `<chain>.protocol_contract` | `(protocol_id, address)` | Maps a contract `address` → `protocol_id` for **Watchdog-supported** protocols. JOIN `token_ledger`/`logs`/`transaction_detail` `USING (address)` to attribute activity to a protocol without hardcoding its address set. Pair with `<chain>.protocol (protocol_id, protocol_name)` for the readable name. Referenced raw. |
+| `common.historical_token_price` | `(chain_id, token_address, ts)` | **Cross-chain** price / market-cap / supply **time-series** — `common` schema, **not** per-chain (carries a `chain_id` column). `price`/`cap` (`float8`), `total_supply` (`numeric`) per `ts` (~30-min cadence, occasional multi-hour gaps). Indexes: `(token_address, chain_id, ts DESC)` → **as-of price for a token** (§4); `(chain_id, ts, cap)` → mcap leaderboard as-of a date; `(ts DESC)` global. **Stablecoins ARE priced here** (≈1.0 — unlike `network_token_info`). Referenced raw. |
 
 ### 1.1 Index inventory (use these as leading predicates)
 
@@ -207,6 +208,7 @@ If the protocol doc lacks a value, **stop and ask** — never guess a selector o
 | "Mint / burn / supply change" | §4 zero-address `token_ledger` | token address |
 | "Oracle/price drift between two sources" | §4 drift formula + `to_usd_value`/`eth_call` | the two price sources |
 | "How similar are two contracts / did an upgrade really change the code?" (suspicious proxy upgrade) | §4 contract-similarity primitive + P2 on `Upgraded(address indexed implementation)` + `LAG` per proxy | proxy address(es) or the Upgraded topic0 |
+| "Value at the time / historical price / stablecoin depeg / market-cap or supply over time" | §4 as-of `common.historical_token_price` (LATERAL nearest-prior `ts`) | token address(es) + `chain_id`; a `ts` window |
 
 ---
 
