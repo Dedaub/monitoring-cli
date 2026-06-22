@@ -106,7 +106,7 @@ Classify:
 
 | Axis | Options |
 |------|---------|
-| **Data source** | `logs` (events) / `outer_transaction` (tx) / `transaction_detail` (call frames + `caller_vm_step_stack` depth, `is_ancestor`) / `token_ledger`,`token_transfers` (value) / `token_balance` (holder balances) / `eth_call` (live state) / `protocol_contract` (attribute to a protocol) |
+| **Data source** | `logs` (events) / `outer_transaction` (tx) / `transaction_detail` (call frames + `caller_vm_step_stack` depth, `is_ancestor`) / `token_ledger`,`token_transfers` (value) / `token_balance` (holder balances) / `eth_call` (live state) / `protocol_contract` (attribute to a protocol) / `dex_pool` (token-pair → pool / V4 PoolId resolution — §4) |
 | **Primitive** | topic0 / 4-byte selector / token+decimals / address |
 | **Mode** | presence (P1/P2/…) vs **absence** (didn't happen in N — P13) |
 | **Scope** | specific deployment vs all-forks (Step 3 collision guard) |

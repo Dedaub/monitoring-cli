@@ -38,6 +38,8 @@ Per-chain schema (`base.`, `ethereum.`, `arbitrum.`, `optimism.`, `polygon.`, `b
 | `<chain>.block` | `(block_number)` | Block headers; source of truth for tip and timestamps. |
 | `<chain>.token_balance` | `(token_address, owner_address)` | **Current** ERC-20 balance per holder: `value` (numeric, raw units), `block_number` (last update). Indexed on `owner_address` and `token_address`-leading PK → both "holders of token X" and "balances of address Y" are index-fast. Holder/concentration/whale analytics — no log replay needed. Referenced raw (no macro). |
 | `<chain>.protocol_contract` | `(protocol_id, address)` | Maps a contract `address` → `protocol_id` for **Watchdog-supported** protocols. JOIN `token_ledger`/`logs`/`transaction_detail` `USING (address)` to attribute activity to a protocol without hardcoding its address set. Pair with `<chain>.protocol (protocol_id, protocol_name)` for the readable name. Referenced raw. |
+| `<chain>.dex_pool` | `(block_number, tx_index, vm_step)` (pool-creation event) | **Token pair → pool** for Uniswap V2/V3/V4 families + all forks (2-token only; **not** Curve/Balancer/multi-token). `pool_tokens` (`ethaddress[2]`), `pool_address`, `factory_address` (= the specific DEX — `project_name` is **only** the V2/V3/V4 standard), `fee`, `metadata` (V4 `id`=PoolId, `hook`). **Index-backed only on `pool_tokens[1]`/`pool_tokens[2]`/`pool_address`** → pivot token(s)→pool; any other lead is a multi-M-row seq scan. `pool_address` **NOT unique**; **V4 pools all share `pool_address`=PoolManager → key on `metadata->>'id'`**. Raw, no macro (BNB = `binance.dex_pool`). Resolution recipe → §4. |
+| `<chain>.dex_pool_activity` | `(pool_address)` | `last_active_block` per pool — liveness filter among the millions of dead pools. Coarse for V4 (one row per PoolManager). Raw. |
 | `common.historical_token_price` | `(chain_id, token_address, ts)` | **Cross-chain** price / market-cap / supply **time-series** — `common` schema, **not** per-chain (carries a `chain_id` column). `price`/`cap` (`float8`), `total_supply` (`numeric`) per `ts` (~30-min cadence, occasional multi-hour gaps). Indexes: `(token_address, chain_id, ts DESC)` → **as-of price for a token** (§4); `(chain_id, ts, cap)` → mcap leaderboard as-of a date; `(ts DESC)` global. **Stablecoins ARE priced here** (≈1.0 — unlike `network_token_info`). Referenced raw. |
 
 ### 1.1 Index inventory (use these as leading predicates)
@@ -51,6 +53,7 @@ Per-chain schema (`base.`, `ethereum.`, `arbitrum.`, `optimism.`, `polygon.`, `b
 | `token_ledger` | `(address)`, `(address, block_number, tx_index, vm_step_start, vm_step)`, `(block_number)`, `(block_number, tx_index, vm_step_start, vm_step)` |
 | `contracts` | `(address)` [pkey], `(deployer)`, `(block_number)` |
 | `token_balance` | `(token_address, owner_address)` [pkey], `(owner_address)`, `(block_number)` — lead with `token_address` for holders-of-a-token, `owner_address` for balances-of-an-address |
+| `dex_pool` | `(pool_address)` [pool→pair], `(pool_tokens[1])`, `(pool_tokens[2])` [token/pair→pool — pivot lead] — **no GIN on the whole array** → use `[1]`/`[2]` **equality**, never `@>` containment. Pair lookup = `BitmapAnd` of `[1]`+`[2]`; test both orderings (not sorted). `dex_pool_activity`: `(pool_address)` |
 
 ### 1.2 Helper functions (PG18+)
 
@@ -127,7 +130,8 @@ Full cheat-sheet in the sibling file. Inventory (what's covered): selector · in
 ERC20 metadata (`latest_token_info`) · **USD price — JOIN `network_token_info.last_price`** · one-call `to_usd_value` (silent-0 if unpriced) ·
 **live state `eth_call`** · **holders `token_balance`** · is-contract / contract-creation ·
 `get_chain_id()` · **mint/burn (zero-address)** · **price drift (÷0-safe)** · 1:1 `LATERAL` enrich ·
-**token-not-in-event → resolve in-tx via `token_ledger`** · `chain_id` literal · time-bucket.
+**token-not-in-event → resolve in-tx via `token_ledger`** · `chain_id` literal · time-bucket ·
+**DEX pool / pair → pool-ID resolution (`dex_pool`; token-pivot, incl. V4 PoolId)**.
 
 ---
 
@@ -209,6 +213,7 @@ If the protocol doc lacks a value, **stop and ask** — never guess a selector o
 | "Oracle/price drift between two sources" | §4 drift formula + `to_usd_value`/`eth_call` | the two price sources |
 | "How similar are two contracts / did an upgrade really change the code?" (suspicious proxy upgrade) | §4 contract-similarity primitive + P2 on `Upgraded(address indexed implementation)` + `LAG` per proxy | proxy address(es) or the Upgraded topic0 |
 | "Value at the time / historical price / stablecoin depeg / market-cap or supply over time" | §4 as-of `common.historical_token_price` (LATERAL nearest-prior `ts`) | token address(es) + `chain_id`; a `ts` window |
+| "Which pool(s) / pool address for token or pair X?" / "monitor swaps on the WETH/USDC pool(s)" — esp. **Uniswap V4** (pools share the PoolManager, addressable only by PoolId) | `dex_pool` token-pivot (§4) → pool-address set (V2/V3) or `metadata->>'id'` PoolId set (V4) → feeds P2/P4 | token or pair addresses; for V4 the PoolManager address + `Swap` topic0 |
 
 ---
 
