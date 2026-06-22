@@ -53,10 +53,10 @@ The skill picker and the login browser flow are interactive, so you stay in cont
 ## Authentication
 
 ```bash
-dedaub-monitoring login   # or: make login
+dedaub-monitoring login    # or: make login
 ```
 
-This opens a browser-based OAuth2 device flow. Your credentials are stored locally and reused across sessions.
+This opens a browser-based OAuth2 device flow. Your credentials are stored locally and reused across sessions; run `logout` to clear them. Every command accepts `--profile/-p` to keep separate credential sets (e.g. work vs personal).
 
 ## Usage
 
@@ -171,28 +171,90 @@ Then type `/monitoring-cli` in Claude Code (or your agent) to start a session. T
 
 ## Commands
 
+The [Usage](#usage) walkthrough above covers the common path — log in, create a query, write SQL, enable alerts. This is the full reference, grouped by what you're doing: the **Account & session** commands get you set up, and the **Operations** sub-sections cover everything you do to existing queries afterwards.
+
+Commands that act on a query or folder take it **either** by `--id <id>` **or** by `--path /Folder/Name` (add `--entity-id` to reach another entity's tree), so once you know what you want you can edit it directly without browsing first. Every command also accepts `--profile/-p`.
+
+### Account & session
+
 | Command | Description |
 |---------|-------------|
-| `login` | Authenticate via browser |
-| `entities` | List your user and org accounts |
-| `tree` | Show your query file tree |
-| `create-folder` | Create a folder |
-| `create-query` | Create an empty query |
-| `write-query` | Update a query's SQL |
+| `login` | Authenticate via browser (OAuth2 device flow) |
+| `logout` | Remove stored credentials for a profile |
+| `entities` | List entities (your user + orgs) available to you |
+| `entity` | Look up an entity by username |
+| `tree` | Show the query file tree for an entity |
+| `install-skill` | Install the agent skill to one or more agents (`--agent`, `--all`) — see [above](#claude-code-skill) |
+
+## Operations
+
+### Folders
+
+| Command | Description |
+|---------|-------------|
+| `create-folder` | Create a folder (intermediate folders are created automatically) |
+| `rename-folder` | Rename a folder (`--new-path`) |
+| `delete-folder` | Delete a folder |
+| `move-folder` | Move a folder under another parent (`--to-folder-id`) |
+| `subfolders` | List a folder's immediate subfolders |
+
+### Queries — create, edit & organize
+
+| Command | Description |
+|---------|-------------|
+| `create-query` | Create a new empty query |
+| `write-query` | Update a query's SQL (pass as an argument or pipe via stdin) |
 | `read-query` | Print a query's SQL |
 | `query-metadata` | Print full query metadata as JSON |
-| `get-schema` | Show available tables and columns |
-| `run-query` | Execute a query and print results |
-| `get-config` | Show materialization config |
-| `set-config` | Set materialization config |
-| `enable-alerts` | Enable incremental alerts for a query |
-| `disable-alerts` | Disable alert notifications |
+| `move-query` | Move a query to another folder (`--to-folder-id`) |
+| `star-query` / `unstar-query` | Star or unstar (favourite) a query |
+| `query-by-key` | Fetch a query's metadata by its share key (`--key`) |
+| `generate-query` | Generate DedaubQL from natural language via the platform generator (for direct/programmatic use) |
+
+### Queries — inspect & validate (no execution)
+
+| Command | Description |
+|---------|-------------|
+| `get-schema` | Show available tables and columns — or macros with `--macros`; filter with `--network`/`--table` |
+| `preprocess-query` | Render DedaubQL macros and print the resulting SQL |
+| `explain-query` | Print the query's PostgreSQL EXPLAIN plan (it plans but does not execute, so it's free) |
+| `validate-query` | Fast compile check — exits 0 if the SQL is valid, else prints the PG error and exits 1 |
+| `query-columns` | Print the output columns (name + type) without running the query |
+| `format-query` | Pretty-print SQL (argument or stdin) |
+| `query-status` | Show materialization/backfill status as JSON |
+| `query-history` | List a query's saved version history |
+
+### Running queries
+
+| Command | Description |
+|---------|-------------|
+| `run-query` | Execute a query and print results (async; Ctrl-C or `--timeout` revokes the server-side task) |
+| `cancel-query` | Revoke a running async query task by id (`--task-id`; idempotent) |
+| `active-queries` | List the task ids of currently-running async queries |
+| `download-results` | Download a completed async query's results as CSV (`--task-id`) |
+| `materialize` | Trigger a materialization run for a query |
+| `reset-materialization` | Reset the materialized table, forcing a full recompute on the next run |
+
+### Materialization & alerts
+
+| Command | Description |
+|---------|-------------|
+| `get-config` | Show a query's materialization/scheduling config |
+| `set-config` | Set materialization/scheduling (`--materialize` TABLE/VIEW/INCREMENTAL, `--frequency`, `--incrementalization`, `--backfill`, `--immediate`) |
+| `enable-alerts` | Enable incremental alerts and notifications (`--email` and/or `--webhook-id`, `--alert-template`, `--unique-key`, `--frequency`) |
+| `disable-alerts` | Disable notifications (materialization is left unchanged) |
 | `list-alerts` | List all queries with alerts enabled |
-| `get-logs` | Show execution logs |
-| `get-alerts` | Show fired alert events |
-| `preprocess-query` | Expand DedaubQL macros and print the result |
-| `explain-query` | Print query dependency analysis |
-| `install-skill` | Install the skill to one or more agents (`--agent`, `--all`) |
+| `get-logs` | List execution logs (filter `--status`/`--since`, paginate with `--before`) |
+| `get-alerts` | List fired alert events (filter `--since`/`--before`, paginate with `--after-id`) |
+
+### Notifications & sharing
+
+| Command | Description |
+|---------|-------------|
+| `webhook` | Manage notification webhooks: `create`, `test`, `list`, `get`, `update`, `delete` (`--secret` for signing) |
+| `alert-filter` | Manage saved alert filters: `create`, `list`, `get`, `update`, `delete` (group queries/chains, `--colour`) |
+| `telegram-code` | Get the Telegram bot linking code for a query's notifications |
+| `share-query` / `unshare-query` | Share or unshare a query with a team (`--team-id`, `--perm` READ/WRITE) |
 
 ## FAQ
 
