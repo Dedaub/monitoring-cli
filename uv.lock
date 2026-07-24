@@ -2,6 +2,12 @@ version = 1
 revision = 3
 requires-python = "==3.13.*"
 
+[manifest]
+members = [
+    "dedaub-skills",
+    "monitoring-cli",
+]
+
 [[package]]
 name = "annotated-doc"
 version = "0.0.4"
@@ -52,6 +58,11 @@ sdist = { url = "https://files.pythonhosted.org/packages/d8/53/6f443c9a4a8358a93
 wheels = [
     { url = "https://files.pythonhosted.org/packages/d1/d6/3965ed04c63042e047cb6a3e6ed1a63a35087b6a609aa3a15ed8ac56c221/colorama-0.4.6-py2.py3-none-any.whl", hash = "sha256:4f1d9991f5acc0ca119f9d443620b77f9d6b33703e51011c16baf57afb285fc6", size = 25335, upload-time = "2022-10-25T02:36:20.889Z" },
 ]
+
+[[package]]
+name = "dedaub-skills"
+version = "0.1.0"
+source = { editable = "packages/dedaub-skills" }
 
 [[package]]
 name = "h11"
@@ -135,6 +146,7 @@ name = "monitoring-cli"
 version = "0.3.12"
 source = { editable = "." }
 dependencies = [
+    { name = "dedaub-skills" },
     { name = "httpx" },
     { name = "prompt-toolkit" },
     { name = "rich" },
@@ -154,6 +166,7 @@ lint = [
 
 [package.metadata]
 requires-dist = [
+    { name = "dedaub-skills", editable = "packages/dedaub-skills" },
     { name = "httpx", specifier = ">=0.27.0,<0.28" },
     { name = "prompt-toolkit", specifier = ">=3.0.0,<4" },
     { name = "rich", specifier = ">=13.0.0,<14" },
