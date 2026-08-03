@@ -25,7 +25,7 @@ sections live in siblings and are pulled when you actually write SQL:
 
 ## 1. Schema cheat-sheet
 
-Per-chain schema (`base.`, `ethereum.`, `arbitrum.`, `optimism.`, `polygon.`, `binance.`, `avalanche.`, `blast.`). All tables below exist on every chain unless noted.
+Per-chain schema (`base.`, `ethereum.`, `arbitrum.`, `optimism.`, `polygon.`, `binance.`, `avalanche.`, `blast.`, `robinhood.`). All tables below exist on every chain unless noted. **Robinhood (4663)** carries all the core tables (`block`/`logs`/`outer_transaction`/`transaction_detail`/`token_ledger`/`token_transfers`/`latest_token_info`/`network_token_info`/`contracts`/`dex_pool`/`dex_pool_activity`) but **not** the legacy non-`_v2` rollups (`address_transfer_stats_daily`/`_weekly`, `address_token_pair_stats_daily`/`_weekly`, `address_cadence_stats_hourly`/`_weekly`, `token_transfer_stats_hourly`/`_weekly`), nor `money_flow_by_day`/`_hour` or `dex_pool_status` — use the `_v2` variants there.
 
 | Table | PK | Purpose |
 |-------|----|---------|
@@ -64,7 +64,7 @@ Per-chain schema (`base.`, `ethereum.`, `arbitrum.`, `optimism.`, `polygon.`, `b
 | `<chain>.block_timestamp(int8)` | `timestamptz` | Block number → wall clock. Prefer over joining `<chain>.block` for time bucketing. |
 | `<chain>.to_usd_value(numeric, token)` | `numeric` | Raw amount → USD (decimals + price handled). See `decode_primitives.md`. |
 | `<chain>.get_chain_id()` | `int` | Numeric chain id literal. |
-| `<chain>.tx_hash(int8, int)` | `ethword` | `(block_number, tx_index)` → tx hash. **Present on all 7 chains** (verified) — **prefer it over a `{{outer_transaction}}` JOIN** when you only need the hash: one fewer table, and it keeps the large `outer_transaction` out of the cold working set (see `decode_primitives.md`). |
+| `<chain>.tx_hash(int8, int)` | `ethword` | `(block_number, tx_index)` → tx hash. **Present on all 9 chains** (verified, incl. `robinhood`) — **prefer it over a `{{outer_transaction}}` JOIN** when you only need the hash: one fewer table, and it keeps the large `outer_transaction` out of the cold working set (see `decode_primitives.md`). |
 
 ### 1.3 Custom types
 
@@ -89,6 +89,7 @@ Addresses in literals must be **lowercased** (no checksum casing) and prefixed `
 | BNB (56) | 3 s | 20 | 1,200 | 28,800 | 201,600 |
 | Avalanche C (43114) | ~2 s | 30 | 1,800 | 43,200 | 302,400 |
 | Blast (81457) | 2 s | 30 | 1,800 | 43,200 | 302,400 |
+| Robinhood (4663) | ~0.1 s | 600 | 36,000 | 864,000 | 6,048,000 |
 
 **Rolling block-window predicate** (always block-indexed, fastest):
 
