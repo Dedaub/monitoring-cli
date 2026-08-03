@@ -66,7 +66,7 @@ constants; always open the named `<slug>/<file>.md` for the actual topics/select
    a wrong constant.
 
    **(b) Network** — pop-up only if not already named; `multiSelect`. Slugs: `ethereum, base, arbitrum,
-   optimism, polygon, bnb, avalanche, blast, robinhood`. Surface the 4 most relevant (the protocol's chains, else
+   optimism, polygon, bnb, avalanche, robinhood`. Surface the 4 most relevant (the protocol's chains, else
    `ethereum/base/arbitrum/polygon`); the rest reach the user via "Other". Multiple picks → **one
    `UNION ALL` query** (Step 4), deployed under the primary slot.
 
@@ -261,10 +261,10 @@ Write PG SQL from the §5 skeleton + grepped constants + scope guard + Step 4 st
   save space (long single expressions like a wrapped `round(...)` may stay on their own one line).
 - **Always project `tx_hash`** (actionable + unique-key part): native on `outer_transaction`; on
   `logs`/`token_ledger`/`transaction_detail` prefer **`<chain>.tx_hash(block_number,tx_index)`** (verified on
-  all 9 chains — avoids a JOIN *and* keeps the large `outer_transaction` out of the cold set), falling back to
+  all 8 chains — avoids a JOIN *and* keeps the large `outer_transaction` out of the cold set), falling back to
   a `{{outer_transaction}}` JOIN on `(block_number,tx_index)` (1:1) only if that function is ever absent.
 - **Always project literal `chain_id`** (UI default chain): eth 1, base 8453, arb 42161, op 10,
-  polygon 137, bnb 56, avax 43114, blast 81457, robinhood 4663. Per-branch literal in a UNION.
+  polygon 137, bnb 56, avax 43114, robinhood 4663. Per-branch literal in a UNION.
 - No `SELECT *` (TOAST: `calldata`/`data`/`returndata`). **No trailing `;`** (UI rejects it).
 - **`LIMIT 200` / `ORDER BY` are mode-scoped.** Query mode + gate/test runs: final `SELECT` ends with
   `LIMIT 200` (cap 500; + `ORDER BY` for display; never on inner CTEs). **Deployed alerts and materialized
