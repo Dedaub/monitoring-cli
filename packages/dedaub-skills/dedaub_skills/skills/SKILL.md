@@ -90,6 +90,17 @@ constants; always open the named `<slug>/<file>.md` for the actual topics/select
 
 ---
 
+## Database schema
+
+`get-schema` (Step 0) is the authoritative, live source for tables/columns per network. When a host
+environment can resolve the schema ahead of time, it is injected verbatim between the markers below.
+
+<!--SCHEMA_REFERENCE_START-->
+<!--SCHEMA_REFERENCE_END-->
+_If no schema appears above, none is available in this environment — ask the user for the relevant tables/columns or infer conservatively (and lean on `get-schema` from Step 0)._
+
+---
+
 ## Step 1 — Read patterns, classify
 
 **Read first:** `common_query_patterns.md` — the hub (rulebook + index: §1 schema/indexes, §2 block-times,

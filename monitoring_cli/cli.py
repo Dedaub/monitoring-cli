@@ -1802,7 +1802,7 @@ def _resolve_skill_targets(
 
 def _copy_skill_to(dest: Path) -> None:
     dest.mkdir(parents=True, exist_ok=True)
-    src = files("monitoring_cli.skills")
+    src = files("dedaub_skills") / "skills"
     # Install SKILL.md *and* the whole references/ tree: the skill reads those paths
     # (references/database/…, references/protocols/…) at runtime, so shipping SKILL.md
     # alone would leave every reference lookup broken.
