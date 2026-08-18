@@ -154,7 +154,7 @@ Full reference: [DedaubQL API Reference](https://docs.dedaub.com/docs/monitoring
 
 ## Claude Code skill
 
-If you use [Claude Code](https://claude.ai/code), install the `/monitoring-cli` skill to get an AI-guided alert builder:
+If you use [Claude Code](https://claude.ai/code), install the `/dedaub-monitoring` skill to get an AI-guided alert builder:
 
 ```bash
 dedaub-monitoring install-skill
@@ -167,7 +167,26 @@ dedaub-monitoring install-skill --agent claude --agent codex   # specific agents
 dedaub-monitoring install-skill --all                          # claude, codex, cursor, .agents
 ```
 
-Then type `/monitoring-cli` in Claude Code (or your agent) to start a session. The skill guides you through researching a protocol, writing alert queries, reviewing them, and deploying them.
+### Install the skill on its own
+
+The skill is published straight from this repository, so an agent can pull it without the Python CLI. Both routes below read [`.claude-plugin/`](.claude-plugin/), where `marketplace.json` and `plugin.json` point at the packaged skill in [`packages/dedaub-skills/`](packages/dedaub-skills/).
+
+With [`npx skills`](https://skills.sh), which supports Claude Code, Codex, Cursor, Copilot, and 70+ other agents:
+
+```bash
+npx skills add Dedaub/monitoring-cli
+```
+
+As a Claude Code plugin, which keeps it current with `/plugin marketplace update`:
+
+```
+/plugin marketplace add Dedaub/monitoring-cli
+/plugin install dedaub-monitoring@dedaub
+```
+
+Installed as a plugin, the skill is namespaced: run `/dedaub-monitoring:dedaub-monitoring`. The skill drives the `dedaub-monitoring` command, so keep the CLI on your PATH — see [Installation](#installation).
+
+Then type `/dedaub-monitoring` in Claude Code (or your agent) to start a session. The skill guides you through researching a protocol, writing alert queries, reviewing them, and deploying them.
 
 ## Commands
 
@@ -284,7 +303,7 @@ You write **DedaubQL**, a dialect of SQL with macros for time-bounded incrementa
 
 ### Is there an AI-assisted way to build alerts?
 
-Yes. If you use [Claude Code](https://claude.ai/code), run `dedaub-monitoring install-skill` and type `/monitoring-cli` to get an AI-guided alert builder that researches a protocol, writes the query, and deploys the alert.
+Yes. If you use [Claude Code](https://claude.ai/code), run `dedaub-monitoring install-skill` and type `/dedaub-monitoring` to get an AI-guided alert builder that researches a protocol, writes the query, and deploys the alert.
 
 ## License
 

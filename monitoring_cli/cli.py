@@ -1802,7 +1802,10 @@ def _resolve_skill_targets(
 
 def _copy_skill_to(dest: Path) -> None:
     dest.mkdir(parents=True, exist_ok=True)
-    src = files("dedaub_skills") / "skills"
+    # Canonical agent-skill layout: <container>/skills/<skill-name>/SKILL.md.
+    # The name-level directory is what the marketplace/plugin manifests point at
+    # (.claude-plugin/*.json), so keep this path and those declarations in sync.
+    src = files("dedaub_skills") / "skills" / _SKILL_NAME
     # Install SKILL.md *and* the whole references/ tree: the skill reads those paths
     # (references/database/…, references/protocols/…) at runtime, so shipping SKILL.md
     # alone would leave every reference lookup broken.

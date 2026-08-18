@@ -10,4 +10,5 @@ build/
 dist/
 .coverage
 .env
-.claude*
+.claude/
+.claude.json

@@ -8,7 +8,7 @@
 - Deploy real-time alerts with email notifications for events such as large transfers, fund drains, liquidations, oracle price deviations, and privileged admin/owner actions.
 - Manage query folders, schemas, run configs, execution logs, and fired-alert history without leaving the terminal.
 - Works across Ethereum, Arbitrum, Base, and other EVM-compatible chains supported by the Dedaub platform (selected via the `--network` option and DedaubQL macros).
-- Optional Claude Code skill (`dedaub-monitoring install-skill`, then `/monitoring-cli`) provides an AI-guided alert builder.
+- Optional Claude Code skill (`dedaub-monitoring install-skill`, then `/dedaub-monitoring`) provides an AI-guided alert builder.
 
 ## Use cases
 
