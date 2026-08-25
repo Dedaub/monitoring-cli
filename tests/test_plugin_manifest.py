@@ -106,3 +106,17 @@ def test_declared_skill_carries_matching_frontmatter(plugin):
         frontmatter = m.group(1)
         assert re.search(rf"^name:\s*{re.escape(_SKILL_NAME)}\s*$", frontmatter, re.M)
         assert re.search(r"^description:", frontmatter, re.M)
+
+
+def test_plugin_version_tracks_pyproject(plugin):
+    """One version string, two files.
+
+    `version` pins the plugin: users keep a cached copy until it changes, so a
+    stale value silently withholds updates. pyproject.toml is the source of
+    truth, and /bump-version edits only that file, so pin the two together.
+    """
+    pyproject = (REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    expected = re.search(r'^version = "([^"]+)"', pyproject, re.M).group(1)
+    assert plugin["version"] == expected, (
+        f"bump .claude-plugin/plugin.json to {expected} to match pyproject.toml"
+    )
