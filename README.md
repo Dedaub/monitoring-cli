@@ -1,5 +1,9 @@
 # dedaub-monitoring
 
+[![Agent skill on skills.sh](https://img.shields.io/badge/skills.sh-dedaub--monitoring-000000?style=flat)](https://www.skills.sh/dedaub/monitoring-cli)
+[![Claude Code plugin](https://img.shields.io/badge/Claude%20Code-plugin-D97757?style=flat)](#install-the-skill-on-its-own)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat)](LICENSE)
+
 **dedaub-monitoring** is a command-line interface (CLI) for the [Dedaub](https://app.dedaub.com) monitoring platform. It lets you write SQL queries against on-chain data on Ethereum and EVM-compatible chains, test them, and deploy real-time blockchain alerts — all from your terminal.
 
 Use it to monitor on-chain activity and get notified about large transfers, fund drains, liquidations, oracle price deviations, privileged admin/owner actions, and any other event you can express in SQL. The package name is `monitoring-cli` and the installed command is `dedaub-monitoring`.
