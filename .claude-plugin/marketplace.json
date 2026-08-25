@@ -1,5 +1,6 @@
 {
   "name": "dedaub",
+  "description": "Dedaub's agent skills for on-chain monitoring: write blockchain SQL and deploy real-time alerts across Ethereum and EVM chains.",
   "owner": {
     "name": "Dedaub",
     "url": "https://dedaub.com"
