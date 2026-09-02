@@ -133,7 +133,7 @@ SELECT
     tl.tx_index,
     tl.address              AS sender,            -- the row with value_delta < 0
     tl.counterparty_address AS recipient,
-    -tl.value_delta / pow(10, {{DECIMALS}}) AS amount_human
+    -tl.value_delta / pow(10::numeric, {{DECIMALS}}) AS amount_human
 FROM txs
 JOIN {{CHAIN}}.token_ledger tl
   ON tl.block_number = txs.block_number
@@ -188,7 +188,7 @@ WITH events AS (
         date_trunc('{{BUCKET}}', {{CHAIN}}.block_timestamp(td.block_number)) AS bucket,
         tl.address              AS initiator,
         tl.counterparty_address AS counterparty,
-        -tl.value_delta / pow(10, {{DECIMALS}}) AS amount_usd
+        -tl.value_delta / pow(10::numeric, {{DECIMALS}}) AS amount_usd
     FROM {{CHAIN}}.transaction_detail td
     JOIN {{CHAIN}}.token_ledger tl
       ON tl.block_number = td.block_number
@@ -225,7 +225,7 @@ ORDER BY bucket DESC;
 ```sql
 SELECT
     tl.{{ACTOR_COLUMN}} AS actor,              -- tl.address (sender) | tl.counterparty_address (recipient)
-    SUM(-tl.value_delta) / pow(10, {{DECIMALS}}) AS total_amount,
+    SUM(-tl.value_delta) / pow(10::numeric, {{DECIMALS}}) AS total_amount,
     COUNT(*)                  AS event_count,
     COUNT(DISTINCT tl.{{OPPOSITE_COLUMN}}) AS unique_counterparties
 FROM {{CHAIN}}.transaction_detail td
@@ -256,7 +256,7 @@ For "top relayers/facilitators/operators", `GROUP BY td.from_a` instead (the cal
 SELECT
     tl.address              AS sender,
     tl.counterparty_address AS receiver,
-    SUM(-tl.value_delta) / pow(10, {{DECIMALS}}) AS edge_weight_amount,
+    SUM(-tl.value_delta) / pow(10::numeric, {{DECIMALS}}) AS edge_weight_amount,
     COUNT(*)                AS edge_weight_count,
     MIN({{CHAIN}}.block_timestamp(tl.block_number)) AS first_interaction,
     MAX({{CHAIN}}.block_timestamp(tl.block_number)) AS last_interaction
@@ -377,7 +377,7 @@ SELECT
     r.chain_name,
     concat('0x', encode(r.token_address, 'hex')) AS token_address,
     r.symbol,
-    SUM(r.amount_raw / pow(10, r.decimals)) AS total_amount
+    SUM(r.amount_raw / pow(10::numeric, r.decimals)) AS total_amount
 FROM {{ref(query_id=123142)}} r
 GROUP BY r.chain_id, r.chain_name, r.token_address, r.symbol
 ORDER BY total_amount DESC

@@ -2,7 +2,7 @@
   "name": "dedaub-monitoring",
   "displayName": "Dedaub Monitoring",
   "description": "Write blockchain SQL queries and deploy real-time on-chain alerts with Dedaub: large transfers, fund drains, liquidations, oracle deviations, and privileged admin actions across Ethereum and EVM chains.",
-  "version": "0.3.12",
+  "version": "0.3.13",
   "author": {
     "name": "Dedaub",
     "url": "https://dedaub.com"
