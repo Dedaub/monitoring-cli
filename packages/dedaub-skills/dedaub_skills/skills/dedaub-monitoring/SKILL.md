@@ -287,7 +287,9 @@ Write PG SQL from the §5 skeleton + grepped constants + scope guard + Step 4 st
 - **Metadata:** `latest_token_info` (PK, 1:1) → `symbol`/`token_name`/`decimals`. **USD price — LEFT JOIN
   `network_token_info`:** `LEFT JOIN <chain>.network_token_info nti ON nti.token_address = token`, read
   `nti.last_price` (double, **kept up to date — the canonical price source**):
-  `round((raw / pow(10, nti.decimals) * nti.last_price)::numeric, 2)`. LEFT JOIN so rows survive a missing
+  `round((raw / pow(10::numeric, nti.decimals) * nti.last_price)::numeric, 2)` — **`10::numeric`, never a
+  bare `10`**: `pow(10, decimals)` resolves to `pow(double precision, double precision)` and re-floats the
+  amount, losing digits past `2^53`. LEFT JOIN so rows survive a missing
   price (NULL, not a silent 0). `<chain>.to_usd_value(raw, token)` is the one-call convenience (decimals +
   price internally) but **silently returns 0 for any unpriced token** — reserve it for quick one-offs where
   every token is known-priced. **Stablecoins carry NO price** — `last_price` is **NULL** for USDC/USDT/DAI (the
@@ -350,14 +352,65 @@ real runtime with `run-query` latency + cheap `count(*)` probes.
 
 Mid-run **Ctrl-C** / `cancel-query --task-id <id>` revokes the server task.
 
+### Decode gate (verify the values, not just the rows) — after the tuning loop, before you present
+
+The empirical gate proved the SQL **executes**. It did not prove the **values** are right. Run this
+gate on the `run-query` output the tuning loop just produced — **both modes**, before Show results
+(query mode) and before the Reviewer (alert mode). Full checks + probe SQL:
+`references/decode-verification.md`. Report in the **Decode Verdict** shape
+(`references/handoff-schemas.md`).
+
+**Tier 1 — free, always** (the `run-query` rows + `query-columns --id <ID>`, which does not execute).
+Checks 4 and 5 need a probe run, so they sit in Tier 2; the numbering is stable across both:
+- **Check 1 — float transport.** An **amount** cell holding `e+` **proves** the value crossed the wire
+  as a JSON float — `float64` is exact only to `2^53`, so digits past the 17th are reconstructed.
+  Seen: `6.520726627089377e+26`. Fix: project the raw amount `::text`. **`e-` never blocks** — it marks
+  a *small* float, which `float64` holds exactly, and `nti.last_price` (`double`) and an
+  oracle-deviation `abs(price - 1.0)` legitimately render as `1.23e-05`. Amount columns only; never a
+  price, a ratio or a percentage.
+- **Check 2 — declared type cannot hold it.** Pair `column_type` from `query-columns` with the values:
+  an `int8` column stops at `9223372036854775807` (9.22e18), so a 6.52e26 cell is a contradiction.
+- **Check 3 — one amount on several events.** **Ignore `0` and NULL**, then flag a value on ≥2 rows with
+  a **different `tx_hash`** — not credible for a `uint256` amount. The zero exclusion is load-bearing: a
+  correct decode repeats `0` by design (Morpho `Liquidate` ends in `badDebtAssets`/`badDebtShares`, both
+  `0` on most liquidations; likewise `fee`, `amount1` on a single-sided event). Check 1 also firing ⇒
+  float collapse; Check 1 clean ⇒ JOIN fan-out / aliasing. Passes only if the header comment declares the
+  amount fixed.
+- **Check 6 — raw amount without its unit.** Every token amount ships `decimals` **and** `symbol`, or a
+  scaled companion: `round(raw / pow(10::numeric, lti.decimals), 6)` — the **`::numeric` base is
+  load-bearing** (`pow(10, decimals)` returns `double precision` and re-floats the amount).
+  `120000007` is **120.000007 USDC**; `958080000000000000` is **0.958080 USUAL**. A fix that **renames**
+  a projected column invalidates the alert-column proof above — re-run `query-columns` and update
+  `--unique-key` / `--alert-template`.
+
+**Tier 2 — one probe query id `/<slug>/Probe`, four statements run in turn** (only if Tier 1 flags, or
+the SQL hand-decodes `log.data`). Each statement opens with the same `WITH probe AS (…)` prelude, and
+the probe CTE **adds `block_number`, `tx_index`, `log_index` and the raw `bytea` token address** — the
+house style projects a readable `tx_hash` and a `symbol`, so those four are otherwise absent.
+
+- **Probe A — counters** in exact `numeric`. `n_precision_lost` and `n_over_float_exact` are
+  independent. `n_rows > n_events` is a JOIN fan-out. `max_digits > 40` is not an amount.
+- **Probe B —** the repeated values by name, with `0` and NULL excluded.
+- **Check 4 —** amount > `latest_token_info.total_supply`. Use a **LEFT JOIN** and read `n_unbounded`.
+  An inner join and `x > NULL` both report 0 on rows the check never examined.
+- **Check 5 —** the amount matches an in-tx `token_ledger.value_delta` row. Skip it for wrapper-token
+  seizes (cToken / eVault / aToken shares) and record the skip.
+
+**REJECTED → fix in place** with `write-query` on the **same id** (never a sibling), then
+`validate-query` → `run-query` → `query-columns` → this gate, **≤2 rounds**. Keep `query-columns` in
+the loop: Check 2 reads it every round, and a rename must not reach the Reviewer unproved. Still
+rejected → **STOP and ask the user**: (a) raw `::text`, drop the decode, (b) switch the amount source
+to `token_ledger.value_delta` (Step 5 already requires it over decoding `logs.data`), or (c) accept and
+deploy with the limitation in the header comment.
+
 ### Mode tail
 
 **Query mode** — **own folder per query** (same discipline as alert mode; never dump into a shared
 `/_scratch`). Name the folder with the **same canonical slug** `<Signal>-<Subject>-<Chain>` as alert mode
 (see the Alert-mode §1 slug rules below) — multiple protocols or chains join with `+` in Step 0(b) priority
 order (`Liquidations-AaveV3-Base+Arbitrum`). **The query inside takes a short role name only — never the
-slug:** a single query → `Query`; a P12 split → `Detail` (row VIEW) + `Summary` (reader). The folder carries
-the identity; the SQL name stays short.
+slug:** a single query → `Query`; a P12 split → `Detail` (row VIEW) + `Summary` (reader); the decode
+gate's Tier 2 probe → `Probe`. The folder carries the identity; the SQL name stays short.
 ```bash
 dedaub-monitoring create-folder "/<slug>"            # e.g. /Liquidations-AaveV3-Base+Arbitrum
 dedaub-monitoring create-query  "/<slug>/Query"      # role name only → /<slug>/Query; reuse the id all session (no deletes)
@@ -368,6 +421,8 @@ dedaub-monitoring write-query --id <ID> <<'SQL'
 SQL
 dedaub-monitoring validate-query --id <ID>           # gate (above) — iterate write→validate on the same id
 dedaub-monitoring run-query      --id <ID> --limit 200 --timeout 30
+dedaub-monitoring query-columns  --id <ID>           # decode gate (above) — verify the VALUES before you show them
+# REJECTED → write-query → validate-query → run-query → query-columns → gate again (≤2 rounds)
 ```
 A re-run of the *same* question overwrites its own folder's query (idempotent); a *new* question gets a new
 slug+folder. Show results + SQL + the query path/id + UI link (Step 6).
@@ -389,11 +444,12 @@ slug+folder. Show results + SQL + the query path/id + UI link (Step 6).
    e.g. `Liquidations-MorphoBlue-Base`, `Liquidations-AaveV3-Arbitrum`, `Drains-AaveV3-Base+Arbitrum`,
    `LargeTransfers-USDC-Ethereum`. Then `create-folder "/<slug>"` → `create-query "/<slug>/<Name>"` where
    **`<Name>` is the query's short role only — never the slug** (the folder already carries it): a single
-   alert → `Alert`; a P12 split → `Detail` (row VIEW) + `Summary` (reader); each `{{ref()}}` lookup → a
-   short role noun (`View`/`Tbl`, or e.g. `Markets`). So `/Liquidations-MorphoBlue-Base/Alert`, not
+   alert → `Alert`; a P12 split → `Detail` (row VIEW) + `Summary` (reader); the decode gate's Tier 2
+   probe → `Probe`; each `{{ref()}}` lookup → a short role noun (`View`/`Tbl`, or e.g. `Markets`). So `/Liquidations-MorphoBlue-Base/Alert`, not
    `/Liquidations-MorphoBlue-Base/Liquidations-MorphoBlue-Base`. `write-query`, run the gate
    (validate → run), iterate on the **same id** (no deletes). Before deploy, `query-columns --id <ID>` and
    confirm every `--unique-key` and every `--alert-template {{var}}` is in the output (most common deploy failure).
+   Then run the **decode gate** (above) on the run output; its Decode Verdict must be APPROVED before step 2.
 2. **Reviewer subagent** (`references/agents/reviewer.md`) — semantic only (right thing? scope/collision/
    threshold? readable template?). Draft inline (`references/handoff-schemas.md`); verdict is its final
    message. REJECT → revise (≤2 rounds).
@@ -425,6 +481,7 @@ final SQL + the query's folder path & id + its UI link `https://app.dedaub.com/t
 | `…/sample_queries/common_query_patterns.md` | always (Step 1) — hub: schema, indexes, perf rules, pattern index, anti-patterns, checklist |
 | `…/database/query_patterns.md` | Step 5 — full P1–P16 SQL templates (indexed by the hub §5) |
 | `…/database/decode_primitives.md` | Step 5 — decode/enrich cheat-sheet (hub §4) |
+| `…/decode-verification.md` | **Step 5 — decode gate** (after the tuning loop, both modes): the numbered checks, the probe SQL, the fix recipes |
 | `…/database/macros.md` | Step 1/5 — macros, VIEW/`ref`/INCREMENTAL, CLI notes |
 | `…/protocols/<name>/README.md` | Step 2a — version disambiguation + collisions |
 | `…/protocols/<name>/<file>.md` | Step 2b — constants |

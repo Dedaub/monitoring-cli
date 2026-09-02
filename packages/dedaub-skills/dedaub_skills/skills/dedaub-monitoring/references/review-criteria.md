@@ -2,8 +2,12 @@
 
 The orchestrator already ran the **empirical gate** (SKILL Step 5: `preprocess-query` + `run-query`),
 which proved the SQL executes, every SELECT/unique-key/template column exists, literals parse, and
-latency shows an indexed lead. **The Reviewer does NOT re-check those mechanics** — reject only on the
-semantic faults below.
+latency shows an indexed lead. It then ran the **decode gate** (`decode-verification.md`). That gate
+proved the returned **values** are plausible. It found no float-transport precision loss. The declared
+`column_type` holds each value. No non-zero amount repeats across distinct events. No amount exceeds
+the token's total supply. Every amount carries its `decimals` and `symbol`. **The Reviewer does NOT
+re-check either set of mechanics** — not execution, column existence, literals or index lead, and not
+decode fidelity, magnitude or scaling. Reject only on the semantic faults below.
 
 1. **Detects the right thing.** Query logic matches the alert name/description; threshold present and
    correct if implied; direction (inflow/outflow, >/<) right.

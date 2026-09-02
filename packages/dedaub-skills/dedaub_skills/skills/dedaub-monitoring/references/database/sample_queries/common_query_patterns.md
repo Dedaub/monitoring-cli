@@ -4,8 +4,9 @@
 **Pairs with:** a protocol knowledge-base doc (e.g. `protocols/uniswap/v3.md`) for *constants*.
 
 This file is the **rulebook + index**: schema (§1), block-times (§2), perf rules (§3), the pattern
-catalogue (§5 index), routing (§7), edge cases (§8), anti-patterns (§9), checklist (§10). Two heavy
-sections live in siblings and are pulled when you actually write SQL:
+catalogue (§5 index), routing (§7), edge cases (§8), anti-patterns (§9), pre-run checklist (§10),
+post-run decode verification (§11). Two heavy sections live in siblings and are pulled when you
+actually write SQL:
 
 - **`../decode_primitives.md`** (§4) — the decode/enrich cheat-sheet (topics, `hex_to_numeric`, USD, `eth_call`, …).
 - **`../query_patterns.md`** (§5) — the full P1–P16 SQL templates.
@@ -258,6 +259,8 @@ If the protocol doc lacks a value, **stop and ask** — never guess a selector o
 | **Optimizing off EXPLAIN `cost=` / `rows=` magnitudes** | The engine can't constant-fold `<chain>.get_historical_block_number('Nd', now())` at plan time → no static chunk pruning → costs and row-estimates assume *all* chunks (seen: `cost≈400k`, `rows=48738` for a branch returning **268 rows in 3 s**). `Chunks excluded during startup: N` = runtime, not plan-time, exclusion. | Trust **`run-query` latency + `count(*)` probes**. Read EXPLAIN for *index choice / seq-scan vs index-scan*, ignore its absolute numbers. |
 | **Silently adding precision filters the user didn't ask for** (e.g. pinning `pancakeCall` callers to factory-deployed pairs) | Narrows recall below the literal ask — in security monitoring the dropped rows are often **exactly the attack case** (a fake pair invoking the callback). | Implement the literal ask; propose the tightening as a commented-out predicate or a question to the user. The reverse direction is fine: **broadening a vague ask** ("any admin function" → the standard Ownable/AccessControl/Pausable/UUPS surface) is encouraged — but **declare it** in the header comment and the chat summary, never silently. |
 | **`{% for network in networks(…) %}` loop missing the `{% if not loop.last %}union all{% endif %}` separator** | For >1 network the loop emits adjacent `SELECT`s with no `UNION ALL` between them → invalid SQL. **Invisible on a single-network test** (`loop.last` is immediately true → the gate passes), then breaks the moment a 2nd network is configured. | Always end the loop body with `{% if not loop.last %}union all{% endif %}` (macros.md); `preprocess-query`-expand with ≥2 networks before deploy. |
+| **Decoding a multi-word `log.data` whole** — `hex_to_numeric('0x' \|\| encode(l.data,'hex'))` on an event whose non-indexed body is >1 word | Concatenates every word into one several-hundred-digit number (a 5-word Morpho `Liquidate` body is 160 bytes), so the "amount" is not an amount. Renders as a plausible-looking float and passes the empirical gate. | Take **one 32-byte word** — `substring(l.data FROM 32N+1 FOR 32)`, 1-indexed (§4) — or better, the **signature-form macro**, which returns decoded named columns. Prefer `token_ledger.value_delta` over decoding `logs.data` at all (§3). Catch it with the decode gate's Check 4 (`../../decode-verification.md`). |
+| **`pow(10, decimals)` without a `::numeric` base** for token scaling | Resolves to `pow(double precision, double precision)` → returns **`double precision`**, silently floating an exact `numeric` amount and losing every digit past `2^53` (`pg_typeof(pow(10, 6::smallint))` = `double precision`). | `pow(10::numeric, decimals)`. Ship the raw value as `::text` beside the scaled one, plus `symbol`, so a reader can tell a large number from a large value (§11). |
 
 ---
 
@@ -276,3 +279,36 @@ If the protocol doc lacks a value, **stop and ask** — never guess a selector o
 11. **Expanded layout (§5 house style), never minified:** `SELECT` alone on its line, **one projected item per line** (4-space indent past the `SELECT` keyword), `FROM`/`JOIN`/`WHERE`/`GROUP BY`/`ORDER BY`/`LIMIT` left-aligned to that `SELECT`, continued `AND`/`OR` indented +2, and a **blank line before each `UNION ALL`**. Never crowd multiple columns onto one shared line.
 12. **Signal identity readable:** signature-form macros preferred; every raw `\x` topic0/selector literal carries its `-- EventName(types)` / `-- fnName(types)` comment. `transaction_detail` call monitors filter `call_opcode = 'CALL'` unless the delegatecall surface is deliberately in scope (§8.10).
 13. **`networks()` loop has its `UNION ALL` separator:** every `{% for network in networks(…) %}` body ends with `{% if not loop.last %}union all{% endif %}` (§9) — confirmed by `preprocess-query`-expanding to ≥2 networks; a single-network test silently passes a missing separator.
+
+---
+
+## 11. Decode verification (after the run, before you present)
+
+§10 is the check **before** running. This is the check **after** it: the empirical gate proves the SQL
+executes, not that the values it returns are right. Run the decode gate on the `run-query` output —
+**both modes**, before results are shown or the alert is deployed. Full checks + probe SQL:
+**`../../decode-verification.md`**.
+
+1. **No `e+` in an amount cell.** Scientific notation **proves** the value crossed the wire as a JSON
+   float (`float64` is exact only to `2^53`), so its low digits are reconstructed. Project the raw amount
+   `::text`. **`e-` is not a fault** — it marks a *small* float, which `float64` holds exactly; a
+   `double` price (`nti.last_price`) and an oracle-deviation `abs(price - 1.0)` render as `1.23e-05` when
+   healthy. Amount columns only, never a price or a ratio.
+2. **The declared `column_type` can hold the value.** `query-columns` is free; an `int8` column stops at
+   `9223372036854775807`.
+3. **No non-zero amount repeats across rows with different `tx_hash`** — unless the header comment
+   declares it fixed. **Ignore `0` and NULL:** a correct decode repeats `0` by design (Morpho `Liquidate`
+   ends in `badDebtAssets`/`badDebtShares`, `0` on most liquidations). Repeats with `e+` = float collapse;
+   repeats without = JOIN fan-out or aliasing.
+4. **No amount exceeds `latest_token_info.total_supply`** for its own token. Exact bound, not a guessed
+   threshold; catches a whole-blob or straddled `log.data` decode (§9). **LEFT JOIN** and count the rows
+   the bound could not cover — an inner join drops a token with no metadata row, and `x > NULL` is NULL,
+   so both report "0 impossible" on rows never examined.
+5. **A hand-decoded amount matches an in-tx `token_ledger.value_delta` row** (§4 LATERAL recipe). Skip
+   for wrapper-token seizes (cToken / eVault / aToken shares) and record the skip.
+6. **Every token amount carries `decimals` + `symbol`, or a scaled companion** —
+   `round(raw / pow(10::numeric, decimals), 6)`, `::numeric` base (§9). `120000007` is **120.000007
+   USDC**, not a big number. A fix that **renames** a column needs a fresh `query-columns` before deploy.
+
+REJECTED → fix in place on the same id, re-run `validate-query` → `run-query` → `query-columns` → this
+gate, **≤2 rounds**, then stop and ask the user.

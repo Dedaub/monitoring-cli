@@ -1,4 +1,8 @@
-# Reviewer Handoff Shapes (alert mode only)
+# Handoff Shapes
+
+The **Draft** and **Verdict** shapes below are **alert mode only** (orchestrator → Reviewer).
+The **Decode Verdict** at the end is written by the orchestrator itself and applies to **both
+modes** — see `decode-verification.md`.
 
 Two small structures cross the orchestrator → Reviewer boundary, **passed inline** (no files):
 the orchestrator pastes the **draft** into the Reviewer's dispatch prompt, and the Reviewer
@@ -51,4 +55,22 @@ APPROVED            <!-- or REJECTED -->
 
 ## Suggestions
 (none)             <!-- or numbered; non-blocking (style, preprocess-query checks) -->
+```
+
+## Decode Verdict — the decode gate's result (both modes)
+
+Written by the **orchestrator**, not a subagent: the decode gate runs inline in Step 5, after the
+tuning loop and before the result is presented or deployed. Checks: `decode-verification.md`.
+
+```markdown
+# Decode Check: <Query or Alert Name>
+
+## Verdict
+APPROVED            <!-- or REJECTED -->
+
+## Issues
+(none)             <!-- or numbered, specific, each a blocker from decode-verification.md -->
+
+## Suggestions
+(none)             <!-- or numbered; non-blocking (a skipped Check 5, a declared repeat, naming) -->
 ```
