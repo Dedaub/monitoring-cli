@@ -123,7 +123,7 @@ Tuple types: `V3RelayData = (bytes32 depositor, bytes32 recipient, bytes32 exclu
 |----------|-----------|-------|
 | `0xad5425c6` | `deposit(bytes32,bytes32,bytes32,bytes32,uint256,uint256,uint256,bytes32,uint32,uint32,uint32,bytes)` | **Current deposit entrypoint** (depositor, recipient, inputToken, outputToken, inputAmount, outputAmount, destChainId, exclusiveRelayer, quoteTimestamp, fillDeadline, exclusivityParameter, message). Emits `FundsDeposited`. |
 | `0x7b939232` | `depositV3(address,address,address,address,uint256,uint256,uint256,address,uint32,uint32,uint32,bytes)` | Legacy address-typed wrapper; internally casts to bytes32 and calls `deposit`. Still emits the **new** `FundsDeposited`. |
-| `0x8b15788e` | `unsafeDeposit(bytes32,bytes32,bytes32,bytes32,uint256,uint256,uint256,bytes32,uint256 depositNonce,uint32,uint32,uint32,bytes)` | Caller-supplied nonce → deterministic "unsafe" depositId (`keccak(msg.sender,depositor,nonce)`). |
+| `0x8b15788e` | `unsafeDeposit(bytes32,bytes32,bytes32,bytes32,uint256,uint256,uint256,bytes32,uint256 depositNonce,uint32,uint32,uint32,bytes)` | Caller-supplied nonce → deterministic "unsafe" depositId (`keccak256(msg.sender, depositor, nonce)`, computed on-chain). |
 | `0xea86bd46` | `depositNow(bytes32,bytes32,bytes32,bytes32,uint256,uint256,uint256,bytes32,uint32 fillDeadlineOffset,uint32,bytes)` | Uses `getCurrentTime()` for quoteTimestamp. |
 | `0xbabb6aac` | `speedUpDeposit(bytes32 depositor,uint256 depositId,uint256 updatedOutputAmount,bytes32 updatedRecipient,bytes,bytes depositorSignature)` | Emits `RequestedSpeedUpDeposit`. |
 | `0x4e0fb8f5` | `speedUpV3Deposit(address,uint32,uint256,address,bytes,bytes)` | Legacy speed-up. |

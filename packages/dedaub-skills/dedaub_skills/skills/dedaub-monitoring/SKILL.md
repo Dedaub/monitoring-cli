@@ -153,7 +153,9 @@ grep -n -i "functionName\|SEL_"      references/protocols/<name>/<file>.md   # s
 grep -n -i "<chain>\|FACTORY\|ROUTER" references/protocols/<name>/<file>.md  # address
 ```
 The `## Quick-copy detection constants` block has topics/selectors/per-chain addresses as `\x`-literals —
-usually all you need. Always also read `## Detection invariants & gotchas` (collision guardrail, e.g.
+usually all you need, but it **drops `indexed` flags**: for any decoded param take the full flagged
+signature from the `## 1. Topics` table (indexed params fill `topic1..3` in declaration order; the rest are
+ABI-encoded in `data`). Always also read `## Detection invariants & gotchas` (collision guardrail, e.g.
 Curve `TokenExchange` collides across pool families; Morpho has three `AccrueInterest` topics).
 
 **2c. Web fallback** — only if no local ref covers the protocol, a user-supplied address isn't in the doc,
@@ -259,6 +261,11 @@ Write PG SQL from the §5 skeleton + grepped constants + scope guard + Step 4 st
   flags must be exact (macros.md footgun). Raw `\x` topic0/selector literals stay for **all-forks** scans
   (one topic0 = every fork) — but EVERY raw literal carries an inline `-- EventName(types)` /
   `-- fnName(types)` comment, no exceptions.
+- **SQL cannot compute a keccak hash** — never call `keccak(…)`/`keccak256(…)`/`digest(…)` (pgcrypto is
+  not installed; core `md5()`/`sha256()` exist but are not keccak). topic0/selectors are always
+  precomputed: hand the signature to the macro, or paste a literal from the ref or the fallback agent —
+  `WHERE l.topic0 = '\x<64hex>'::bytea  -- EventName(types)`. Full function surface in
+  `references/database/decode_primitives.md`.
 - **Call monitoring filters `call_opcode = 'CALL'`** by default (`transaction_detail` has one row per
   *frame*: a proxy call also yields a DELEGATECALL frame with the same calldata → double-counted proxies,
   implementation addresses matched). Drop it deliberately — and say so in the header comment — when the
