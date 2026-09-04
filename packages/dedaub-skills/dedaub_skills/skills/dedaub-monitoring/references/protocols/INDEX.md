@@ -25,9 +25,8 @@ in the doc (some entries are bridged representations / decoys — the docs flag 
 - **Messaging (generic interop):** `layerzero` `axelar` `celer` `connext` `zkbridge`
 - **DEX / AMM:** `aerodrome` `angstrom` `apeswap` `balancer` `bancor` `beets` `biswap` `blackhole`
   `camelot` `curve` `dodo` `dooar` `ekubo` `fluid` `fraxswap` `izumi` `metric` `native` `pancakeswap`
-  `pharaoh` `quickswap` `ramses` `shibaswap` `sushiswap` `swaap` `tessera` `thena`
-  `topaz` `traderjoe`
-  `uniswap` `velodrome`
+  `pharaoh` `quickswap` `ramses` `shibaswap` `sushiswap` `swaap` `tessera` `thena` `topaz`
+  `traderjoe` `uniswap` `velodrome`
 - **Aggregator (routing):** `dodo` (smartroute) · `native` (RFQ)
 - **Lending / money-market:** `40acres` `aave` `agave` `benqi` `compound` `euler` `fluid` `fluxfinance`
   `granary` `justlend` `layerbank` `lodestar` `maple` `moola` `moonwell` `morpho` `native` `pike`
