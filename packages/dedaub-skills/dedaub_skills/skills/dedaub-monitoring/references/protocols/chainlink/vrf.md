@@ -153,7 +153,7 @@ Wrappers (direct funding), all verified live:
 
 ## 5. Detection invariants & gotchas
 
-1. **Request → fulfill pairing:** `RandomWordsRequested.requestId` matches `RandomWordsFulfilled.requestId`. In v2 `requestId = keccak(keyHash, preSeed)` semantics; just join on `requestId`.
+1. **Request → fulfill pairing:** `RandomWordsRequested.requestId` matches `RandomWordsFulfilled.requestId`. In v2 `requestId = keccak256(keyHash, preSeed)` semantics (derived on-chain — you never recompute it); just join on `requestId`.
 2. **v2 vs v2.5 topics fully differ** — `subId` width change alters every event hash. Index both sets; disambiguate by emitter (coordinator) + version, not by event name.
 3. **Native vs LINK payment** is only observable in v2.5: `RandomWordsFulfilled.nativePayment` and the `SubscriptionFundedWithNative` event. v2 is LINK-only.
 4. **Subscription funding via LINK is an ERC-677 `transferAndCall`**, not a coordinator method call — to attribute funding, also watch LINK `Transfer(...,bytes)` (`0xe19260af…`) to the coordinator with `data = abi.encode(subId)`. The `fundSubscription` selector is a wrapper/helper convenience.
