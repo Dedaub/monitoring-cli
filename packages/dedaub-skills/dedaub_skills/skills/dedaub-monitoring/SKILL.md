@@ -223,6 +223,10 @@ Alert output is always **INCREMENTAL** (`enable-alerts` forces it; dedup via
 | **VIEW + `{{ref()}}`** | reusable/testable lookup, re-evaluated each run (`--materialize VIEW`) |
 | **TABLE + `{{ref()}}`** | history-spanning (>30d) set the inline cap can't reach (`--materialize TABLE`) |
 
+**Spell it `{{ref("Name")}}`** — quoted name, first positional arg, resolved from the calling query's
+folder, so a ref and its target must live in one folder. Not `ref(table="Name")`, not a bare id: only the
+quoted-positional form registers a dependency. Use `query_id=` only for an id you captured yourself.
+
 Lead the alert's own scan with the `address` index.
 
 **Aggregates → split (P12).** For any total/sum/leaderboard, esp. cross-chain: materialize the full

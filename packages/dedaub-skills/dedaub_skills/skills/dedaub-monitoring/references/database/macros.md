@@ -32,9 +32,23 @@ anti-patterns. Its two siblings hold the bulk: **`query_patterns.md`** (§5 P1�
 
 ## Structural macros
 
-- **`{{ref(query_id=<id>)}}`** / **`{{ref(table="/Folder/Name")}}`** — pull another query's output
-  (VIEW/TABLE) by id or path (path form = shared `/lib/...` lists). How an INCREMENTAL alert or P12 reader
-  gets a reusable lookup. Resolves on the **ethereum slot** (deploy-playbook §"Execution slot").
+- **`{{ref("Name")}}`** — **the default form:** the sibling's name as the **first positional** argument,
+  resolved **relative to the calling query's folder** — so it resolves only while both queries sit in the
+  SAME folder. It is the only form you can write for a query created in the same plan/run as yours: that
+  query has no `query_id` until promotion creates it. How an INCREMENTAL alert or P12 reader gets a
+  reusable lookup: `FROM {{ref("Detail")}} r`. *Hazard:* if no query of that name is yours in that folder,
+  resolution falls back to a single PUBLIC query of the same name owned by anyone — wrong rows, no error.
+  Keep sibling names distinct.
+- **`{{ref(query_id=<id>)}}`** — folder-independent, but only for an id you **captured yourself** from
+  `create-query`. An id that is neither yours nor PUBLIC fails loudly (`The query <id> you requested does
+  not exist, or has not been shared with you`); an id that happens to land on a PUBLIC query resolves
+  silently to that stranger's rows. Never copy an id out of a doc, never guess one.
+- **`{{ref(table="/Folder/Name")}}`** — absolute path, for a query outside your folder. `table=` is for
+  absolute paths **only**: `{{ref(table="Name")}}` resolves at runtime but registers **no dependency
+  edge** — the graph matcher reads only a quoted first positional argument — so a sibling written that way
+  passes every gate unchecked. A bare integer `{{ref(<id>)}}` is **not** a form at all: the first
+  positional argument is the *name*, and an int raises `TypeError` inside the resolver.
+  All three forms resolve on the **ethereum slot** (deploy-playbook §"Execution slot").
 - **`{{eth_call("<addr>.fn(argtype arg)", outputs="( rettype output0 )", network='<c>')}}`** — live
   on-chain view call at tip → `<chain>.eth_call(addr,'sig(returns)',args_jsonb)`; returns a tuple
   (`output0`/`[0]`). **One RPC/row** → small sets only; for balances use `token_balance`.
