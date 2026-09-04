@@ -30,7 +30,7 @@ WHERE ...                         -- indexed lead + block-range/duration; collis
 
 ## Materialization
 `INCREMENTAL`          <!-- alert output is always INCREMENTAL; list any VIEW/TABLE lookup query
-                            ids it reads via {{ref(<id>)}}, and whether each is CTE/VIEW/TABLE -->
+                            NAMES it reads via {{ref("Name")}}, and whether each is CTE/VIEW/TABLE -->
 
 ## Network
 `ethereum`             <!-- the chain the alert's run config applies to (enable-alerts --network) -->

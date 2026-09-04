@@ -347,15 +347,18 @@ The split:
 1. **Principal VIEW (the row scan)** — one query that emits the **full per-row result, `--materialize VIEW`,
    and carries NO `LIMIT`** (the §3-rule-10 interactive `LIMIT 200` never applies here — the
    reader must see every row to sum correctly; a `LIMIT` would silently truncate the total). This is the
-   query whose id you reference (e.g. `123142`). It still obeys every other rule: indexed lead,
+   query the reader names in its `ref()` (call it `Detail`; the reader is `Summary`). It still obeys
+   every other rule: indexed lead,
    `block_number`/`duration=` bound, `committed AND error IS NULL`, explicit columns, no trailing `;`.
-2. **Aggregating reader (the sum)** — a **separate** query that does `FROM {{ref(query_id=123142)}}` and applies the
+2. **Aggregating reader (the sum)** — a **separate** query **in the same folder** that does
+   `FROM {{ref("Detail")}}` (bare sibling name, resolved relative to the reader's own folder, so it needs
+   no id) and applies the
    `SUM`/`GROUP BY`. `ORDER BY … LIMIT N` belongs on the reader **only when top-N is the semantics**
    (leaderboard); a deployed totals reader carries neither (§3 rule 10 — interactive runs may still cap
    display at 200).
 
 ```sql
--- Principal VIEW (id 123142): full rows, NO limit, materialize VIEW.
+-- Principal VIEW, named "Detail": full rows, NO limit, materialize VIEW.
 -- One UNION ALL branch per chain; each carries its own literal chain_id + chain_name (cross-chain PK rule below).
 SELECT 8453  AS chain_id, 'base'     AS chain_name, tl.token_address, -tl.value_delta AS amount_raw, lti.decimals, lti.symbol
 FROM {{token_ledger(network='base', duration='24h')}} tl
@@ -378,7 +381,7 @@ SELECT
     concat('0x', encode(r.token_address, 'hex')) AS token_address,
     r.symbol,
     SUM(r.amount_raw / pow(10::numeric, r.decimals)) AS total_amount
-FROM {{ref(query_id=123142)}} r
+FROM {{ref("Detail")}} r   -- sibling by name in the same folder; no id needed
 GROUP BY r.chain_id, r.chain_name, r.token_address, r.symbol
 ORDER BY total_amount DESC
 LIMIT 200

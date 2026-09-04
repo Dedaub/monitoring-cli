@@ -2,7 +2,7 @@
 
 **Precondition (from Step 5):** the real target query `/<AlertName>/<QueryName>` is already
 **created, written, and passed the empirical gate** (`validate-query` first, then `run-query`). Any
-VIEW/TABLE lookup it reads via `{{ref(<id>)}}` is already created and `set-config`'d. So this playbook is
+VIEW/TABLE lookup it reads via `{{ref("<Name>")}}` is already created and `set-config`'d. So this playbook is
 mostly `enable-alerts` + smoke-test + finalize. Run in order; stop and report on any failure.
 
 **Variables:** `QUERY_ID`, `NETWORK` (the chain the query's macros read), `ALERT_TEMPLATE`
@@ -19,7 +19,9 @@ dedaub-monitoring write-query --id <LOOKUP_ID> <<'SQL'
 SQL
 # VIEW = re-evaluated each run (reusable, not materialized); TABLE = refreshed snapshot (history)
 dedaub-monitoring set-config --id <LOOKUP_ID> --network <NETWORK> --materialize VIEW
-# the alert references it as: FROM {{ref(query_id=<LOOKUP_ID>)}}
+# the alert references it as: FROM {{ref("<LOOKUP_NAME>")}}   # same-folder sibling, no id to get wrong
+# ref(query_id=<LOOKUP_ID>) also works HERE — this is the one path where you captured the id yourself.
+# It resolves, but the dependency checker does not see it, so prefer the name.
 ```
 For a **TABLE** lookup (history-spanning), force the first population so the alert's `{{ref()}}` resolves
 to real rows immediately instead of on the next scheduled cycle:
