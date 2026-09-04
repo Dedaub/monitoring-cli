@@ -25,7 +25,8 @@ in the doc (some entries are bridged representations / decoys — the docs flag 
 - **Messaging (generic interop):** `layerzero` `axelar` `celer` `connext` `zkbridge`
 - **DEX / AMM:** `aerodrome` `angstrom` `apeswap` `balancer` `bancor` `beets` `biswap` `blackhole`
   `camelot` `curve` `dodo` `dooar` `ekubo` `fluid` `fraxswap` `izumi` `metric` `native` `pancakeswap`
-  `pharaoh` `quickswap` `ramses` `shibaswap` `sushiswap` `swaap` `tessera` `topaz` `traderjoe`
+  `pharaoh` `quickswap` `ramses` `shibaswap` `sushiswap` `swaap` `tessera` `thena`
+  `topaz` `traderjoe`
   `uniswap` `velodrome`
 - **Aggregator (routing):** `dodo` (smartroute) · `native` (RFQ)
 - **Lending / money-market:** `40acres` `aave` `agave` `benqi` `compound` `euler` `fluid` `fluxfinance`
@@ -64,7 +65,7 @@ third-party protocols (Liquid Collective / StakeWise). No `<slug>/` dir exists f
 | `avalanche_c_bitcoin` | Bridge | Avax +Other (BTC) | core.md | Avalanche Bridge BTC.b wrapped Bitcoin |
 | `avalanche_c_native` | Bridge | ETH·Avax | core.md | Avalanche Bridge (AB) ETH↔C-Chain |
 | `axelar` | Bridge·Messaging | 7 | core.md | GMP + token bridge cross-chain |
-| `balancer` | DEX | ETH·Base·Arb·OP·Avax +Gnosis | v2.md, v3.md | Weighted/boosted-pool AMM + vault |
+| `balancer` | DEX | ETH·Base·BNB·Avax·Arb·OP·Poly +Gnosis | v2.md, v3.md | Weighted/boosted-pool AMM + vault |
 | `bancor` | DEX | ETH | v3.md | Omnipool single-sided AMM, ETH-only |
 | `beamer` | Bridge | ETH·OP·Base·Arb +Other | core.md | Optimistic rollup-to-rollup bridge |
 | `beets` | DEX | OP | core.md | Beethoven X; Balancer-V2 fork, shared Vault; OP-only of 7 |
@@ -80,7 +81,7 @@ third-party protocols (Liquid Collective / StakeWise). No `<slug>/` dir exists f
 | `chainlink` | Oracle | 7 +many | ccip/data-feeds/vrf/automation/functions/data-streams/link-token | Price feeds, CCIP, VRF, Automation, Functions |
 | `coinbase` | LST | ETH·Base·Arb·OP·Poly | cbeth.md | cbETH; FiatToken fork, oracle-pushed rate; 5 bridge wrappers |
 | `compound` | Lending | ETH·Base·Arb·OP·Poly | v2.md, v3.md | V2 pools + V3 Comet single-borrow-asset |
-| `connext` | Bridge·Messaging | ETH·Base·BNB·Arb·OP·Poly | amarok.md, core.md | Connext/Everclear intent clearing |
+| `connext` | Bridge·Messaging | 7 | amarok.md, core.md | Connext/Everclear intent clearing |
 | `curve` | DEX·CDP | 7 | curve.md, crvusd.md | StableSwap/crypto AMM + crvUSD LLAMMA CDP |
 | `dodo` | DEX·Aggregator | 7 | v1/v2/v3.md, smartroute.md | PMM AMM + SmartRoute aggregator |
 | `dooar` | DEX | ETH·BNB | core.md | DooarSwap (STEPN); tiny UniV2 fork, ETH+BSC only |
@@ -99,14 +100,14 @@ third-party protocols (Liquid Collective / StakeWise). No `<slug>/` dir exists f
 | `justlend` | Lending | +Other (Tron) | core.md | Compound-V2 fork, Tron-only; absent all 7 EVM |
 | `layerbank` | Lending | +Other (Linea/Scroll/Mode) | core.md | Own Core+LToken arch; none of the 7 targets |
 | `layerzero` | Messaging·Bridge | 7 +many | v1.md, v2.md | OFT / generic cross-chain messaging endpoint |
-| `lido` | LST | ETH +L2 bridged | v1–v3.md, l2.md | stETH/wstETH; the canonical ETH LST |
+| `lido` | LST | ETH·Base·BNB·Arb·OP | v1–v3.md, l2.md | stETH/wstETH; the canonical ETH LST |
 | `lighter` | Perps·Bridge | ETH | core.md | zkLighter orderbook perp DEX; ETH L1 settlement |
 | `lodestar` | Lending | Arb | core.md | Compound-V2 fork, Arbitrum-only; frozen post plvGLP exploit |
 | `maple` | Lending·Token | ETH·Base (+SYRUP 7) | v1/v2/syrup-cross-chain.md | RWA/institutional credit pools; SYRUP OFT + CCIP token |
 | `metric` | DEX | ETH | core.md, founder-fleet.md | ETH-only front-end DEX (0x/KeeperDAO), not a DODO fork |
 | `moola` | Lending | +Other (Celo) | core.md | Aave fork, Celo-only; absent all 7 |
 | `moonwell` | Lending | Base·OP +Other | core.md | Compound-V2 fork; lending only on Base+Optimism |
-| `morpho` | Lending | ETH·Base·Arb·OP·Poly | v1/v2/optimizers.md | Blue immutable markets + MetaMorpho/Vaults-V2 |
+| `morpho` | Lending | 7 | v1/v2/optimizers.md | Blue immutable markets + MetaMorpho/Vaults-V2 |
 | `native` | DEX·Lending·Aggregator | ETH·Base·BNB·Arb | dex.md, lending.md | RFQ swap engine (NativeRouter) + lending |
 | `nitro` | Bridge | 7 +Other | core.md, gateway.md | Router Protocol Voyager gateway + AssetBridge |
 | `orbiter` | Bridge | 7 +Other | core.md, mdc.md | Maker-Deposit-Contract rollup bridge w/ arbitration |
@@ -119,7 +120,7 @@ third-party protocols (Liquid Collective / StakeWise). No `<slug>/` dir exists f
 | `rainbow` | Bridge | ETH +Other (NEAR) | core.md | NEAR Rainbow Bridge (legacy), ETH L1 |
 | `ramses` | DEX | Arb | cl.md, legacy.md | Solidly ve(3,3) + UniV3-style CL (fee-keyed); Arbitrum-only |
 | `realt_rmm` | Lending | +Other (Gnosis) | core.md | RealToken Aave fork, Gnosis-only; RWA reserves |
-| `rocketpool` | LST | ETH +L2 bridged | core.md, l2.md | rETH decentralized-validator staking; L2 = bridged rETH |
+| `rocketpool` | LST | ETH·Base·Arb·OP·Poly | core.md, l2.md | rETH decentralized-validator staking; L2 = bridged rETH |
 | `ronin_native` | Bridge | ETH +Other (Ronin) | core.md | Ronin gaming-chain bridge, ETH L1 |
 | `seamlessprotocol` | Lending·Restaking | Base·ETH | v1.md, leveragetokens.md | Aave-V3 lending (Base) + Morpho-powered leverage tokens |
 | `shibaswap` | DEX | ETH | core.md | UniV2 fork (SSLP) + TopDog farm + BONE/Bury staking; ETH-only |
@@ -135,8 +136,9 @@ third-party protocols (Liquid Collective / StakeWise). No `<slug>/` dir exists f
 | `synthetix` | Perps | ETH·OP·Base·Arb | v2.md, v3.md | Synth/perps derivatives; V2 → V3 collateral system |
 | `tessera` | DEX | Base·BNB | core.md | Wintermute dark AMM (EVM = Base + BSC only) |
 | `tether` | Bridge·Token | ETH·Arb·OP·Poly +Other | core.md | USDT0 LayerZero-OFT omnichain USDT (~23 chains) |
+| `thena` | DEX | BNB | classic.md, cl.md | Solidly ve(3,3) + Algebra-V1 CL; BNB-only. The fork parent of Blackhole/Ramses |
 | `topaz` | DEX | BNB | amm.md, slipstream.md | ve(3,3) Velodrome+Aerodrome fork, BNB-only |
-| `traderjoe` | DEX | Avax·Arb·BNB | v1/v2.0/v2.1/v2.2.md | Liquidity Book bins; Avax+Arb full, BSC no-2.2 |
+| `traderjoe` | DEX | ETH·BNB·Avax·Arb | v1/v2.0/v2.1/v2.2.md | Liquidity Book bins; Avax+Arb full, BSC no-2.2 |
 | `uniswap` | DEX | 7 | v2/v3/v4.md | The canonical AMM; V2 pairs → V3 CL → V4 hooks |
 | `uwulend` | Lending | ETH | core.md | Aave-V2 fork, ETH-only; ~$24M June-2024 oracle exploit |
 | `velodrome` | DEX | OP +Other (Superchain) | v2.md, slipstream.md, superchain.md | ve(3,3) + Slipstream; Optimism-Superchain |
