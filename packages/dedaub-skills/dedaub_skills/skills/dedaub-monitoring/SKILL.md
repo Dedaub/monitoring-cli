@@ -240,7 +240,7 @@ with `GROUP BY`/`SUM` + final `LIMIT 200`; the VIEW/reader split is an alert-mod
 **Combine signals with `UNION ALL`.** Multiple topic0s/addresses/selectors and/or chains → one query, one
 branch per signal (same columns, own indexed lead + window + literal `chain_id`). `block_number` is **not**
 cross-chain comparable — never JOIN on it; aggregate outside the UNION over `block_timestamp(...)`.
-**Deploy slot:** a cross-chain UNION (or any query hard-coding `network=` in its macros) must deploy on the
+**Deploy slot:** a cross-chain UNION (or any query hard-coding `<c>.<macro name>` in its macros) must deploy on the
 **`ethereum`/chain_id=1 slot**, else it silently never fires (deploy-playbook §"Execution slot"). Confirm
 via `get-logs`/`query-status`.
 

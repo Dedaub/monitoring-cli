@@ -361,12 +361,12 @@ The split:
 -- Principal VIEW, named "Detail": full rows, NO limit, materialize VIEW.
 -- One UNION ALL branch per chain; each carries its own literal chain_id + chain_name (cross-chain PK rule below).
 SELECT 8453  AS chain_id, 'base'     AS chain_name, tl.token_address, -tl.value_delta AS amount_raw, lti.decimals, lti.symbol
-FROM {{token_ledger(network='base', duration='24h')}} tl
+FROM {{base.token_ledger(duration='24h')}} tl
 JOIN base.latest_token_info lti ON lti.token_address = tl.token_address
 WHERE tl.value_delta < 0 AND tl.value_delta != 0
 UNION ALL
 SELECT 42161 AS chain_id, 'arbitrum' AS chain_name, tl.token_address, -tl.value_delta AS amount_raw, lti.decimals, lti.symbol
-FROM {{token_ledger(network='arbitrum', duration='3h')}} tl
+FROM {{arbitrum.token_ledger(duration='3h')}} tl
 JOIN arbitrum.latest_token_info lti ON lti.token_address = tl.token_address
 WHERE tl.value_delta < 0 AND tl.value_delta != 0
 -- no LIMIT
@@ -414,7 +414,7 @@ SELECT address, DATE(now()) AS date_error
 FROM watched
 WHERE NOT EXISTS (
     SELECT 1
-    FROM {{transaction_detail(network='ethereum', duration='24 hour')}} td   -- duration= works on transaction_detail too
+    FROM {{<chain>.transaction_detail(duration='24 hour')}} td   -- duration= works on transaction_detail too
     WHERE td.to_a = watched.address
       AND common.selector(td.calldata) = '\x<selector>'::bytea
       AND td.committed
@@ -430,7 +430,7 @@ The platform's flagship oracle-staleness alert uses the equivalent `… EXCEPT S
 ```sql
 SELECT tx_hash(t.block_number, t.tx_index) AS tx_hash, p.protocol_name,
        SUM(<chain>.to_usd_value(t.value_delta, t.token_address)) AS net_usd
-FROM {{token_ledger(network='<chain>', duration='…')}} t
+FROM {{<chain>.token_ledger(duration='…')}} t
 JOIN <chain>.protocol_contract pc USING (address)
 JOIN <chain>.protocol          p  USING (protocol_id)
 GROUP BY t.block_number, t.tx_index, p.protocol_id, p.protocol_name
@@ -445,8 +445,8 @@ HAVING SUM(<chain>.to_usd_value(t.value_delta, t.token_address)) > 1000000   -- 
 
 ```sql
 SELECT tx_hash(outer_call.block_number, outer_call.tx_index)
-FROM {{transaction_detail(network='ethereum', duration='…')}} AS outer_call
-JOIN {{transaction_detail(network='ethereum', duration='…', inputs='0x<addr>.execute(bytes,bytes[])')}} AS inner_call
+FROM {{<chain>.transaction_detail(duration='…')}} AS outer_call
+JOIN {{<chain>.transaction_detail(duration='…', inputs='0x<addr>.execute(bytes,bytes[])')}} AS inner_call
   ON {{is_ancestor("outer_call", "inner_call")}}
 WHERE outer_call.to_a = inner_call.to_a       -- same callee reached again in a nested frame = reentrancy
 ```

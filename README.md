@@ -86,7 +86,7 @@ SELECT
     encode(t.from_a, 'hex') AS sender,
     t.callvalue / 1e18 AS eth_amount,
     t.block_number
-FROM {{outer_transaction(network='ethereum')}} t
+FROM {{ethereum.outer_transaction()}} t
 WHERE t.callvalue > 100 * 1e18
   AND t.status = true
 SQL
@@ -140,13 +140,13 @@ Queries use DedaubQL, a dialect of SQL with macros that handle time-bounded incr
 
 ```sql
 -- Use this
-FROM {{outer_transaction(network='ethereum')}} t
+FROM {{ethereum.outer_transaction()}} t
 
 -- Not this (causes full table scans and timeouts)
 FROM ethereum.outer_transaction t
 ```
 
-Key macros: `{{outer_transaction(network='ethereum')}}`, `{{logs(network='ethereum')}}`, `{{contracts(network='ethereum')}}`.
+Key macros: `{{ethereum.outer_transaction()}}`, `{{etheruem.logs()}}`, `{{ethereum.contracts()}}`.
 
 All address and hash columns are `bytea`. Use `\x`-prefixed literals in WHERE clauses and `encode(col, 'hex')` in SELECT for readable output:
 
@@ -295,15 +295,15 @@ Write a query that selects transfers above a threshold (see the [large ETH trans
 
 ### Which blockchains and networks are supported?
 
-Any chain supported by the Dedaub monitoring platform, including Ethereum, Arbitrum, and Base. Select the chain with the `--network` option (default `ethereum`) and the matching network argument inside your DedaubQL macros (e.g. `{{outer_transaction(network='arbitrum')}}`).
+Any chain supported by the Dedaub monitoring platform, including Ethereum, Arbitrum, and Base. Select the chain with the `--network` option (default `ethereum`) and the matching network argument inside your DedaubQL macros (e.g. `{{ethereum.outer_transaction()}}`).
 
 ### How do I monitor a smart contract or DeFi protocol for drains, liquidations, or admin actions?
 
-Query the protocol's logs and calls with the `{{logs(...)}}` and `{{outer_transaction(...)}}` macros, filter for the events you care about (large withdrawals, liquidation calls, owner/admin function selectors, oracle updates), and enable alerts on the query. The Claude Code skill (`dedaub-monitoring install-skill`) can build these queries for you from a plain-language description.
+Query the protocol's logs and calls with the `{{<c>.logs(...)}}` and `{{<c>.outer_transaction(...)}}` macros (`<c>` is the chain slug), filter for the events you care about (large withdrawals, liquidation calls, owner/admin function selectors, oracle updates), and enable alerts on the query. The Claude Code skill (`dedaub-monitoring install-skill`) can build these queries for you from a plain-language description.
 
 ### Do I write raw SQL or a special dialect?
 
-You write **DedaubQL**, a dialect of SQL with macros for time-bounded incremental execution. Always use macros (e.g. `{{outer_transaction(network='ethereum')}}`) instead of raw table names to avoid full table scans. See [DedaubQL](#dedaubql) above.
+You write **DedaubQL**, a dialect of SQL with macros for time-bounded incremental execution. Always use macros (e.g. `{{ethereum.outer_transaction()}}`) instead of raw table names to avoid full table scans. See [DedaubQL](#dedaubql) above.
 
 ### Is there an AI-assisted way to build alerts?
 

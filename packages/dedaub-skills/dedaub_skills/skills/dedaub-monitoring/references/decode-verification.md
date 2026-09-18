@@ -243,7 +243,7 @@ SELECT count(*)                                        AS n_rows,
 FROM probe p
 LEFT JOIN LATERAL (
     SELECT tl.token_address
-      FROM {{token_ledger(network='<chain>', duration='<w>')}} tl
+      FROM {{<chain>.token_ledger(duration='<w>')}} tl
      WHERE tl.block_number = p.block_number
        AND tl.tx_index     = p.tx_index
        AND tl.address      = '\x<protocol_contract>'::bytea

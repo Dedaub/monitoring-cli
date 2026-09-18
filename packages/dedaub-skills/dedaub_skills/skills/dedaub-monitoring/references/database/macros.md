@@ -21,12 +21,12 @@ anti-patterns. Its two siblings hold the bulk: **`query_patterns.md`** (§5 P1�
 
 | Macro | Grain | Use for |
 |-------|-------|---------|
-| `{{outer_transaction(network=,duration=)}}` | 1 / top-level tx | `tx_hash`,`callvalue`,`status`,`from_a`/`to_a`,`input` — entry-call, ETH value |
-| `{{transaction_detail(network=,duration=,inputs=)}}` | 1 / call frame | `from_a`/`to_a`/`calldata`/`callvalue`/`error`/`call_opcode`/`caller_vm_step_stack` — internal calls, selectors. Takes `duration=` + `inputs=` like `logs`, plus the signature-string forms (below). |
-| `{{logs(network=,duration=,inputs=)}}` | 1 / emitted log | events by topic0 + emitter |
-| `{{token_ledger(...)}}` / `{{token_transfers(...)}}` | parsed token deltas | value analytics (`value_delta` signed) > decoding `logs.data` |
-| `{{contracts(...)}}` / `{{contract_list(...)}}` | deployed contracts | deployer / is-contract lookups |
-| `{{block(...)}}` | block headers | tip, timestamps |
+| `{{<chain>.outer_transaction(duration=)}}` | 1 / top-level tx | `tx_hash`,`callvalue`,`status`,`from_a`/`to_a`,`input` — entry-call, ETH value |
+| `{{<chain>.transaction_detail(duration=,inputs=)}}` | 1 / call frame | `from_a`/`to_a`/`calldata`/`callvalue`/`error`/`call_opcode`/`caller_vm_step_stack` — internal calls, selectors. Takes `duration=` + `inputs=` like `logs`, plus the signature-string forms (below). |
+| `{{<chain>.logs(duration=,inputs=)}}` | 1 / emitted log | events by topic0 + emitter |
+| `{{<chain>.token_ledger(...)}}` / `{{<chain>.token_transfers(...)}}` | parsed token deltas | value analytics (`value_delta` signed) > decoding `logs.data` |
+| `{{<chain>.contracts(...)}}` / `{{contract_list(...)}}` | deployed contracts | deployer / is-contract lookups |
+| `{{<chain>.block(...)}}` | block headers | tip, timestamps |
 
 `outer_transaction` (`status`) vs `transaction_detail` (`committed`/`error`) = granularities, not rivals.
 
@@ -49,7 +49,7 @@ anti-patterns. Its two siblings hold the bulk: **`query_patterns.md`** (§5 P1�
   passes every gate unchecked. A bare integer `{{ref(<id>)}}` is **not** a form at all: the first
   positional argument is the *name*, and an int raises `TypeError` inside the resolver.
   All three forms resolve on the **ethereum slot** (deploy-playbook §"Execution slot").
-- **`{{eth_call("<addr>.fn(argtype arg)", outputs="( rettype output0 )", network='<c>')}}`** — live
+- **`{{<chain>.eth_call("<addr>.fn(argtype arg)", outputs="( rettype output0 )")}}`** — live
   on-chain view call at tip → `<chain>.eth_call(addr,'sig(returns)',args_jsonb)`; returns a tuple
   (`output0`/`[0]`). **One RPC/row** → small sets only; for balances use `token_balance`.
 - **`{{is_ancestor("a","b")}}` / `{{is_parent("a","b")}}`** — call-frame ancestry predicates joining two
@@ -97,7 +97,7 @@ A raw topic0 catches a protocol **and all forks** at once (one `PoolCreated` top
 Arbitrum), skips the unused `decode_event` join, and sidesteps the `indexed` footgun — use it when you want
 **every fork** or only need presence, not decoded args:
 ```sql
-FROM {{logs(network='arbitrum', duration='7d')}} l
+FROM {{arbirum.logs(duration='7d')}} l
 WHERE l.topic0 = '\x<event_topic0>'::bytea  -- EventName(type,type,…)
 ```
 **Every raw `\x` topic0/selector literal carries an inline `-- EventName(types)` /

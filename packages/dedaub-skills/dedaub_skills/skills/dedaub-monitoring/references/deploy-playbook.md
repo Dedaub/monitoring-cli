@@ -74,10 +74,10 @@ dedaub-monitoring get-config --id <QUERY_ID> --network <NETWORK>   # expect mate
 If `get-config` on the alert's network shows `INCREMENTAL` + your frequency, the config is live
 regardless of what the UI modal renders for its currently-selected network.
 
-### Execution slot — explicit-`network=` / cross-chain queries deploy on `ethereum` (chain_id=1)
+### Execution slot — explicit-`<chain>.<macro or table>` / cross-chain queries deploy on `ethereum` (chain_id=1)
 
 `--network` = data chain holds **only for network-agnostic macros** (no `network=`; the slot injects the
-chain). When the SQL **hard-codes `network=`** (the skill's norm), and for any **cross-chain `UNION`**, the
+chain). When the SQL **hard-codes `<chain>.<macro or table>`** (the skill's norm), and for any **cross-chain `UNION`**, the
 data chain is fixed in the SQL, so the slot is just an execution identity — and the materializer/scheduler
 **defaults it to `chain_id=1`**. Deploy on any other slot and `materialize`/`query-status` fail with
 `Unable to locate query … chain_id=1` and **no run ever fires**. **Fix: `enable-alerts --network ethereum`**
