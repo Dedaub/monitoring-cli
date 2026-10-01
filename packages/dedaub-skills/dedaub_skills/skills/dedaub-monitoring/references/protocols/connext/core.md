@@ -1,13 +1,13 @@
 # Everclear V6 — Topics, Selectors, Addresses (Ethereum, Base, BNB, Avalanche, Arbitrum, Optimism, Polygon)
 
-**Status:** verified against live RPC on every listed chain and the canonical `everclearorg/monorepo` repo (`dev` branch) on 2026-06-09.
-**Scope:** the current **Everclear** intent-based clearing layer (the rebrand of Connext, post-Amarok). Covers the **EverclearSpoke** (per-spoke-chain intent contract), **SpokeGateway** (Hyperlane messaging adapter), and **FeeAdapterV2** (the actual user-facing entrypoint). Topics and selectors are chain-agnostic; addresses are network-specific. The clearing **EverclearHub** lives on Everclear's own L2 (Hyperlane domain **25327**), which is **outside the seven requested chains** — its Hub topics are documented in §1.4 as a finding. For the legacy Connext Amarok Diamond, see [amarok.md](amarok.md).
+**Status:** verified against live RPC on every listed chain and the canonical `everclearorg/monorepo` repo (`dev` branch) on 2026-06-09. Re-verified on 2026-09-29: the struct-typed rows (written out as tuples), the per-chain addresses against the Everclear mainnet contracts page, and all eight target chains, Robinhood Chain (4663) included. **The Everclear team announced the protocol sunset on 2026-05-21** (The Block); see §10, item 12.
+**Scope:** the current **Everclear** intent-based clearing layer (the rebrand of Connext, post-Amarok). Covers the **EverclearSpoke** (per-spoke-chain intent contract), **SpokeGateway** (Hyperlane messaging adapter), and **FeeAdapterV2** (the actual user-facing entrypoint). Topics and selectors are chain-agnostic; addresses are network-specific. The clearing **EverclearHub** lives on Everclear's own L2 (Hyperlane domain **25327**), which is **outside the eight target chains** — its Hub topics are documented in §1.4 as a finding. For the legacy Connext Amarok Diamond, see [amarok.md](amarok.md); for the first generation (NXTP v1), see [nxtp.md](nxtp.md). Robinhood Chain (4663) has no Everclear contract (§8).
 
 Everclear is an **intent/clearing** protocol, not a lock-mint bridge: a user calls `newIntent` (via FeeAdapter) on the origin **Spoke**; solvers fill it on the destination Spoke; the **Hub** (clearing chain) nets and settles via Hyperlane messages between SpokeGateway↔HubGateway. The Spoke and Gateway are **UUPS (ERC-1967) proxies** — `eth_getCode` returns a ~183-byte minimal proxy; the EIP-1967 impl slot is set and the **admin slot is empty** (UUPS, upgrade auth in the impl's `owner`). The **FeeAdapterV2 is a direct (non-proxy) deployment** (~12.8 kB, identical bytecode on all 7 chains). 
 
 **Deployed-version note (verified on-chain 2026-06-09):** the live Spoke is the **V6 interface** — it uses the `IEverclearV2.Intent` struct `(bytes32 initiator, bytes32 receiver, bytes32 inputAsset, bytes32 outputAsset, uint32 origin, uint64 nonce, uint48 timestamp, uint48 ttl, uint256 amount, uint256 amountOutMin, uint32[] destinations, bytes data)` — note **`amountOutMin` and NO `maxFee`** (unlike the older V1 `Intent` which had `uint24 maxFee` and no `amountOutMin`). The deployed entrypoint is **FeeAdapterV2**. All §1/§2 hashes are computed from this V6 struct and matched against the live bytecode and live logs.
 
-> **Vanity / address-collision trap.** The EverclearSpoke, SpokeGateway and (oddly) the EverclearHub all share the **same literal `0xa05A3380…D816`** in the docs. On the **seven spoke chains** `0xa05A3380…` (or its per-chain variant) is the **Spoke**; on the **hub clearing chain** the same literal is the **Hub**. Disambiguate by chain: call `EVERCLEAR()` on a spoke — it returns the **hub domain 25327** (`0x62ef`), proving it is a Spoke pointing at the Hub, not the Hub itself.
+> **Vanity / address-collision trap.** The EverclearSpoke, SpokeGateway and (oddly) the EverclearHub all share the **same literal `0xa05A3380889115bf313f1Db9d5f335157Be4D816`** in the docs. On the **seven spoke chains** `0xa05A3380889115bf313f1Db9d5f335157Be4D816` (or its per-chain variant) is the **Spoke**; on the **hub clearing chain** the same literal is the **Hub**. Disambiguate by chain: call `EVERCLEAR()` on a spoke — it returns the **hub domain 25327** (`0x62ef`), proving it is a Spoke pointing at the Hub, not the Hub itself.
 
 ---
 
@@ -15,10 +15,10 @@ Everclear is an **intent/clearing** protocol, not a lock-mint bridge: a user cal
 
 | Contract | Role | Proxy? | Address pattern across the 7 |
 |----------|------|--------|------------------------------|
-| **EverclearSpoke** (V6) | Per-chain intent contract: `newIntent`, `fillIntent`, `deposit`/`withdraw`, queue processing, settlement receipt. | **UUPS / ERC-1967** | Vanity `0xa05A3380…D816` on ETH/Base/BNB/Arb/OP; **diverges** on Avalanche (`0x9aA2Ecad…`) and Polygon (`0x7189C59e…`). Per-chain impl. |
-| **SpokeGateway** (V6) | Hyperlane messaging adapter (Spoke↔Hub). | **UUPS / ERC-1967** | Vanity `0x9ADA72CC…99A7` on ETH/Base/BNB/Arb/OP; diverges on Avax (`0x7EB63a64…`) and Polygon (`0x26CFF54f…`). |
-| **FeeAdapterV2** | User-facing entrypoint: `newIntent` (+fee), `newOrder`, Permit2. Wraps the Spoke. | **No** (direct, ~12.8 kB) | **Same literal `0xd0185bfb…540e` on ALL 7 chains** (identical bytecode). |
-| **CLEAR / Everclear token** | Governance token. | EIP-1967 proxy (ETH) / OFT | `0x58b9cb81…05E8` on ETH/BNB/Arb/OP/Polygon; absent Base+Avax — see [amarok.md](amarok.md) §10. |
+| **EverclearSpoke** (V6) | Per-chain intent contract: `newIntent`, `fillIntent`, `deposit`/`withdraw`, queue processing, settlement receipt. | **UUPS / ERC-1967** | Vanity `0xa05A3380889115bf313f1Db9d5f335157Be4D816` on ETH/Base/BNB/Arb/OP; **diverges** on Avalanche (`0x9aA2Ecad5C77dfcB4f34893993f313ec4a370460`) and Polygon (`0x7189C59e245135696bFd2906b56607755F84F3fD`). Per-chain impl. |
+| **SpokeGateway** (V6) | Hyperlane messaging adapter (Spoke↔Hub). | **UUPS / ERC-1967** | Vanity `0x9ADA72CCbAfe94248aFaDE6B604D1bEAacc899A7` on ETH/Base/BNB/Arb/OP; diverges on Avax (`0x7EB63a646721de65eBa79ffe91c55DCE52b73c12`) and Polygon (`0x26CFF54f11608Cd3060408690803AB4a43f462f2`). |
+| **FeeAdapterV2** | User-facing entrypoint: `newIntent` (+fee), `newOrder`, Permit2. Wraps the Spoke. | **No** (direct, ~12.8 kB) | **Same literal `0xd0185bfb8107c5b2336bC73cE3fdd9Bfb504540e` on all 7 chains other than Robinhood** (identical bytecode). |
+| **CLEAR / Everclear token** | Governance token. | EIP-1967 proxy (ETH) / OFT | `0x58b9cb810A68a7f3e1E4f8Cb45D1B9B3c79705E8` on ETH/BNB/Arb/OP/Polygon; absent on Base, Avalanche and Robinhood — see [amarok.md](amarok.md) §10. |
 | **EverclearHub** + **HubGateway** | Clearing-chain core (netting, invoices, settlements). | UUPS | On the Everclear L2 (Hyperlane domain **25327**) — NOT on any of the seven. §1.4. |
 
 ---
@@ -33,8 +33,8 @@ V6/V2 Intent tuple = `(bytes32,bytes32,bytes32,bytes32,uint32,uint64,uint48,uint
 
 | topic0 | Event |
 |--------|-------|
-| `0x80eb6c87e9da127233fe2ecab8adf29403109adc6bec90147df35eeee0745991` | `IntentAdded(bytes32 indexed _intentId, uint256 _queueIdx, Intent _intent)` — **origin: user created an intent.** *(verified live, Base)* |
-| `0xe3bc4b05ac625e8c55084d86f8bb9a4c1ff02777dccc7ec0f3b3b7e7468cf383` | `IntentFilled(bytes32 indexed _intentId, address indexed _solver, bytes32 indexed _receiver, uint256 _amountOut, uint256 _queueIdx, Intent _intent)` — **destination: solver filled.** |
+| `0x80eb6c87e9da127233fe2ecab8adf29403109adc6bec90147df35eeee0745991` | `IntentAdded(bytes32 indexed _intentId, uint256 _queueIdx, (bytes32 initiator, bytes32 receiver, bytes32 inputAsset, bytes32 outputAsset, uint32 origin, uint64 nonce, uint48 timestamp, uint48 ttl, uint256 amount, uint256 amountOutMin, uint32[] destinations, bytes data) _intent)` — **origin: user created an intent.** *(verified live, Base)* |
+| `0xe3bc4b05ac625e8c55084d86f8bb9a4c1ff02777dccc7ec0f3b3b7e7468cf383` | `IntentFilled(bytes32 indexed _intentId, address indexed _solver, bytes32 indexed _receiver, uint256 _amountOut, uint256 _queueIdx, (bytes32 initiator, bytes32 receiver, bytes32 inputAsset, bytes32 outputAsset, uint32 origin, uint64 nonce, uint48 timestamp, uint48 ttl, uint256 amount, uint256 amountOutMin, uint32[] destinations, bytes data) _intent)` — **destination: solver filled.** |
 | `0x4190759d37d5cfe7a1a70e06ec7508a05d12fd9cb76f353da1c9e028e5a48dcf` | `Settled(bytes32 indexed _intentId, address _account, address _asset, uint256 _amount)` — settlement arrived from Hub. |
 | `0x8752a472e571a816aea92eec8dae9baf628e840f4929fbcc2d155e6233ff68a7` | `Deposited(address indexed _depositant, address indexed _asset, uint256 _amount)` — solver liquidity in. |
 | `0xd1c19fbcd4551a5edfb66d43d2e337c04837afda3482b42bdf569a8fccdae5fb` | `Withdrawn(address indexed _withdrawer, address indexed _asset, uint256 _amount)` — solver liquidity out. |
@@ -47,7 +47,7 @@ V6/V2 Intent tuple = `(bytes32,bytes32,bytes32,bytes32,uint32,uint64,uint48,uint
 | `0x9e87fac88ff661f02d44f95383c817fece4bce600a3dab7a54406878b965e752` | `Paused()` |
 | `0xa45f47fdea8a1efdd9029a5691c7f759c32b7c698632b563573e155625d16933` | `Unpaused()` |
 
-> The **`Intent` struct must use the V6/V2 layout** (`amountOutMin`, no `maxFee`) or `IntentAdded`/`IntentFilled` topic0 won't match. The older V1 layout (with `uint24 maxFee`) yields **different, wrong** hashes (`IntentAdded` V1 would be `0xefe68281…`, which is NOT what the live contract emits).
+> The **`Intent` struct must use the V6/V2 layout** (`amountOutMin`, no `maxFee`) or `IntentAdded`/`IntentFilled` topic0 won't match. The older V1 layout (with `uint24 maxFee`) yields **different, wrong** hashes (`IntentAdded` V1 would be `0xefe68281645929e2db845c5b42e12f7c73485fb5f18737b7b29379da006fa5f7`, which is NOT what the live contract emits).
 
 ### 1.2 FeeAdapterV2 — the user entrypoint (separate emitter)
 
@@ -64,9 +64,9 @@ A user `newIntent` through the FeeAdapter emits **both** `IntentWithFeesAdded` (
 
 | topic0 / value | Meaning |
 |--------|-------|
-| `0xbc7cd75a20ee27fd9adebab32041f755214dbc6bffa90cc0225b39da2e5c2d3b` | `Upgraded(address implementation)` — **watch on Spoke/Gateway proxies** for impl rotations. |
+| `0xbc7cd75a20ee27fd9adebab32041f755214dbc6bffa90cc0225b39da2e5c2d3b` | `Upgraded(address indexed implementation)` — **watch on Spoke/Gateway proxies** for impl rotations. |
 | `0xc7f505b2f371ae2175ee4913f4499e1f2633a7b5936321eed1cdaeb6115181d2` | `Initialized(uint64 version)` — OZ `Initializable`. |
-| `0x8be0079c531659141344cd1fd0a4f28419497f9722a3daafe3b4186f6b6457e0` | `OwnershipTransferred(address,address)`. |
+| `0x8be0079c531659141344cd1fd0a4f28419497f9722a3daafe3b4186f6b6457e0` | `OwnershipTransferred(address indexed previousOwner, address indexed newOwner)`. |
 | `0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc` | EIP-1967 **impl slot** (set on Spoke/Gateway). |
 | `0xb53127684a568b3173ae13b9f8a6016e243e63b6e8ee1178d6a717850b5d6103` | EIP-1967 **admin slot** — **empty** on every Everclear proxy (UUPS). |
 
@@ -85,27 +85,27 @@ Computed from `IHubStorage.sol`. Recorded for completeness — these fire only o
 
 ## 2. Function signatures (chain-agnostic — `keccak256(canonical sig)[0:4]`)
 
-All selectors below were **matched PRESENT against the live deployed bytecode** (Spoke impl `0x1b97e14a…` on ETH; FeeAdapter `0xd0185bfb…`) on 2026-06-09 unless noted.
+All selectors below were **matched PRESENT against the live deployed bytecode** (Spoke impl `0x1b97e14ac5cc126692dc6bce22f1c2e5fa6ccaae` on ETH; FeeAdapter `0xd0185bfb8107c5b2336bC73cE3fdd9Bfb504540e`) on 2026-06-09 unless noted.
 
 ### 2.1 EverclearSpoke (V6) — state-changing
 
 | Selector | Signature | Notes |
 |----------|-----------|-------|
 | `0x8249eb15` | `newIntent(uint32[] destinations, address receiver, address inputAsset, address outputAsset, uint256 amount, uint256 amountOutMin, uint48 ttl, bytes data)` | Direct intent creation. **PRESENT.** (The `bytes32`-receiver overload `0x00c58a2c` is NOT in this impl.) |
-| `0x0ed6c47d` | `fillIntent(Intent _intent, uint256 _amountOut, bytes32 _receiver, uint32[] _destinations, bytes _signature, bool _pullFunds)` | Solver fill (destination). **PRESENT.** Emits `IntentFilled`. |
-| `0xc9bd6a97` | `batchFillIntent(Intent[] _intents, uint256[] _amountOut, bytes32[] _receivers, uint32[][] _destinations, bytes _signature, bool _pullFunds)` | **PRESENT.** |
-| `0xafa6fbd5` | `processIntentQueue(Intent[] _intents, uint256 _dynamicGasLimit)` | Batch origin→hub message. **PRESENT.** |
+| `0x0ed6c47d` | `fillIntent((bytes32 initiator, bytes32 receiver, bytes32 inputAsset, bytes32 outputAsset, uint32 origin, uint64 nonce, uint48 timestamp, uint48 ttl, uint256 amount, uint256 amountOutMin, uint32[] destinations, bytes data) _intent, uint256 _amountOut, bytes32 _receiver, uint32[] _destinations, bytes _signature, bool _pullFunds)` | Solver fill (destination). **PRESENT.** Emits `IntentFilled`. |
+| `0xc9bd6a97` | `batchFillIntent((bytes32 initiator, bytes32 receiver, bytes32 inputAsset, bytes32 outputAsset, uint32 origin, uint64 nonce, uint48 timestamp, uint48 ttl, uint256 amount, uint256 amountOutMin, uint32[] destinations, bytes data)[] _intents, uint256[] _amountOut, bytes32[] _receivers, uint32[][] _destinations, bytes _signature, bool _pullFunds)` | **PRESENT.** |
+| `0xafa6fbd5` | `processIntentQueue((bytes32 initiator, bytes32 receiver, bytes32 inputAsset, bytes32 outputAsset, uint32 origin, uint64 nonce, uint48 timestamp, uint48 ttl, uint256 amount, uint256 amountOutMin, uint32[] destinations, bytes data)[] _intents, uint256 _dynamicGasLimit)` | Batch origin→hub message. **PRESENT.** |
 | `0x61b03cb7` | `processFillQueue(uint32 _amount, uint256 _dynamicGasLimit)` | Batch fill→hub message. **PRESENT.** |
 | `0x47e7ef24` | `deposit(address _asset, uint256 _amount)` | Solver liquidity in. **PRESENT.** Emits `Deposited`. |
 | `0xf3fef3a3` | `withdraw(address _asset, uint256 _amount)` | Solver/user liquidity out. **PRESENT.** Emits `Withdrawn`. |
-| `0x17a297df` | `executeIntentCalldata(Intent _intent)` | Replays an intent's external call. **PRESENT.** |
+| `0x17a297df` | `executeIntentCalldata((bytes32 initiator, bytes32 receiver, bytes32 inputAsset, bytes32 outputAsset, uint32 origin, uint64 nonce, uint48 timestamp, uint48 ttl, uint256 amount, uint256 amountOutMin, uint32[] destinations, bytes data) _intent)` | Replays an intent's external call. **PRESENT.** |
 | `0x0144a661` | `updateFeeAdapter(address)` | Owner-only. **PRESENT.** Emits `FeeAdapterUpdated`. |
 | `0x92b4a6be` | `updateFillSigner(address)` | Owner-only. **PRESENT.** Emits `FillSignerUpdated`. |
 | `0xc0346b20` | `updateGateway(address)` | Owner-only. **PRESENT.** |
 | `0x8456cb59` | `pause()` / `0x3f4ba83a` `unpause()` | **PRESENT.** |
 | `0x4f1ef286` | `upgradeToAndCall(address newImpl, bytes data)` | UUPS upgrade. **PRESENT.** Emits `Upgraded`. |
 
-### 2.2 FeeAdapterV2 — user entrypoint (all PRESENT in `0xd0185bfb…`)
+### 2.2 FeeAdapterV2 — user entrypoint (all PRESENT in `0xd0185bfb8107c5b2336bC73cE3fdd9Bfb504540e`)
 
 | Selector | Signature | Notes |
 |----------|-----------|-------|
@@ -133,9 +133,9 @@ All verified via `eth_getCode` returning non-empty bytecode on `https://ethereum
 
 | Role | Address | Impl (EIP-1967) | One-liner |
 |------|---------|-----------------|-----------|
-| **EverclearSpoke** (UUPS) | `0xa05A3380889115bf313f1Db9d5f335157Be4D816` | `0x1b97e14ac5cc126692dc6bce22f1c2e5fa6ccaae` | Intent contract; emits §1.1. owner `0xa02a88f0…`. |
+| **EverclearSpoke** (UUPS) | `0xa05A3380889115bf313f1Db9d5f335157Be4D816` | `0x1b97e14ac5cc126692dc6bce22f1c2e5fa6ccaae` | Intent contract; emits §1.1. owner `0xa02a88f0bbd47045001bd460ad186c30f9a974d6`. |
 | **SpokeGateway** (UUPS) | `0x9ADA72CCbAfe94248aFaDE6B604D1bEAacc899A7` | `0xa80bcfe3ccd475bd5e74671d10610d7010fe740d` | Hyperlane adapter. |
-| **FeeAdapterV2** (direct) | `0xd0185bfb8107c5b2336bC73cE3fdd9Bfb504540e` | — (12 779 B) | User entrypoint; emits §1.2. owner `0xa02a88f0…`. |
+| **FeeAdapterV2** (direct) | `0xd0185bfb8107c5b2336bC73cE3fdd9Bfb504540e` | — (12 779 B) | User entrypoint; emits §1.2. owner `0xa02a88f0bbd47045001bd460ad186c30f9a974d6`. |
 | Owner (Spoke + FeeAdapter) | `0xa02a88f0bbd47045001bd460ad186c30f9a974d6` | — | Everclear governance Safe on Ethereum. |
 
 ## 4. Addresses — shared-vanity chains (Base 8453, BNB 56, Arbitrum 42161, Optimism 10)
@@ -149,11 +149,11 @@ On **Base, BNB, Arbitrum and Optimism** the Spoke and Gateway use the **same van
 | **FeeAdapterV2** (direct) | `0xd0185bfb8107c5b2336bC73cE3fdd9Bfb504540e` |
 | Owner (Spoke) | `0xf20d5277ad2f301e2f18e2948ff3e72ad0a6dff9` |
 
-Per-chain live Spoke impls (read from EIP-1967 slot, 2026-06-09): **Base** `0xd0d94282063236a61ea0d61e1b068516be0a8e73` · **BNB** `0xaba33f246fcb6da288519a635a017d715a9c7e01` · **Arbitrum** `0xa29aaafad54c4205ffbd1e778448188211ae17f3` · **Optimism** `0x8c2c5c570ee35ae0dc781599af6886dd759561e9`. Per-chain Gateway impls: Base/Arb/OP/BNB all share `0xe0f010e465f15dcd42098df9b99f1038c11b3056`. **Read the live slot — never hard-code an impl.**
+Per-chain live Spoke impls (read from EIP-1967 slot, 2026-06-09; unchanged on 2026-09-29): **Base** `0xd0d94282063236a61ea0d61e1b068516be0a8e73` · **BNB** `0xaba33f246fcb6da288519a635a017d715a9c7e01` · **Arbitrum** `0xa29aaafad54c4205ffbd1e778448188211ae17f3` · **Optimism** `0x8c2c5c570ee35ae0dc781599af6886dd759561e9`. Per-chain Gateway impls: Base/Arb/OP/BNB all share `0xe0f010e465f15dcd42098df9b99f1038c11b3056`. **Read the live slot — never hard-code an impl.**
 
 ## 5. Addresses — Avalanche C-Chain (chain ID 43114) — divergent vanity
 
-The vanity addresses are **NOT** used here; Everclear deployed at different literals. All verified via `eth_getCode` on `https://avalanche-c-chain-rpc.publicnode.com`. Owner = `0xf20d5277…`.
+The vanity addresses are **NOT** used here; Everclear deployed at different literals. All verified via `eth_getCode` on `https://avalanche-c-chain-rpc.publicnode.com`. Owner = `0xf20d5277ad2f301e2f18e2948ff3e72ad0a6dff9`.
 
 | Role | Address | Impl |
 |------|---------|------|
@@ -165,7 +165,7 @@ The vanity addresses are **NOT** used here; Everclear deployed at different lite
 
 ## 6. Addresses — Polygon PoS (chain ID 137) — divergent vanity
 
-Verified via `eth_getCode` on `https://polygon-bor-rpc.publicnode.com`. Owner = `0xf20d5277…`.
+Verified via `eth_getCode` on `https://polygon-bor-rpc.publicnode.com`. Owner = `0xf20d5277ad2f301e2f18e2948ff3e72ad0a6dff9`.
 
 | Role | Address | Impl |
 |------|---------|------|
@@ -188,16 +188,17 @@ The Hub is the **netting/clearing brain**; spoke chains never run it. Cross-chai
 
 | Chain | ID | EverclearSpoke | SpokeGateway | FeeAdapterV2 | Vanity? |
 |---|---|---|---|---|---|
-| **Ethereum** | 1 | `0xa05A3380…D816` | `0x9ADA72CC…99A7` | `0xd0185bfb…540e` | ✅ shared |
-| **Base** | 8453 | `0xa05A3380…D816` | `0x9ADA72CC…99A7` | `0xd0185bfb…540e` | ✅ shared |
-| **BNB** | 56 | `0xa05A3380…D816` | `0x9ADA72CC…99A7` | `0xd0185bfb…540e` | ✅ shared |
-| **Arbitrum** | 42161 | `0xa05A3380…D816` | `0x9ADA72CC…99A7` | `0xd0185bfb…540e` | ✅ shared |
-| **Optimism** | 10 | `0xa05A3380…D816` | `0x9ADA72CC…99A7` | `0xd0185bfb…540e` | ✅ shared |
-| **Avalanche** | 43114 | `0x9aA2Ecad…0460` | `0x7EB63a64…3c12` | `0xd0185bfb…540e` | ⚠️ Spoke/GW diverge |
-| **Polygon** | 137 | `0x7189C59e…F3fD` | `0x26CFF54f…62f2` | `0xd0185bfb…540e` | ⚠️ Spoke/GW diverge |
-| Everclear L2 (Hub) | domain 25327 | — (Hub `0xa05A3380…`) | HubGateway `0xEFfAB7cC…` | — | outside the 7 |
+| **Ethereum** | 1 | `0xa05A3380889115bf313f1Db9d5f335157Be4D816` | `0x9ADA72CCbAfe94248aFaDE6B604D1bEAacc899A7` | `0xd0185bfb8107c5b2336bC73cE3fdd9Bfb504540e` | ✅ shared |
+| **Base** | 8453 | `0xa05A3380889115bf313f1Db9d5f335157Be4D816` | `0x9ADA72CCbAfe94248aFaDE6B604D1bEAacc899A7` | `0xd0185bfb8107c5b2336bC73cE3fdd9Bfb504540e` | ✅ shared |
+| **BNB** | 56 | `0xa05A3380889115bf313f1Db9d5f335157Be4D816` | `0x9ADA72CCbAfe94248aFaDE6B604D1bEAacc899A7` | `0xd0185bfb8107c5b2336bC73cE3fdd9Bfb504540e` | ✅ shared |
+| **Arbitrum** | 42161 | `0xa05A3380889115bf313f1Db9d5f335157Be4D816` | `0x9ADA72CCbAfe94248aFaDE6B604D1bEAacc899A7` | `0xd0185bfb8107c5b2336bC73cE3fdd9Bfb504540e` | ✅ shared |
+| **Optimism** | 10 | `0xa05A3380889115bf313f1Db9d5f335157Be4D816` | `0x9ADA72CCbAfe94248aFaDE6B604D1bEAacc899A7` | `0xd0185bfb8107c5b2336bC73cE3fdd9Bfb504540e` | ✅ shared |
+| **Avalanche** | 43114 | `0x9aA2Ecad5C77dfcB4f34893993f313ec4a370460` | `0x7EB63a646721de65eBa79ffe91c55DCE52b73c12` | `0xd0185bfb8107c5b2336bC73cE3fdd9Bfb504540e` | ⚠️ Spoke/GW diverge |
+| **Polygon** | 137 | `0x7189C59e245135696bFd2906b56607755F84F3fD` | `0x26CFF54f11608Cd3060408690803AB4a43f462f2` | `0xd0185bfb8107c5b2336bC73cE3fdd9Bfb504540e` | ⚠️ Spoke/GW diverge |
+| **Robinhood Chain** | 4663 | ❌ `0x` | ❌ `0x` | ❌ `0x` | not deployed |
+| Everclear L2 (Hub) | domain 25327 | — (Hub `0xa05A3380889115bf313f1Db9d5f335157Be4D816`) | HubGateway `0xEFfAB7cCEBF63FbEFB4884964b12259d4374FaAa` | — | outside the eight |
 
-**All seven requested chains run an Everclear Spoke** (contrast Amarok, which skips Avalanche). The **FeeAdapterV2 literal `0xd0185bfb…540e` is identical on all 7** — the single most reliable cross-chain tell. Spoke/Gateway share a vanity on 5 of 7 (Avax + Polygon diverge). Counterparty chains outside the seven that Everclear also clears include the **Everclear L2 hub (25327)** plus **zkSync Era, Linea, Blast, Scroll, Mode, Mantle, Unichain, Ronin, and others** (Hyperlane domains).
+**Seven of the eight target chains run an Everclear Spoke** (contrast Amarok, which skips Avalanche). **Robinhood Chain (4663) has none:** `eth_getCode` = `0x` (nonce 0) at the Spoke, Gateway and FeeAdapter literals of every chain in this file, and the Everclear mainnet contracts page has no Robinhood entry (2026-09-29). The **FeeAdapterV2 literal `0xd0185bfb8107c5b2336bC73cE3fdd9Bfb504540e` is identical on all 7 deployed chains** — the single most reliable cross-chain tell. Spoke/Gateway share a vanity on 5 of 7 (Avax + Polygon diverge). Counterparty chains outside the seven that Everclear also clears include the **Everclear L2 hub (25327)** plus **zkSync Era, Linea, Blast, Scroll, Mode, Mantle, Unichain, Ronin, and others** (Hyperlane domains).
 
 ---
 
@@ -205,28 +206,30 @@ The Hub is the **netting/clearing brain**; spoke chains never run it. Cross-chai
 
 | Contract | Pattern | Detection | Upgrade auth |
 |----------|---------|-----------|--------------|
-| **EverclearSpoke** | **UUPS (ERC-1967)** | ~183 B proxy; EIP-1967 impl slot `0x3608…bbc` set (e.g. ETH `0x1b97e14a…`); **admin slot `0xb531…6103` empty**; impl exposes `upgradeToAndCall`/`proxiableUUID`. | `owner()` (`0xa02a88f0…` ETH; `0xf20d5277…` other chains). Emits `Upgraded`. |
-| **SpokeGateway** | **UUPS (ERC-1967)** | ~183 B proxy; impl slot set (ETH `0xa80bcfe3…`); admin slot empty. | `owner()`. |
+| **EverclearSpoke** | **UUPS (ERC-1967)** | ~183 B proxy; EIP-1967 impl slot `0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc` set (e.g. ETH `0x1b97e14ac5cc126692dc6bce22f1c2e5fa6ccaae`); **admin slot `0xb53127684a568b3173ae13b9f8a6016e243e63b6e8ee1178d6a717850b5d6103` empty**; impl exposes `upgradeToAndCall`/`proxiableUUID`. | `owner()` (`0xa02a88f0bbd47045001bd460ad186c30f9a974d6` ETH; `0xf20d5277ad2f301e2f18e2948ff3e72ad0a6dff9` other chains). Emits `Upgraded`. |
+| **SpokeGateway** | **UUPS (ERC-1967)** | ~183 B proxy; impl slot set (ETH `0xa80bcfe3ccd475bd5e74671d10610d7010fe740d`); admin slot empty. | `owner()`. |
 | **FeeAdapterV2** | **Direct deployment (no proxy)** | ~12 779 B full contract; EIP-1967 impl slot empty; identical bytecode all 7 chains. | `owner()` (immutable logic). |
-| **CLEAR token** | EIP-1967 proxy (ETH) | impl slot `0x8d9a1606…`. | token owner. |
+| **CLEAR token** | EIP-1967 proxy (ETH) | impl slot `0x8d9a1606b12aedd7469d154149d66e3418ef890c`. | token owner. |
 
-**To track Spoke/Gateway upgrades, watch `Upgraded(address)` `0xbc7cd75a…` on the proxy** — the impl differs per chain and rotates. Confirm "FeeAdapter is not a proxy" by an empty impl slot (`0x0`) on its address.
+**To track Spoke/Gateway upgrades, watch `Upgraded(address)` `0xbc7cd75a20ee27fd9adebab32041f755214dbc6bffa90cc0225b39da2e5c2d3b` on the proxy** — the impl differs per chain and rotates. Confirm "FeeAdapter is not a proxy" by an empty impl slot (`0x0`) on its address.
 
 ---
 
 ## 10. Detection invariants & gotchas
 
-1. **A user bridge = TWO events in one tx, same `_intentId`:** FeeAdapter `IntentWithFeesAdded` (`0x4cc03dfa…`) **and** Spoke `IntentAdded` (`0x80eb6c87…`). Key the user flow on `IntentWithFeesAdded` (it carries the indexed `_initiator` and the fee split); correlate to settlement via `_intentId`.
+1. **A user bridge = TWO events in one tx, same `_intentId`:** FeeAdapter `IntentWithFeesAdded` (`0x4cc03dfa265ccd4670a5059498b2551525947958b26b5e70f6a6dc62a950fd4e`) **and** Spoke `IntentAdded` (`0x80eb6c87e9da127233fe2ecab8adf29403109adc6bec90147df35eeee0745991`). Key the user flow on `IntentWithFeesAdded` (it carries the indexed `_initiator` and the fee split); correlate to settlement via `_intentId`.
 2. **Use the V6/V2 Intent struct** (`amountOutMin`, NO `maxFee`) for `IntentAdded`/`IntentFilled` topic0 and `newIntent`/`fillIntent` selectors. The V1 layout (`uint24 maxFee`) gives **wrong** hashes — the live contracts emit the V6 ones (matched against live bytecode + logs).
 3. **Lifecycle is cross-chain:** `IntentAdded` (origin Spoke) → `IntentFilled` (destination Spoke) → `Settled` (origin or virtual-balance Spoke). The Hub (`Deposit/Invoice/SettlementEnqueued`) sits on the clearing L2 (domain 25327), **not on any of the seven** — you won't see netting events on the requested chains.
 4. **`_initiator`/`_receiver` are `bytes32`, not `address`,** in the Intent struct and `IntentWithFeesAdded` (left-padded EVM addresses, or raw non-EVM identifiers). Don't assume 20-byte addresses.
 5. **The fill `_solver` (IntentFilled topic2) and the FeeAdapter caller are not the end user.** Attribute the bridge to `_initiator`; the user receives on the destination as `_receiver`.
-6. **Vanity collision Hub vs Spoke:** `0xa05A3380…D816` is the **Spoke** on the seven chains and the **Hub** on the clearing L2. Call `EVERCLEAR()` (returns 25327 on a spoke) to confirm. Key on `(chainId, address)`.
-7. **Spoke/Gateway vanity holds on 5 of 7;** Avalanche (`0x9aA2Ecad…`) and Polygon (`0x7189C59e…`) diverge. **FeeAdapterV2 (`0xd0185bfb…540e`) is identical on all 7** — the best cross-chain anchor.
+6. **Vanity collision Hub vs Spoke:** `0xa05A3380889115bf313f1Db9d5f335157Be4D816` is the **Spoke** on the seven chains and the **Hub** on the clearing L2. Call `EVERCLEAR()` (returns 25327 on a spoke) to confirm. Key on `(chainId, address)`.
+7. **Spoke/Gateway vanity holds on 5 of 7;** Avalanche (`0x9aA2Ecad5C77dfcB4f34893993f313ec4a370460`) and Polygon (`0x7189C59e245135696bFd2906b56607755F84F3fD`) diverge. **FeeAdapterV2 (`0xd0185bfb8107c5b2336bC73cE3fdd9Bfb504540e`) is identical on all 7 deployed chains** — the best cross-chain anchor.
 8. **Per-chain impls differ and rotate.** Read the EIP-1967 slot live; watch `Upgraded`. Admin slot is always empty (UUPS).
 9. **FeeAdapterV2 is NOT a proxy.** Its impl slot is `0x0` by design — that is not a missing proxy.
 10. **`Deposited`/`Withdrawn` are solver liquidity, not user bridging.** A user bridge does not emit `Deposited`. Solvers pre-fund the destination Spoke; `IntentFilled` consumes that liquidity.
 11. **Hyperlane domain ≠ chainId for most chains, but coincidentally equals chainId for many** (BNB=56, Avax=43114, Arb=42161, OP=10, Polygon=137, Base=8453, ETH=1). The **hub** is domain 25327 with no matching public chainId. Don't conflate with the Connext/Nomad domains used by Amarok ([amarok.md](amarok.md)).
+12. **Sunset and residual activity.** The Everclear team announced on 2026-05-21 that the protocol is sunset and that no user funds remain (The Block). Measured in the pinned window 2026-09-28 00:00 to 12:00 UTC: 0 `IntentAdded`, 0 `IntentFilled` and 0 `Settled` logs from any emitter on each of the eight target chains. The Spoke and Gateway proxies are still upgradeable by their owners, so keep `Upgraded`, `OwnershipTransferred` and `Withdrawn` monitors on them.
+13. **Not on Robinhood Chain.** No code at any Everclear literal on chain 4663 and no entry in the official contracts page. Everclear also has Spokes on chains outside the eight (Unichain, zkSync Era, Ronin, ApeChain, Mode, Zircuit, Linea, Blast, Scroll, Taiko, Berachain, Gnosis, Mantle, Sonic, Ink), some at other literals: key on `(chainId, address)`.
 
 ---
 
@@ -293,7 +296,8 @@ EIP1967_ADMIN_SLOT            = '\xb53127684a568b3173ae13b9f8a6016e243e63b6e8ee1
 -- ===== Addresses — shared vanity (ETH/Base/BNB/Arb/OP) =====
 SHARED_SPOKE                  = '\xa05a3380889115bf313f1db9d5f335157be4d816'
 SHARED_GATEWAY                = '\x9ada72ccbafe94248afade6b604d1beaacc899a7'
-FEE_ADAPTER_ALL_7             = '\xd0185bfb8107c5b2336bc73ce3fdd9bfb504540e'  -- identical on all 7 chains
+FEE_ADAPTER_ALL_7             = '\xd0185bfb8107c5b2336bc73ce3fdd9bfb504540e'  -- identical on all 7 deployed chains
+-- Robinhood Chain (4663): no Everclear contract (eth_getCode = 0x at every literal in this block)
 -- Avalanche (divergent)
 AVAX_SPOKE                    = '\x9aa2ecad5c77dfcb4f34893993f313ec4a370460'
 AVAX_GATEWAY                  = '\x7eb63a646721de65eba79ffe91c55dce52b73c12'
@@ -316,12 +320,15 @@ ETH_GATEWAY_IMPL              = '\xa80bcfe3ccd475bd5e74671d10610d7010fe740d'
 ## 12. Verification & sources
 
 How constants were verified (2026-06-09):
-- **Topic0 + selectors:** recomputed locally as `keccak256(canonical signature)` / `[0:4]` from `everclearorg/monorepo` (`dev`) interfaces — `IEverclearV2.sol` (Intent struct), `IEverclearSpokeV6.sol`, `ISpokeStorageV6.sol`, `IFeeAdapterV2.sol`, `IHubStorage.sol`. **`IntentAdded` (`0x80eb6c87…`) and `IntentWithFeesAdded` (`0x4cc03dfa…`) cross-checked against live `eth_getLogs`** on the Base Spoke/FeeAdapter at block 44 385 499 (one of each). **Every Spoke and FeeAdapter selector in §2 was matched PRESENT against the live deployed bytecode** (Spoke impl `0x1b97e14a…`, FeeAdapter `0xd0185bfb…`) via PUSH4 scan — this is how the deployed version was pinned to V6 (the V1 `newIntent`/`fillIntent`/`IntentAdded` variants are absent on chain).
+- **Topic0 + selectors:** recomputed locally as `keccak256(canonical signature)` / `[0:4]` from `everclearorg/monorepo` (`dev`) interfaces — `IEverclearV2.sol` (Intent struct), `IEverclearSpokeV6.sol`, `ISpokeStorageV6.sol`, `IFeeAdapterV2.sol`, `IHubStorage.sol`. **`IntentAdded` (`0x80eb6c87e9da127233fe2ecab8adf29403109adc6bec90147df35eeee0745991`) and `IntentWithFeesAdded` (`0x4cc03dfa265ccd4670a5059498b2551525947958b26b5e70f6a6dc62a950fd4e`) cross-checked against live `eth_getLogs`** on the Base Spoke/FeeAdapter at block 44 385 499 (one of each). **Every Spoke and FeeAdapter selector in §2 was matched PRESENT against the live deployed bytecode** (Spoke impl `0x1b97e14ac5cc126692dc6bce22f1c2e5fa6ccaae`, FeeAdapter `0xd0185bfb8107c5b2336bC73cE3fdd9Bfb504540e`) via PUSH4 scan — this is how the deployed version was pinned to V6 (the V1 `newIntent`/`fillIntent`/`IntentAdded` variants are absent on chain).
 - **Addresses:** parsed from the Everclear mainnet contracts registry / docs, existence-checked via `eth_getCode` on each chain's publicnode RPC. Spoke/Gateway/FeeAdapter confirmed on all 7 (Spoke/Gateway vanity on 5, divergent on Avax + Polygon; FeeAdapter identical literal on all 7). `EVERCLEAR()` read live = 25327 confirms Spoke role; `owner()` read live per chain.
 - **Proxy impls:** read from the EIP-1967 impl slot live per chain (Spoke + Gateway populated, admin slot empty → UUPS); FeeAdapter impl slot empty → direct deployment.
-- **Chain/domain coverage:** Hyperlane domain IDs from the Everclear docs (hub = 25327). Hub/HubGateway on the clearing L2 noted as outside the seven.
+- **Chain/domain coverage:** Hyperlane domain IDs from the Everclear docs (hub = 25327). Hub/HubGateway on the clearing L2 noted as outside the eight. On 2026-09-29 the Everclear mainnet contracts page listed the same Spoke, Gateway and FeeAdapter literals for the seven deployed target chains and no Robinhood Chain entry; `eth_getCode` = `0x` (nonce 0) on Robinhood Chain at all nine literals of §3 to §6.
+- **Struct-typed rows (2026-09-29):** `IntentAdded`, `IntentFilled`, `fillIntent`, `batchFillIntent`, `processIntentQueue` and `executeIntentCalldata` written out with the V6 `Intent` tuple; each hash equals the listed value. The V1 `IntentAdded` form (with `uint24 maxFee`, from `IEverclear.sol`) hashes to `0xefe68281645929e2db845c5b42e12f7c73485fb5f18737b7b29379da006fa5f7`.
+- **Pinned 12-hour window 2026-09-28 00:00 to 12:00 UTC:** `IntentAdded`, `IntentFilled` and `Settled` from any emitter: Ethereum 0, Base 0, Arbitrum 0, Optimism 0, Polygon 0, BNB 0, Avalanche 0, Robinhood 0. The Spoke implementations read from the EIP-1967 slot were unchanged from 2026-06-09 on all seven deployed chains (Avalanche and Polygon included).
 
 Authoritative sources:
 - Canonical repo: [`everclearorg/monorepo`](https://github.com/everclearorg/monorepo) — `packages/contracts/src/{contracts,interfaces}` (`EverclearSpoke`, `FeeAdapter`, `SpokeGateway`, `EverclearHub`, `IEverclearV2`).
 - Docs: [Everclear mainnet contracts](https://docs.everclear.org/resources/contracts/mainnet) · [Everclear fundamentals](https://docs.everclear.org/developers/fundamentals).
 - Explorers: [Basescan FeeAdapterV2](https://basescan.org/address/0xd0185bfb8107c5b2336bc73ce3fdd9bfb504540e) · [Etherscan EverclearSpoke](https://etherscan.io/address/0xa05a3380889115bf313f1db9d5f335157be4d816).
+- Sunset: [The Block, 2026-05-21: "CLEAR token tanks 48% as Everclear winds down protocol, foundation and labs unit"](https://www.theblock.co/amp/post/402252/clear-token-tanks-48-everclear-winds-down-protocol-foundation-labs-unit).

@@ -145,8 +145,11 @@ Role of each address is chain-dependent; the table below lists only the **Gatewa
 | Arbitrum | 42161 | `0xC21e4ebD…` | ERC1967 proxy → `0x86dfc31d…` | `0xf0773508…` |
 | Optimism | 10 | `0x86dfc31d…` | UUPS proxy → `0xac589f48…` | — |
 | Polygon | 137 | `0x21c1E74C…` | EIP-1967 proxy → `0x5b97f51c…` | — |
+| **Robinhood** | 4663 | — (`0x`) | — | — |
 
 **Two distinct Gateway deployment styles.** On ETH/Base/BNB/OP the Gateway proxy lives at `0x86dfc31d…` and its UUPS impl at `0xac589f48…`. On Avax/Arb the *impl* (the same 41,526-char logic) sits at `0x86dfc31d…` and the proxy is `0xC21e4ebD…`. On Polygon the proxy is `0x21c1E74C…` (impl `0x5b97f51c…`) and the bare logic is at `0xC21e4ebD…`. **The same address literal is impl on one chain and proxy on another — key on `(chainId, address)` and read the impl slot live.**
+
+**Robinhood Chain (4663): no Router contract.** On 2026-10-01 `eth_getCode` returned `0x` (nonce 0) on `https://rpc.mainnet.chain.robinhood.com` at the Gateway literals `0x86dfc31d9cb3280ee1eb1096caa9fc66299af973`, `0xC21e4ebD1d92036Cb467b53fE3258F219d909Eb9` and `0x21c1E74CAaDf990E237920d5515955a024031109` and at the AssetBridge `0xf0773508c585246bd09bfb401aa18b72685b03f9`. The official Nitro supported-chains table has no Robinhood row. The newer official AssetForwarders of each chain are in [core.md](./core.md) §0.1.
 
 ---
 
@@ -244,5 +247,5 @@ How the constants were verified (2026-06-09):
 
 Authoritative sources:
 - Canonical contracts: [`router-protocol/router-contracts`](https://github.com/router-protocol/router-contracts) — `gateway/evm/contracts/GatewayUpgradeable.sol`, `Utils.sol`, `asset-bridge/evm/contracts/AssetBridgeUpgradeable.sol`, `IAssetBridge.sol`.
-- Docs: [Router CrossTalk / Message transfer](https://docs.routerprotocol.com/develop/message-transfer-via-crosstalk/) · [Nitro high-level workflow](https://docs.routerprotocol.com/develop/asset-transfer-via-nitro/high-level-workflow/).
+- Docs: [Router CrossTalk / Message transfer](https://docs.routerprotocol.com/develop/message-transfer-via-crosstalk/) · [Nitro — asset transfer overview](https://docs.routerprotocol.com/develop/asset-transfer-via-nitro/).
 - Explorers: [Snowscan Gateway proxy `0xC21e4ebD`](https://snowscan.xyz/address/0xC21e4ebD1d92036Cb467b53fE3258F219d909Eb9) · [Etherscan Gateway `0x86dfc31d`](https://etherscan.io/address/0x86dfc31d9cb3280ee1eb1096caa9fc66299af973) · [Snowscan AssetBridge `0xf0773508`](https://snowscan.xyz/address/0xf0773508c585246bd09bfb401aa18b72685b03f9).

@@ -1,6 +1,6 @@
 # Allbridge Classic — Topics, Selectors, Addresses (Ethereum, BNB, Polygon, Avalanche; NOT Arbitrum/Optimism/Base)
 
-**Status:** verified against live RPC on all seven requested chains and the canonical `allbridge-io/allbridge-contract-docs` ABI on 2026-06-09. Topic0s/selectors recomputed locally as `keccak256(signature)` and cross-checked against live `eth_getLogs`; the one vanity address existence-checked via `eth_getCode` on every chain.
+**Status:** verified against live RPC on all seven requested chains and the canonical `allbridge-io/allbridge-contract-docs` ABI on 2026-06-09. Topic0s/selectors recomputed locally as `keccak256(signature)` and cross-checked against live `eth_getLogs`; the one vanity address existence-checked via `eth_getCode` on every chain. Robinhood Chain (4663) checked on 2026-09-29: no Classic contract.
 **Scope:** Allbridge **Classic** — the original lock/burn-and-unlock token bridge (predecessor to [Core](core.md)). One Solidity Bridge contract per chain at a shared vanity address. Topics + selectors are **chain-agnostic**; the address is one cross-chain vanity literal but only carries real bridge bytecode on four of the seven chains. **Allbridge Classic is deprecated and scheduled to stop in mid-2026** (per the official docs) — but it is **still live** (verified recent `lock`/`unlock` activity on Ethereum).
 
 Classic is a **classic lock/unlock bridge**, not a liquidity-pool bridge. To send: call `lock` (ERC-20) or `lockBase` (native), which transfers the token to the Bridge and **locks it** (native tokens) or **burns** the wrapped representation, emitting `Sent`. An off-chain validator signs a confirmation; the recipient calls `unlock` on the destination Bridge with that signature, which **releases** the locked token (or **mints** the wrapped one), emitting `Received`. There are no pools, no vUSD, no LP tokens, no per-token contracts — a single Bridge contract handles every supported token via a `tokenInfos` registry.
@@ -67,6 +67,7 @@ The Classic Bridge lives at one vanity literal `0xBBbD1BbB4f9b936C3604906D7592A6
 | **Arbitrum** | 42161 | **777 B** | ⚠️ **NOT a bridge** — a minimal `Ownable` sweeper (`withdraw()` 0x3ccfd60b, `owner()`, `transferOwnership`, `renounceOwnership`). No `lock`/`unlock`/`Sent`/`Received`. |
 | **Base** | 8453 | **777 B** | ⚠️ Same sweeper as Arbitrum. NOT a Classic bridge. |
 | **Optimism** | 10 | **`0x` (0 B)** | ❌ Not deployed at all. |
+| **Robinhood Chain** | 4663 | **`0x` (0 B, nonce 0)** | ❌ Not deployed; not in the official Classic contract list (checked 2026-09-29). |
 
 ### 3.1 Ethereum role addresses (read live)
 
@@ -74,7 +75,7 @@ The Classic Bridge lives at one vanity literal `0xBBbD1BbB4f9b936C3604906D7592A6
 |------|---------|
 | **Bridge** | `0xBBbD1BbB4f9b936C3604906D7592A644071dE884` |
 | `validator()` | `0x93746538d4519c809827205bd1c2c7a0e15bd74b` |
-| `unlockSigner()` | `0x83f53c078bf81f6d8b79e01e2ed36c473a960c5e` |
+| `unlockSigner()` | `0x83f53c078bf81f6d8b79e01e2ed36c473a960c5e` (EOA: no code, nonce 193 on 2026-09-29) |
 | `feeCollector()` | `0x83f53c078bf81f6d8b79e01e2ed36c473a960c5e` (= unlockSigner) |
 | `feeOracle()` | `0xba6d8de08f13a3d22fcec54752812dd4dcf2e1f6` |
 
@@ -103,6 +104,7 @@ The Classic Bridge lives at one vanity literal `0xBBbD1BbB4f9b936C3604906D7592A6
 | Arbitrum | 42161 | ❌ (777-B sweeper at the vanity addr, not a bridge) | |
 | Base | 8453 | ❌ (777-B sweeper at the vanity addr) | |
 | Optimism | 10 | ❌ (`0x`) | |
+| Robinhood Chain | 4663 | ❌ (`0x`, nonce 0) | not in the official list (2026-09-29) |
 
 Vanity tell: the bridge address `0xBBbD1Bbb…` and the Solana program `BBbD1WSj…` share the `BBbD1` prefix. **But the same literal also carries a non-bridge sweeper on Arbitrum/Base** — never assume "address has code ⇒ Classic bridge"; gate on bytecode size (≈19,273 B) or the presence of the `Sent`/`Received` topic0s.
 
@@ -159,8 +161,8 @@ EIP1967_IMPL_SLOT             = '\x360894a13ba1a3210667c828492db98dca3e2076cc373
 CLASSIC_BRIDGE                = '\xbbbd1bbb4f9b936c3604906d7592a644071de884'
 -- Ethereum roles
 ETH_CLASSIC_VALIDATOR         = '\x93746538d4519c809827205bd1c2c7a0e15bd74b'
-ETH_CLASSIC_UNLOCK_SIGNER     = '\x83f53c078bf81f6d8b79e01e2ed36c473a960c5e'
-ETH_CLASSIC_FEE_COLLECTOR     = '\x83f53c078bf81f6d8b79e01e2ed36c473a960c5e'
+ETH_CLASSIC_UNLOCK_SIGNER_EOA = '\x83f53c078bf81f6d8b79e01e2ed36c473a960c5e'   -- EOA: no code, nonce 193 (2026-09-29)
+ETH_CLASSIC_FEE_COLLECTOR_EOA = '\x83f53c078bf81f6d8b79e01e2ed36c473a960c5e'   -- same EOA as the unlock signer
 ETH_CLASSIC_FEE_ORACLE        = '\xba6d8de08f13a3d22fcec54752812dd4dcf2e1f6'
 ```
 
@@ -175,6 +177,7 @@ How every constant was verified (2026-06-09):
 - **Addresses:** the single vanity Bridge address parsed from the official Classic contracts page (`docs.allbridge.io/allbridge-overview/bridge-contracts`). `eth_getCode` run on all seven chains → 19,273 B bridge on ETH/BNB/Polygon/Avax; 777 B non-bridge sweeper on Arbitrum/Base (selectors `withdraw()`/`owner()`/`transferOwnership`/`renounceOwnership`); `0x` on Optimism.
 - **Roles:** `validator()`/`unlockSigner()`/`feeCollector()`/`feeOracle()` read via `eth_call` on Ethereum (returned non-zero addresses); there is no `owner()` (call returns empty).
 - **Immutability:** EIP-1967 impl slot read live = `0x0` on ETH/BNB/Polygon/Avax → not a proxy.
+- **Robinhood Chain (2026-09-29):** `eth_getCode` at `0xBBbD1BbB4f9b936C3604906D7592A644071dE884` on `https://rpc.mainnet.chain.robinhood.com` returns `0x` (nonce 0). The official Classic contract page lists Avalanche, BNB Chain, Celo, Ethereum, Fantom, NEAR, Polygon, Solana and other non-EVM networks, but no Robinhood Chain. The Classic `Sent` / `Received` topics had 0 logs on Robinhood Chain in the pinned window 2026-09-28 00:00–12:00 UTC.
 
 **Authoritative sources:**
 - Canonical ABI/docs: [`github.com/allbridge-io/allbridge-contract-docs`](https://github.com/allbridge-io/allbridge-contract-docs)

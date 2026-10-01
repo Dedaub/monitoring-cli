@@ -102,6 +102,7 @@ All verified via `eth_getCode` on each chain's publicnode RPC on 2026-06-09. **F
 | Base | 8453 | ✓ `0x5523…` | ✓ `0x00cD…` | **highest live RFQ volume** of the 7. |
 | **Avalanche** | 43114 | **✗ `0x`** | **✗ `0x`** | **NOT DEPLOYED.** |
 | **Polygon** | 137 | **✗ `0x`** | **✗ `0x`** | **NOT DEPLOYED.** |
+| **Robinhood** | 4663 | **✗ `0x`** | **✗ `0x`** | **NOT DEPLOYED.** `eth_getCode` = `0x` (nonce 0) on 2026-09-29 at FastBridge `0x5523D3c98809DdDB82C686E152F5C58B1B0fB59E`, FastBridgeRouterV2 `0x00cD000000003f7F682BE4813200893d4e690000`, FastBridgeRouter `0x0000000000489d89D2B233D3375C045dfD05745F` and FastBridgeInterceptor `0xFb1fb1060C550A9b274C64f70dadF16f2aD34fB1`; chain id 4663 is not in the SDK's `SupportedChainId` enum. |
 
 **Counterparty chains outside the seven:** RFQ also runs on Blast, Linea, Scroll, Berachain, HyperEVM, Unichain, Worldchain and others (in the SDK `FAST_BRIDGE_ROUTER_ADDRESS_MAP`). A `BridgeRequested.destChainId` may reference any of these — an out-of-set `destChainId` is a valid leg.
 

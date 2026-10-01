@@ -23,7 +23,7 @@ repo root. Decide once, reuse all session.
 ## Step 0 — Session setup (always)
 
 **Must-read first — protocol map.** Skim `references/protocols/INDEX.md`: the category/chain → protocol
-lookup (which slugs are bridges / DEXs / lending / LST / restaking / perps / oracle, and which of the 7
+lookup (which slugs are bridges / DEXs / lending / LST / restaking / perps / oracle, and which of the 8
 chains each covers). Use it to turn a **category or chain** ask ("bridge volume X→Y", "all DEXs on Base",
 "lending on Arbitrum") into the right `<slug>/` set before Step 2. It's an index only — never a source of
 constants; always open the named `<slug>/<file>.md` for the actual topics/selectors/addresses.

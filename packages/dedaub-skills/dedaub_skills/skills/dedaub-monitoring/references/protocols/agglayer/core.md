@@ -1,6 +1,6 @@
 # Polygon AggLayer Unified Bridge (LxLy) — Topics, Selectors, Addresses (Ethereum L1 only of the 7 targets; mirror on attached chains outside the 7)
 
-**Status:** verified against live RPC on Ethereum L1 + all six other requested chains and against Polygon zkEVM (chain 1101, the canonical attached chain), and the `0xPolygonHermez/zkevm-contracts` repos, on 2026-06-09.
+**Status:** verified against live RPC on Ethereum L1 + all six other requested chains and against Polygon zkEVM (chain 1101, the canonical attached chain), and the `0xPolygonHermez/zkevm-contracts` repos, on 2026-06-09. Extended on 2026-09-29 with the X Layer USDC `L1Escrow` (the `usdc-lxly` token path over the bridge) and the Robinhood Chain (4663) check.
 **Scope:** the Polygon AggLayer "Unified Bridge" (a.k.a. LxLy bridge): `PolygonZkEVMBridgeV2` + its on-chain counterparties `PolygonZkEVMGlobalExitRootV2` and `PolygonRollupManager`, plus the `AggLayerGateway`, on **Ethereum mainnet (chain 1)**. Topics/selectors are chain-agnostic (recomputed locally as keccak256 of the canonical signature); addresses are network-specific. **Of the seven requested chains, AggLayer's canonical contracts exist ONLY on Ethereum L1.** Base, BNB, Avalanche, Arbitrum, Optimism, and Polygon PoS run **no** AggLayer contract (every address below returns `0x` there). The bridge *mirror* runs on the attached L2s — Polygon zkEVM 1101, X Layer 196, and sovereign chains — all **outside** the seven (documented in §6 as a finding, not an omission).
 
 The Unified Bridge is the single asset+message gateway of the AggLayer interoperability network. It is **NOT** the legacy Polygon PoS bridge (that is a separate, older system on chain 1↔137 — see §9.1) and it is **NOT** an immutable contract: every core contract is a **Transparent (EIP-1967) upgradeable proxy** behind one shared `ProxyAdmin`, itself owned by a 3-day `TimelockController`. The L1 bridge is deployed **once** at a deterministic address and the **same address `0x2a3DD3EB832aF982ec71669E178424b10Dca2EDe` is reused on every attached chain** (L1, Polygon zkEVM, X Layer, sovereign chains) — so you must key bridge state on `(chainId, address)`, never on address alone.
@@ -22,6 +22,7 @@ The non-obvious facts a monitoring engineer needs before indexing:
 | **PolygonRollupManager** | Registry/verifier hub for all attached rollups+sovereign chains. `rollupCount()` = 27 live (2026-06-09). Verifies state transitions (zk batches + pessimistic proofs), feeds the rollup-exit-root to the GER, pays/charges POL. | **Transparent EIP-1967** | impl `0x15caf18d…` (23 734 B) |
 | **AggLayerGateway** | Verification-key / proof-route gateway used by RollupManager's pessimistic-proof path (`aggLayerGateway()` on RM → this). | **Transparent EIP-1967** | impl `0xd062b7f9…` (12 233 B) |
 | **TokenWrapped** | Per-(originNetwork,originToken) wrapped ERC-20, deployed by the bridge via CREATE2. Address is deterministic (`precalculatedWrapperAddress` / `getTokenWrappedAddress`). | Plain ERC-20 (not a proxy) | — |
+| **L1Escrow (X Layer USDC, `usdc-lxly`)** | Escrows native USDC on L1 for X Layer (AggLayer network 3, chain 196). `bridgeToken` locks USDC and sends a **message** through the bridge to the L2 `ZkMinterBurner`, which mints USDC on X Layer; the reverse message makes the escrow release USDC. Emits `Deposit`. | **EIP-1967 proxy** (UUPS in source) | impl `0x3bc0ca57b7ad8e88c74dca3dcd0105cb49acad05` (8 343 B) |
 | **TimelockController** | 3-day timelock that owns the ProxyAdmin (upgrade authority). | not a proxy | `0xeF146245…` (10 107 B) |
 | **ProxyAdmin** | Transparent-proxy admin for all four core proxies. Owner = the Timelock. | not a proxy | `0x0f99738B…` (2 149 B) |
 
@@ -33,7 +34,7 @@ The L1 bridge is the **production AggLayer v2 / "Unified Bridge" generation** (s
 
 All values recomputed locally with keccak256 on 2026-06-09 and, where noted, cross-checked against live `eth_getLogs` on the L1 contracts.
 
-### 1.1 PolygonZkEVMBridgeV2 (emitter on L1 = `0x2a3D…2EDe`)
+### 1.1 PolygonZkEVMBridgeV2 (emitter on L1 = `0x2a3DD3EB832aF982ec71669E178424b10Dca2EDe`)
 
 | topic0 | Event |
 |--------|-------|
@@ -55,7 +56,7 @@ These are inherited-plus-extended. `BridgeEvent`/`ClaimEvent`/`NewWrappedToken` 
 | `0xc7318b7ed6ba4f2908a3de396d8ab49b1dadb55db5b55123247a401f29ff8d82` | `SetSovereignWETHAddress(address sovereignWETHTokenAddress, bool isNotMintable)` |
 | `0xc2ae0bd0ec0fd0352bfe5bacac49637af342c1e40f1b80a7f74440dc7fe3f063` | `RemoveLegacySovereignTokenAddress(address sovereignTokenAddress)` |
 
-### 1.3 PolygonZkEVMGlobalExitRootV2 (emitter on L1 = `0x580b…3CFb`)
+### 1.3 PolygonZkEVMGlobalExitRootV2 (emitter on L1 = `0x580bda1e7A0CFAe92Fa7F6c20A3794F169CE3CFb`)
 
 | topic0 | Event |
 |--------|-------|
@@ -65,7 +66,7 @@ These are inherited-plus-extended. `BridgeEvent`/`ClaimEvent`/`NewWrappedToken` 
 
 > **`UpdateL1InfoTree` and `UpdateL1InfoTreeV2` both fire on every GER update** (14 + 14 in the same window). V2 is the indexed-leaf-count variant added for the L1 Info Tree v2; index whichever you key on, but expect both.
 
-### 1.4 PolygonRollupManager (emitter on L1 = `0x5132…7aB2`)
+### 1.4 PolygonRollupManager (emitter on L1 = `0x5132A183E9F3CB7C848b0AAC5Ae0c4f0491B7aB2`)
 
 | topic0 | Event |
 |--------|-------|
@@ -84,6 +85,16 @@ These are inherited-plus-extended. `BridgeEvent`/`ClaimEvent`/`NewWrappedToken` 
 |--------|-------|
 | `0xbc7cd75a20ee27fd9adebab32041f755214dbc6bffa90cc0225b39da2e5c2d3b` | `Upgraded(address indexed implementation)` — **watch on every core proxy to catch impl rotation.** |
 | `0x7e644d79422f17c01e4894b5f4f588d331ebfa28653d42ae832dc59e38c9798f` | `AdminChanged(address previousAdmin, address newAdmin)` |
+
+### 1.6 L1Escrow — X Layer USDC (emitter on L1 = `0xfe3240995c771f10d2583e8fa95f92ee40e15150`)
+
+Source: `BuildOnPolygon/usdc-lxly` `src/L1Escrow.sol`.
+
+| topic0 | Event |
+|--------|-------|
+| `0x5548c837ab068cf56a2c2479df0882a4922fd203edb7517321831d95078c5f62` | `Deposit(address indexed from, address indexed to, uint256 amount)` — **source leg of the USDC path to X Layer**: `from` = L1 payer, `to` = X Layer recipient. The same transaction holds the USDC `Transfer` payer → escrow and a message `BridgeEvent` (leafType 1) from the bridge. |
+
+The escrow has **no payout event.** An X Layer → L1 withdrawal ends with `claimMessage` on the bridge: the bridge emits `ClaimEvent` and calls `onMessageReceived` on the escrow, which sends USDC escrow → receiver (an ERC-20 `Transfer` only). `Deposit(address,address,uint256)` is a **generic signature**: in the pinned window of 2026-09-28, 13 unrelated contracts on Ethereum emitted it 67 times, and many contracts emitted it on Base, Arbitrum, Optimism, Polygon, BNB and Robinhood. Always filter it on the escrow address.
 
 ---
 
@@ -113,8 +124,8 @@ Selectors recomputed locally on 2026-06-09; presence checked against the live L1
 | `0x22e95f2c` | `getTokenWrappedAddress(uint32 originNetwork, address originTokenAddress)` → `address` | CREATE2 wrapper for a foreign token (0x0 if not yet deployed). ✓present |
 | `0xaaa13cc2` | `precalculatedWrapperAddress(uint32 originNetwork, address originTokenAddress, string name, string symbol, uint8 decimals)` → `address` | deterministic wrapper address. |
 | `0xbab161bf` | `networkID()` → `uint32` | AggLayer network id (**L1 = 0**, verified). |
-| `0xd02103ca` | `globalExitRootManager()` → `address` | → GER manager (`0x580b…3CFb` on L1, verified). |
-| `0x8ed7e3f2` | `polygonRollupManager()` → `address` | → RollupManager (`0x5132…7aB2` on L1, verified). |
+| `0xd02103ca` | `globalExitRootManager()` → `address` | → GER manager (`0x580bda1e7A0CFAe92Fa7F6c20A3794F169CE3CFb` on L1, verified). |
+| `0x8ed7e3f2` | `polygonRollupManager()` → `address` | → RollupManager (`0x5132A183E9F3CB7C848b0AAC5Ae0c4f0491B7aB2` on L1, verified). |
 | `0x3c351e10` | `gasTokenAddress()` → `address` | `0x0` on L1 (native gas = ETH, verified). |
 | `0x2dfdf0b5` | `depositCount()` → `uint256` | leaf count of the local exit tree. |
 | `0xfb570834` | `verifyMerkleProof(bytes32 leafHash, bytes32[32] smtProof, uint32 index, bytes32 root)` → `bool` | |
@@ -137,7 +148,7 @@ Selectors recomputed locally on 2026-06-09; presence checked against the live L1
 | `0x33d6247d` | `updateExitRoot(bytes32 newRoot)` | **only the bridge may call** (sets mainnet exit root). |
 | `0x3ed691ef` | `getLastGlobalExitRoot()` → `bytes32` | current GER. |
 | `0x5ca1e165` | `getRoot()` → `bytes32` | L1 Info Tree root (verified live). |
-| `0xa3c573eb` | `bridgeAddress()` → `address` | → bridge (verified `0x2a3D…2EDe`). |
+| `0xa3c573eb` | `bridgeAddress()` → `address` | → bridge (verified `0x2a3DD3EB832aF982ec71669E178424b10Dca2EDe`). |
 | `0xef4eeb35` | `l1InfoRootMap(uint32 depositCount)` → `bytes32` | historical L1 Info root by leaf count. |
 
 ### 2.5 PolygonRollupManager
@@ -145,11 +156,11 @@ Selectors recomputed locally on 2026-06-09; presence checked against the live L1
 | Selector | Signature | Notes |
 |----------|-----------|-------|
 | `0xa3c573eb` | `bridgeAddress()` → `address` | verified → bridge. |
-| `0xd02103ca` | `globalExitRootManager()` → `address` | verified → `0x580b…3CFb`. |
+| `0xd02103ca` | `globalExitRootManager()` → `address` | verified → `0x580bda1e7A0CFAe92Fa7F6c20A3794F169CE3CFb`. |
 | `0xa2967d99` | `getRollupExitRoot()` → `bytes32` | aggregated rollup exit root fed to the GER. ✓present in impl |
 | `0xf4e92675` | `rollupCount()` → `uint32` | **27** live (verified). |
 | `0xe46761c4` | `pol()` → `address` | POL fee token (`0x455e…c3f6`, verified). |
-| `0xab0475cf` | `aggLayerGateway()` → `address` | → `0x046b…74b3` (verified). ✓present in impl |
+| `0xab0475cf` | `aggLayerGateway()` → `address` | → `0x046bb8bb98db4cecbb2929542686b74b516274b3` (verified). ✓present in impl |
 | `0x9a908e73` | `onSequenceBatches(uint64,bytes32)` | called by a rollup when it sequences. ✓present in impl |
 | `0xf9c4c2ae` | `rollupIDToRollupData(uint32)` | full per-rollup struct. |
 | `0xceee281d` | `rollupAddressToID(address)` → `uint32` | reverse lookup. |
@@ -161,6 +172,21 @@ Selectors recomputed locally on 2026-06-09; presence checked against the live L1
 | `0x99a88ec4` | `upgrade(address proxy, address implementation)` | ProxyAdmin; emits `Upgraded` on the proxy. |
 | `0x9623609d` | `upgradeAndCall(address proxy, address implementation, bytes data)` | ProxyAdmin. |
 | `0x8da5cb5b` | `owner()` → `address` | ProxyAdmin owner = the Timelock (`0xeF14…A4EF`, verified). |
+
+### 2.7 L1Escrow — X Layer USDC
+
+| Selector | Signature | Notes |
+|----------|-----------|-------|
+| `0x03bdcfc9` | `bridgeToken(address destinationAddress, uint256 amount, bool forceUpdateGlobalExitRoot)` | **User entrypoint.** Pulls USDC, calls the bridge's `bridgeMessage` to network 3, emits `Deposit`. `whenNotPaused`. |
+| `0x726dc60b` | `bridgeToken(address destinationAddress, uint256 amount, bool forceUpdateGlobalExitRoot, bytes permitData)` | Same with an EIP-2612 permit. |
+| `0x1806b5f2` | `onMessageReceived(address originAddress, uint32 originNetwork, bytes data)` | Bridge-only (inside `claimMessage`). Releases USDC to the L1 receiver; no escrow event. |
+| `0xe78cea92` | `bridge()` → `address` | = `0x2a3DD3EB832aF982ec71669E178424b10Dca2EDe` (read live). |
+| `0xa282c46e` | `zkNetworkId()` → `uint32` | = 3 (X Layer; RollupManager rollup 3 has chain id 196). |
+| `0x988d3898` | `zkMinterBurner()` → `address` | = `0x1a8c4999d32f05b63a227517be0824aed47e4728` (the X Layer minter; an L2 address). |
+| `0xa6f73669` | `l1USDC()` → `address` | = USDC `0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48`. |
+| `0x8da5cb5b` | `owner()` → `address` | = `0xa07ae4bdfa7ba8bc0e8a8525bcc768300a8970bb` (an EOA). Can pause. |
+| `0x8456cb59` | `pause()` | Owner. `paused()` = false on 2026-09-29. **Pause signal.** |
+| `0x3f4ba83a` | `unpause()` | Owner. |
 
 ---
 
@@ -175,29 +201,31 @@ All verified via `eth_getCode` returning non-empty bytecode on `https://ethereum
 | **PolygonRollupManager** (proxy) | `0x5132A183E9F3CB7C848b0AAC5Ae0c4f0491B7aB2` | Rollup registry+verifier; `rollupCount()` = 27. Emits §1.4. |
 | **AggLayerGateway** (proxy) | `0x046bb8bb98db4cecbb2929542686b74b516274b3` | Pessimistic-proof verification-key gateway. |
 | **POL token** | `0x455e53CBB86018Ac2B8092FdCd39d8444aFFC3F6` | ERC-20 fee/stake token used by RollupManager. |
-| **ProxyAdmin** (shared) | `0x0f99738B2Fc14D77308337f3e2596b63aE7bCC4A` | Transparent-proxy admin for all four core proxies; `owner()` = Timelock. |
-| **TimelockController** | `0xeF1462451C30Ea7aD8555386226059fE837CA4EF` | Upgrade authority; `getMinDelay()` = **259 200 s (3 days)**. Owns the ProxyAdmin. |
+| **ProxyAdmin** (shared) | `0x0F99738B2Fc14D77308337f3e2596b63aE7BCC4A` | Transparent-proxy admin for all four core proxies; `owner()` = Timelock. |
+| **TimelockController** | `0xEf1462451C30Ea7aD8555386226059Fe837CA4EF` | Upgrade authority; `getMinDelay()` = **259 200 s (3 days)**. Owns the ProxyAdmin. |
+| **L1Escrow — X Layer USDC** (proxy) | `0xfe3240995c771f10d2583e8fa95f92ee40e15150` | Native-USDC escrow of the X Layer USDC path; emits `Deposit` (§1.6). 699 B proxy; impl `0x3bc0ca57b7ad8e88c74dca3dcd0105cb49acad05`. Owner and EIP-1967 admin = the EOA `0xa07ae4bdfa7ba8bc0e8a8525bcc768300a8970bb` (no code, nonce 48). Not part of the Timelock-governed core. |
 
 ### 3.1 Live implementations (read from EIP-1967 slot `0x360894…bbc` on 2026-06-09)
 
 | Proxy | Live implementation | impl size |
 |-------|---------------------|-----------|
-| Bridge `0x2a3D…2EDe` | `0x66e0120e3C965552A89aCC37b03f762624BAC5ad` | 13 986 B |
-| GER `0x580b…3CFb` | `0x7f1655D9D570167b2a3FFD1ef809D3fdd74427C5` | 3 353 B |
-| RollupManager `0x5132…7aB2` | `0x15caf18DED768E3620E0F656221bf6b400Ad2618` | 23 734 B |
-| AggLayerGateway `0x046b…74b3` | `0xd062B7f9FBb89bDa59262E77015c34A27DC9aB49` | 12 233 B (gateway proxy runtime = 2 227 B) |
+| Bridge `0x2a3DD3EB832aF982ec71669E178424b10Dca2EDe` | `0x66E0120e3c965552a89AcC37b03f762624baC5Ad` | 13 986 B |
+| L1Escrow (X Layer USDC) `0xfe3240995c771f10d2583e8fa95f92ee40e15150` (read 2026-09-29) | `0x3bc0ca57b7ad8e88c74dca3dcd0105cb49acad05` | 8 343 B (admin slot = the owner EOA, not the shared ProxyAdmin) |
+| GER `0x580bda1e7A0CFAe92Fa7F6c20A3794F169CE3CFb` | `0x7F1655d9d570167B2a3FfD1Ef809D3Fdd74427C5` | 3 353 B |
+| RollupManager `0x5132A183E9F3CB7C848b0AAC5Ae0c4f0491B7aB2` | `0x15cAF18dEd768e3620E0f656221Bf6B400ad2618` | 23 734 B |
+| AggLayerGateway `0x046bb8bb98db4cecbb2929542686b74b516274b3` | `0xD062B7f9fbB89bdA59262E77015C34a27Dc9aB49` | 12 233 B (gateway proxy runtime = 2 227 B) |
 
 All four admin slots (`0xb53127…6103`) read `0x…0f99738b2fc14d77308337f3e2596b63ae7bcc4a` = the shared ProxyAdmin → confirms **Transparent** (not UUPS) pattern.
 
 ---
 
-## 4. Addresses — Base (8453), BNB (56), Avalanche (43114), Arbitrum (42161), Optimism (10), Polygon PoS (137)
+## 4. Addresses — Base (8453), BNB (56), Avalanche (43114), Arbitrum (42161), Optimism (10), Polygon PoS (137), Robinhood (4663) — NOT DEPLOYED
 
-**No AggLayer Unified-Bridge contract is deployed on any of these six chains.** Verified 2026-06-09: `eth_getCode` for the bridge `0x2a3DD3EB…`, the RollupManager `0x5132A183…`, and the GER `0x580bda1e…` returns **`0x` (empty)** on each of Base, BNB, Avalanche, Arbitrum, Optimism, and Polygon PoS.
+**No AggLayer Unified-Bridge contract is deployed on any of these six chains.** Verified 2026-06-09: `eth_getCode` for the bridge `0x2a3DD3EB832aF982ec71669E178424b10Dca2EDe`, the RollupManager `0x5132A183E9F3CB7C848b0AAC5Ae0c4f0491B7aB2`, and the GER `0x580bda1e7A0CFAe92Fa7F6c20A3794F169CE3CFb` returns **`0x` (empty)** on each of Base, BNB, Avalanche, Arbitrum, Optimism, and Polygon PoS.
 
 These chains are **not** attached to AggLayer (they are independent L1s / Optimistic-and-Arbitrum-stack L2s anchored to Ethereum by their own native bridges). **Polygon PoS (137) in particular is served by the *legacy* Polygon PoS bridge, a completely separate system** (§9.1) — it shares the "Polygon" brand but none of the LxLy code/addresses.
 
-| Chain | ID | Bridge `0x2a3D…2EDe` | RollupManager | GER | AggLayer contracts? |
+| Chain | ID | Bridge `0x2a3DD3EB832aF982ec71669E178424b10Dca2EDe` | RollupManager | GER | AggLayer contracts? |
 |---|---|---|---|---|---|
 | Base | 8453 | `0x` | `0x` | `0x` | **none** |
 | BNB Smart Chain | 56 | `0x` | `0x` | `0x` | **none** |
@@ -205,6 +233,7 @@ These chains are **not** attached to AggLayer (they are independent L1s / Optimi
 | Arbitrum One | 42161 | `0x` | `0x` | `0x` | **none** |
 | Optimism | 10 | `0x` | `0x` | `0x` | **none** |
 | Polygon PoS | 137 | `0x` | `0x` | `0x` | **none** (legacy PoS bridge instead — §9.1) |
+| Robinhood Chain | 4663 | `0x` | `0x` | `0x` | **none** (checked 2026-09-29; also `0x` at the AggLayerGateway and the USDC L1Escrow; chain id 4663 is not among the 28 rollups of `RollupManager.rollupIDToRollupData`) |
 
 ---
 
@@ -212,14 +241,15 @@ These chains are **not** attached to AggLayer (they are independent L1s / Optimi
 
 | Chain | ID | Bridge | GER | RollupManager | AggLayerGateway | POL |
 |---|---|---|---|---|---|---|
-| **Ethereum** | 1 | ✅ `0x2a3D…2EDe` | ✅ `0x580b…3CFb` | ✅ `0x5132…7aB2` | ✅ `0x046b…74b3` | ✅ `0x455e…c3F6` |
+| **Ethereum** | 1 | ✅ `0x2a3DD3EB832aF982ec71669E178424b10Dca2EDe` (+ X Layer USDC L1Escrow `0xfe3240995c771f10d2583e8fa95f92ee40e15150`) | ✅ `0x580bda1e7A0CFAe92Fa7F6c20A3794F169CE3CFb` | ✅ `0x5132A183E9F3CB7C848b0AAC5Ae0c4f0491B7aB2` | ✅ `0x046bb8bb98db4cecbb2929542686b74b516274b3` | ✅ `0x455e53CBB86018Ac2B8092FdCd39d8444aFFC3F6` |
 | Base | 8453 | — | — | — | — | — |
 | BNB | 56 | — | — | — | — | — |
 | Avalanche | 43114 | — | — | — | — | — |
 | Arbitrum One | 42161 | — | — | — | — | — |
 | Optimism | 10 | — | — | — | — | — |
 | Polygon PoS | 137 | — | — | — | — | — |
-| *Polygon zkEVM (counterparty, **not** in the 7)* | 1101 | ✅ `0x2a3D…2EDe` (mirror, impl `0x5f41…cbd5`, 22 811 B) | ✅ GER-L2 `0xa40d…b8fa` | — (L1-only) | — | — |
+| Robinhood Chain | 4663 | — | — | — | — | — |
+| *Polygon zkEVM (counterparty, **not** in the 7)* | 1101 | ✅ `0x2a3DD3EB832aF982ec71669E178424b10Dca2EDe` (mirror, impl `0x5f411584e02964a028e3123c833c352cd2f5cbd5`, 22 811 B) | ✅ GER-L2 `0xa40D5f56745a118D0906a34E69aeC8C0Db1cB8fA` | — (L1-only) | — | — |
 
 **Vanity / address tell:** the bridge is the **same literal `0x2a3DD3EB832aF982ec71669E178424b10Dca2EDe` on L1 and every attached chain** (deterministic deploy). Presence is NOT distinguishable by address — only by `eth_getCode` + chainId. The RollupManager, GER, AggLayerGateway, POL, ProxyAdmin and Timelock are **Ethereum-L1-only** (each rollup runs its own L2 GER mirror but no RollupManager).
 
@@ -234,7 +264,7 @@ These chains are **not** attached to AggLayer (they are independent L1s / Optimi
 
 AggLayer's whole purpose is cross-chain, so most bridge *destinations* are outside the requested seven. Verified/known counterparties:
 
-- **Polygon zkEVM (chain 1101)** — the original AggLayer rollup. Bridge mirror at the **same `0x2a3DD3EB…`** (verified live, impl `0x5f4115…cbd5`, 22 811 B — `PolygonZkEVMBridgeV2`, **not** sovereign: `setSovereignTokenAddress`/`wethToken` = 0 occ). Its L2 GER manager is `0xa40d5f56745A118D0906a34E69aEC8C0Db1cb8fA` (2 112 B).
+- **Polygon zkEVM (chain 1101)** — the original AggLayer rollup. Bridge mirror at the **same `0x2a3DD3EB832aF982ec71669E178424b10Dca2EDe`** (verified live, impl `0x5f411584e02964a028e3123c833c352cd2f5cbd5`, 22 811 B — `PolygonZkEVMBridgeV2`, **not** sovereign: `setSovereignTokenAddress`/`wethToken` = 0 occ). Its L2 GER manager is `0xa40D5f56745a118D0906a34E69aeC8C0Db1cB8fA` (2 112 B).
 - **X Layer (OKB, chain 196)**, **Astar zkEVM**, **Wirex/GPT, Silicon, Pentagon, Lumia, Ternoa, Witness Chain, …** — the 27 rollups tracked by `RollupManager.rollupCount()` are attached AggLayer chains, **none of which is among the seven**. Newer attachments deploy `BridgeL2SovereignChain` (the §1.2/§2.3 sovereign variant) at the same bridge address.
 
 When indexing an AggLayer transfer that *originates* on or is *destined* for any of the seven, note: **only Ethereum (network 0) is a valid AggLayer endpoint among the seven.** A bridge from "Polygon" via AggLayer means Polygon **zkEVM (1101)**, never Polygon **PoS (137)**.
@@ -246,6 +276,7 @@ When indexing an AggLayer transfer that *originates* on or is *destined* for any
 | Contract | Pattern | Detection | Upgrade auth |
 |----------|---------|-----------|--------------|
 | **PolygonZkEVMBridgeV2** | **Transparent (EIP-1967)** | impl slot `0x360894…bbc` set (`0x66e0120e…`); admin slot `0xb53127…6103` = ProxyAdmin `0x0f99738b…`. Runtime = 2 583 B proxy stub; logic in impl (13 986 B). | ProxyAdmin ← Timelock (3-day). |
+| **L1Escrow (X Layer USDC)** | **EIP-1967 proxy** (UUPS per the `usdc-lxly` source; `CommonAdminOwner` admin + owner roles) | impl slot = `0x3bc0ca57b7ad8e88c74dca3dcd0105cb49acad05`; admin slot = `0xa07ae4bdfa7ba8bc0e8a8525bcc768300a8970bb` (read 2026-09-29). | **A single EOA** `0xa07ae4bdfa7ba8bc0e8a8525bcc768300a8970bb` is both admin and `owner()`: no timelock. Watch `Upgraded` and `Paused` on the escrow. |
 | **PolygonZkEVMGlobalExitRootV2** | **Transparent (EIP-1967)** | impl `0x7f1655d9…`; admin = ProxyAdmin. | ProxyAdmin ← Timelock. |
 | **PolygonRollupManager** | **Transparent (EIP-1967)** | impl `0x15caf18d…`; admin = ProxyAdmin. | ProxyAdmin ← Timelock. |
 | **AggLayerGateway** | **Transparent (EIP-1967)** | impl `0xd062b7f9…`; admin = ProxyAdmin. | ProxyAdmin ← Timelock. |
@@ -256,7 +287,7 @@ When indexing an AggLayer transfer that *originates* on or is *destined* for any
 - **EIP-1967 implementation slot:** `0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc` (read live for all four core proxies above).
 - **EIP-1967 admin slot:** `0xb53127684a568b3173ae13b9f8a6016e243e63b6e8ee1178d6a717850b5d6103` (all four = `0x0f99738B…`, i.e. shared ProxyAdmin → **Transparent, not UUPS**).
 - **Beacon slot** `0xa3f0ad74…` is empty on all four (no Beacon pattern).
-- **`Upgraded(address)` topic0 to watch:** `0xbc7cd75a20ee27fd9adebab32041f755214dbc6bffa90cc0225b39da2e5c2d3b` (the L1 bridge `0x2a3D…2EDe`, GER, RollupManager, gateway). An impl rotation on the **bridge** is the highest-severity upgrade event (it controls escrowed funds).
+- **`Upgraded(address)` topic0 to watch:** `0xbc7cd75a20ee27fd9adebab32041f755214dbc6bffa90cc0225b39da2e5c2d3b` (the L1 bridge `0x2a3DD3EB832aF982ec71669E178424b10Dca2EDe`, GER, RollupManager, gateway). An impl rotation on the **bridge** is the highest-severity upgrade event (it controls escrowed funds).
 
 ---
 
@@ -273,9 +304,13 @@ When indexing an AggLayer transfer that *originates* on or is *destined* for any
 9. **Native-asset bridging carries `token = address(0)` and value in `msg.value`.** `gasTokenAddress()` = `0x0` on L1 → native = ETH. On gas-token sovereign chains the gas token differs and `wethToken()` becomes meaningful — but that's off the seven.
 10. **GER updates fire BOTH `UpdateL1InfoTree` (`0xda61aa78…`) and `UpdateL1InfoTreeV2` (`0xaf6c6cd7…`)** per update (verified 14+14). Don't double-count a GER advance.
 11. **Two state-verification paths on RollupManager:** legacy zk batches emit `VerifyBatchesTrustedAggregator`/`VerifyBatches`; the AggLayer pessimistic path emits `VerifyPessimisticStateTransition` (`0xdf47e7db…`, verified 8 logs). A monitor watching rollup finality must watch all three.
-12. **Same bridge address everywhere → always key on `(chainId, 0x2a3D…2EDe)`.** GER/RollupManager/Gateway/POL/ProxyAdmin/Timelock are L1-exclusive — finding them on an L2 would be an anomaly.
+12. **Same bridge address everywhere → always key on `(chainId, 0x2a3DD3EB832aF982ec71669E178424b10Dca2EDe)`.** GER/RollupManager/Gateway/POL/ProxyAdmin/Timelock are L1-exclusive — finding them on an L2 would be an anomaly.
 13. **Upgrade authority is a 3-day timelock** (`getMinDelay()` = 259 200 s). A queued `upgrade`/`upgradeAndCall` on the ProxyAdmin via the Timelock is the early-warning signal for a bridge logic change — watch `Upgraded` (`0xbc7cd75a…`) on the four core proxies, and the Timelock's `CallScheduled`/`CallExecuted`.
 14. **Do not conflate with the legacy Polygon PoS bridge** (§9.1): different contracts, different chain pair (1↔137), different events (`LockedEther`/`NewDepositBlock`/`Withdraw`), no LxLy global exit root.
+15. **USDC to X Layer does not use `bridgeAsset`.** The `usdc-lxly` path locks native USDC in the L1Escrow `0xfe3240995c771f10d2583e8fa95f92ee40e15150` and sends a **message** (`BridgeEvent` with `leafType` 1, `originAddress` = the escrow, `destinationNetwork` 3, `destinationAddress` = the L2 `ZkMinterBurner` `0x1a8c4999d32f05b63a227517be0824aed47e4728`, `amount` 0, `metadata` = `abi.encode(recipient, amount)`). The user and the amount are in the escrow's `Deposit(from, to, amount)`, the USDC `Transfer` and that metadata, not in the `BridgeEvent` asset fields. Join `Deposit` to its `BridgeEvent` by the transaction hash; the bridge `depositCount` then links to the X Layer claim. Measured sample: `0x4c8988208e38af7e337a3a4a9fb3d453082476bffa3a9deb4e0d1a9719c356a5` (block 25,929,315; decoded `BridgeEvent`: leafType 1, network 0 → 3, amount 0, metadata recipient = the payer, 192,629,920 USDC units; `depositCount` 263,902).
+16. **The escrow has no payout event.** An X Layer → Ethereum USDC withdrawal is a bridge `ClaimEvent` (message leaf) plus a USDC `Transfer` escrow → receiver in the same `claimMessage` transaction. Key the payout on that `Transfer` from `0xfe3240995c771f10d2583e8fa95f92ee40e15150`.
+17. **The escrow's upgrade key is one EOA** (`0xa07ae4bdfa7ba8bc0e8a8525bcc768300a8970bb`, admin and owner), unlike the Timelock-governed core. An `Upgraded` or `Paused` on the escrow is a high-severity signal: it holds the USDC that backs USDC on X Layer.
+18. **Robinhood Chain (4663) is not an AggLayer chain.** No AggLayer contract has code there, and none of the 28 rollups registered on 2026-09-29 has chain id 4663 (§4).
 
 ---
 
@@ -373,13 +408,22 @@ ETH_BRIDGE_IMPL                = '\x66e0120e3c965552a89acc37b03f762624bac5ad'
 ETH_GER_IMPL                   = '\x7f1655d9d570167b2a3ffd1ef809d3fdd74427c5'
 ETH_ROLLUP_MANAGER_IMPL        = '\x15caf18ded768e3620e0f656221bf6b400ad2618'
 ETH_AGGLAYER_GATEWAY_IMPL      = '\xd062b7f9fbb89bda59262e77015c34a27dc9ab49'
+-- X Layer USDC path (usdc-lxly)
+TOPIC_L1ESCROW_DEPOSIT         = '\x5548c837ab068cf56a2c2479df0882a4922fd203edb7517321831d95078c5f62'  -- generic signature: filter on the escrow
+SEL_L1ESCROW_BRIDGE_TOKEN      = '\x03bdcfc9'
+SEL_L1ESCROW_BRIDGE_TOKEN_PMT  = '\x726dc60b'
+SEL_L1ESCROW_ON_MESSAGE        = '\x1806b5f2'
+ETH_XLAYER_USDC_L1ESCROW       = '\xfe3240995c771f10d2583e8fa95f92ee40e15150'
+ETH_XLAYER_USDC_L1ESCROW_IMPL  = '\x3bc0ca57b7ad8e88c74dca3dcd0105cb49acad05'
+ETH_XLAYER_ESCROW_OWNER_EOA    = '\xa07ae4bdfa7ba8bc0e8a8525bcc768300a8970bb'  -- owner and EIP-1967 admin (no code, nonce 48)
 
 -- ===== Counterparty (OUTSIDE the 7) — Polygon zkEVM (chain ID 1101) =====
-ZKEVM_BRIDGE_V2                = '\x2a3dd3eb832af982ec71669e178424b10dca2ede'  -- mirror, impl 0x5f4115...cbd5
+ZKEVM_BRIDGE_V2                = '\x2a3dd3eb832af982ec71669e178424b10dca2ede'  -- mirror, impl 0x5f411584e02964a028e3123c833c352cd2f5cbd5
 ZKEVM_GER_L2                   = '\xa40d5f56745a118d0906a34e69aec8c0db1cb8fa'
 
 -- ===== NOT deployed (verified eth_getCode = 0x on 2026-06-09): =====
 --   Base(8453), BNB(56), Avalanche(43114), Arbitrum(42161), Optimism(10), Polygon PoS(137)
+--   Robinhood Chain(4663): also 0x (verified 2026-09-29)
 ```
 
 ---
@@ -392,7 +436,16 @@ How every constant was verified (2026-06-09):
 - **Selector presence:** scanned the live bridge impl runtime bytecode (`0x66e0120e…`, 13 986 B) — `bridgeAsset`/`bridgeMessage`/`bridgeMessageWETH`/`claimAsset(0xccaa2d11)`/`claimMessage`/`updateGlobalExitRoot`/`getTokenWrappedAddress`/`activateEmergencyState`/`isClaimed(0xcc461632)` present; `isClaimed(uint256,uint32)`/`setSovereignTokenAddress`/`migrateLegacyToken`/`wethToken` **absent** (confirms `PolygonZkEVMBridgeV2`, not the sovereign variant). RollupManager impl scanned for `getRollupExitRoot`/`onSequenceBatches`/`aggLayerGateway` (present).
 - **Addresses:** existence-checked via `eth_getCode` on each of the seven chains' publicnode RPC + Polygon zkEVM. L1 wiring verified by `eth_call`: bridge↔GER↔RollupManager↔gateway↔POL cross-references all resolve. `networkID()` = 0, `gasTokenAddress()` = 0x0, `rollupCount()` = 27, `pol()` = `0x455e…c3f6`, ProxyAdmin `owner()` = Timelock, Timelock `getMinDelay()` = 259 200 s.
 - **Proxy impls:** read live from EIP-1967 impl slot `0x360894…bbc` and admin slot `0xb53127…6103` for all four core proxies; admin = shared ProxyAdmin `0x0f99738b…` on each → **Transparent** (not UUPS/Beacon).
-- **Chain coverage:** for all six non-Ethereum target chains, `eth_getCode` of the bridge, RollupManager, and GER returned `0x` → recorded as not-deployed. Polygon zkEVM (1101) mirror confirmed present (bridge same address, L2 GER `0xa40d…b8fa`).
+- **Chain coverage:** for all six non-Ethereum target chains, `eth_getCode` of the bridge, RollupManager, and GER returned `0x` → recorded as not-deployed. Polygon zkEVM (1101) mirror confirmed present (bridge same address, L2 GER `0xa40D5f56745a118D0906a34E69aeC8C0Db1cB8fA`).
+
+Additions of 2026-09-29:
+
+- **X Layer USDC L1Escrow:** event and functions from `BuildOnPolygon/usdc-lxly` `src/L1Escrow.sol` (topic0 and selectors recomputed with `keccak256`). On chain: 699 B EIP-1967 proxy, impl `0x3bc0ca57b7ad8e88c74dca3dcd0105cb49acad05` (8 343 B); `bridge()` = the LxLy bridge, `zkNetworkId()` = 3, `zkMinterBurner()` = `0x1a8c4999d32f05b63a227517be0824aed47e4728`, `l1USDC()` = USDC, `owner()` = EIP-1967 admin = `0xa07ae4bdfa7ba8bc0e8a8525bcc768300a8970bb` (no code, nonce 48), `paused()` = false. `RollupManager.rollupIDToRollupData(3)` returns chain id 196 (X Layer).
+- **Measured activity** (pinned 12-hour window 2026-09-28 00:00–12:00 UTC): bridge `BridgeEvent` 9 and `ClaimEvent` (v2) 179 on Ethereum; legacy `ClaimEvent` 0; escrow `Deposit` 0 (at `0xfe3240995c771f10d2583e8fa95f92ee40e15150`). All bridge events: 0 on the other seven chains. Positive control for the escrow: the Ethereum Blockscout logs API returns 750 `Deposit` logs at the escrow from block 19,573,736 to 25,929,315.
+- **Sample** (read with `eth_getTransactionReceipt` and decoded): `0x4c8988208e38af7e337a3a4a9fb3d453082476bffa3a9deb4e0d1a9719c356a5` — `bridgeToken`: USDC `Transfer` payer → escrow, `BridgeEvent` (message, decoded in §8 item 15), two GER events, escrow `Deposit`.
+- **Robinhood Chain:** `eth_getCode` = `0x` (nonce 0) at the bridge, GER, RollupManager, AggLayerGateway and the escrow; `rollupCount()` = 28 on 2026-09-29, and none of the 28 registered chain ids is 4663.
+- **Checksum fix:** seven addresses (ProxyAdmin, Timelock, the four implementations, the zkEVM L2 GER) had an invalid EIP-55 case in earlier versions; the hex is unchanged.
+- Sources added: [`BuildOnPolygon/usdc-lxly` `src/L1Escrow.sol`](https://github.com/BuildOnPolygon/usdc-lxly/blob/main/src/L1Escrow.sol) · [Etherscan — X Layer USDC L1Escrow](https://etherscan.io/address/0xfe3240995c771f10d2583e8fa95f92ee40e15150) · [Ethereum Blockscout logs API](https://eth.blockscout.com/api?module=logs&action=getLogs&fromBlock=18000000&toBlock=latest&address=0xfe3240995c771f10d2583e8fa95f92ee40e15150&topic0=0x5548c837ab068cf56a2c2479df0882a4922fd203edb7517321831d95078c5f62).
 
 **Authoritative sources:**
 - Canonical repos: [`0xPolygonHermez/zkevm-contracts`](https://github.com/0xPolygonHermez/zkevm-contracts) (PolygonZkEVMBridgeV2, BridgeL2SovereignChain, PolygonZkEVMGlobalExitRootV2, PolygonRollupManager) · [`agglayer/agglayer`](https://github.com/agglayer/agglayer) · [`agglayer/agglayer-contracts`](https://github.com/agglayer/agglayer-contracts)

@@ -7,6 +7,8 @@ Allbridge ships **two distinct, coexisting bridge products** with separate codeb
 | [core.md](core.md) | **Allbridge Core** (current) | vUSD liquidity-pool bridge: `Bridge`(=Router) + per-token `Pool`s + `Messenger`/`WormholeMessenger` + `GasOracle`, plus bundled CCTP v1 / CCTP v2 / OFT adapters. All **immutable** (no proxies). | **Active** | ETH, BNB, Polygon, Avalanche, Arbitrum, Optimism, Base — **all 7** carry a Bridge. |
 | [classic.md](classic.md) | **Allbridge Classic** (legacy) | Lock/burn-and-unlock bridge: one immutable `Bridge` contract per chain at a shared vanity address; validator-signed `unlock`. | **Deprecated, sunsetting mid-2026** (still live) | Bridge on **ETH, BNB, Polygon, Avalanche only**. Arbitrum/Base = a non-bridge sweeper at the vanity addr; Optimism = `0x`. |
 
+**Robinhood Chain (4663):** no Allbridge contract of either product. `eth_getCode` returns `0x` at the Classic vanity address and at every Core address checked, and neither official contract list names the chain (checked 2026-09-29).
+
 ## Cross-cutting facts
 
 - **Two products, different addressing schemes.** Core uses **unrelated per-chain addresses** (shared invariant = the owner `0x01a494079dcb715f622340301463ce50cd69a4d0`, not the address). Classic uses **one cross-chain vanity literal** `0xBBbD1BbB4f9b936C3604906D7592A644071dE884` (matching the Solana program `BBbD1WSj…`).

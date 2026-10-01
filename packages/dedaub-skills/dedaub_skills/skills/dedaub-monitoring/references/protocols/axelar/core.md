@@ -1,6 +1,6 @@
-# Axelar Network — Topics, Selectors, Addresses (Ethereum, Base, BNB, Avalanche, Arbitrum, Optimism, Polygon)
+# Axelar Network — Topics, Selectors, Addresses (Ethereum, Base, BNB, Avalanche, Arbitrum, Optimism, Polygon; NOT Robinhood)
 
-**Status:** verified against live RPC on all seven listed chains and the canonical `axelarnetwork/axelar-cgp-solidity` + `axelarnetwork/interchain-token-service` repos on 2026-06-09. Topic0s/selectors recomputed locally as `keccak256(signature)` and cross-checked against live `eth_getLogs` + deployed-bytecode `PUSH32`/`PUSH4` scans; addresses existence-checked via `eth_getCode`; proxy impls read live.
+**Status:** verified against live RPC on all seven listed chains and the canonical `axelarnetwork/axelar-cgp-solidity` + `axelarnetwork/interchain-token-service` repos on 2026-06-09. Topic0s/selectors recomputed locally as `keccak256(signature)` and cross-checked against live `eth_getLogs` + deployed-bytecode `PUSH32`/`PUSH4` scans; addresses existence-checked via `eth_getCode`; proxy impls read live. Extended on 2026-09-29: the Amplifier `MessageApproved` signature corrected (§1.6), the value movement of the gateway-token path measured (§9, item 16), and the Robinhood Chain (4663) check (§6).
 **Scope:** the EVM contracts of Axelar's General Message Passing (GMP) layer — **AxelarGateway** (cross-chain call/token gateway), **AxelarGasService** (relayer gas prepayment), and the **Interchain Token Service (ITS)** stack (ITS + InterchainTokenFactory + TokenManager + InterchainToken). Topics and selectors are **chain-agnostic**; addresses are network-specific. All seven target chains carry the full stack.
 
 Axelar is a **proof-of-stake message-passing network**, not a lock/mint bridge with a single vault. Source chains emit a `ContractCall` (or `ContractCallWithToken`/`TokenSent`) event on the **AxelarGateway**; a decentralized validator set observes it, reaches consensus off-chain, and the relayer submits an `execute(bytes)` batch to the **destination** gateway that flips the call to `approved`; the destination app then calls `validateContractCall` and runs its handler, emitting `ContractCallExecuted`. **The on-chain footprint is therefore split across two chains per message** — the outbound event and the inbound `ContractCallApproved`/`ContractCallExecuted` live on different gateways. Gas for the destination execution is prepaid on the **source** chain into the AxelarGasService (`NativeGasPaidForContractCall`, etc.), keyed by the source `txHash`/`logIndex` and the payload hash.
@@ -101,14 +101,16 @@ The live deployment uses **native-gas** payment events; the ERC-20-token gas-pay
 
 ### 1.6 Amplifier gateway (NOT deployed on any of the seven — reference only)
 
-Axelar's next-gen `AxelarAmplifierGateway` is **absent on all seven target chains** (they run the §1.1 consensus gateway). If/when it lands, watch these:
+Axelar's next-gen `AxelarAmplifierGateway` is **absent on all seven target chains** (they run the §1.1 consensus gateway) and on Robinhood Chain. If/when it lands, watch these (signatures from `axelar-gmp-sdk-solidity` `contracts/interfaces/IBaseAmplifierGateway.sol` and `IBaseWeightedMultisig.sol`):
 
 | topic0 | Event |
 |--------|-------|
-| `0x30ae6cc78c27e651745bf2ad08a11de83910ac1e347a52f7ac898c0fbef94dae` | `ContractCall(address,string,string,bytes32,bytes)` — same topic0 as §1.1 (shared signature) |
-| `0x6d338c7b274d71c344e745d8639ee21c8dff7afea59173f79375f4b25de06e7e` | `MessageApproved(bytes32,string,string,address,bytes32)` |
-| `0xe7d1e1f435233f7a187624ac11afaf32ee0da368cef8a5625be394412f619254` | `MessageExecuted(bytes32)` |
-| `0xe7cf1d3405bd906f8500af030e1130f3affbe991be73471a0d3983fe3ca61ebc` | `SignersRotated(uint256,bytes32,bytes)` |
+| `0x30ae6cc78c27e651745bf2ad08a11de83910ac1e347a52f7ac898c0fbef94dae` | `ContractCall(address indexed sender, string destinationChain, string destinationContractAddress, bytes32 indexed payloadHash, bytes payload)` — same topic0 as §1.1 (shared signature) — **source leg** |
+| `0xcda53a2698efcca41b57faaddeb19bcb237bb1c71b479721fcc3a6fd41ba8097` | `MessageApproved(bytes32 indexed commandId, string sourceChain, string messageId, string sourceAddress, address indexed contractAddress, bytes32 indexed payloadHash)` — destination approval (status only, no value moves) |
+| `0xe7d1e1f435233f7a187624ac11afaf32ee0da368cef8a5625be394412f619254` | `MessageExecuted(bytes32 indexed commandId)` — destination: the app consumed the approval |
+| `0xe7cf1d3405bd906f8500af030e1130f3affbe991be73471a0d3983fe3ca61ebc` | `SignersRotated(uint256 indexed epoch, bytes32 indexed signersHash, bytes signers)` — admin: verifier-set rotation |
+
+> **Correction (2026-09-29):** an earlier version of this table listed `MessageApproved(bytes32,string,string,address,bytes32)` with topic0 `0x6d338c7b274d71c344e745d8639ee21c8dff7afea59173f79375f4b25de06e7e`. That five-parameter form is not the source event: the source has a sixth parameter, `string messageId`, after `sourceChain`. Use `0xcda53a2698efcca41b57faaddeb19bcb237bb1c71b479721fcc3a6fd41ba8097`. In the pinned 12-hour window of 2026-09-28, `MessageApproved` (six-parameter) and `MessageExecuted` had 0 logs from any emitter on all eight chains.
 
 ---
 
@@ -236,7 +238,7 @@ All verified via `eth_getCode` returning non-empty bytecode on `https://ethereum
 | **AxelarGateway** (proxy) | `0x4F4495243837681061C4743b74B3eEdf548D56A5` | `0x99b5fa03a5ea4315725c43346e55a6a6fbd94098` | GMP gateway. **This literal is the Ethereum gateway ONLY.** |
 | **AxelarGasService** (proxy) | `0x2d5d7d31F671F86C782533cc367F14109a082712` | `0xcb5c784dcf8ff342625dbc53b356ed0cbb0ebb9b` | Relayer gas escrow. `owner()`=`0x7216…b1af`, `gasCollector()`=`0x7ddb…efbc`. |
 | **InterchainTokenService** (proxy) | `0xB5FB4BE02232B1bBA4dC8f81dc24C26980dE9e3C` | `0x1b13a9baf8d3116c56ccdf3aa9049ad532a9c03d` | ITS hub. `owner()`=`0x5f93…0c10`, `paused()`=false. |
-| **InterchainTokenFactory** (proxy) | `0x83A93500d23Fbc3e82B410aD07A6a9F7A0670D66` | `0xe833e9662cb0a811aa3b1746280ab43507b61946` | Token factory over ITS. |
+| **InterchainTokenFactory** (proxy) | `0x83a93500d23Fbc3e82B410aD07A6a9F7A0670D66` | `0xe833e9662cb0a811aa3b1746280ab43507b61946` | Token factory over ITS. |
 | TokenManager (impl) | `0x8832f0381707bb29756edecf42580800207f2a9e` | — | Clone target for per-token managers. |
 | InterchainToken (impl) | `0x7f9f70da4af54671a6abac58e705b5634cac8819` | — | Clone target for interchain ERC-20s. |
 | InterchainTokenDeployer | `0xb769ce7dc3d642b082a55f0c12622c6e516969a3` | — | `implementationAddress()`=`0x7f9f…8819`. |
@@ -256,7 +258,7 @@ All four core contracts are **present on every one of the seven chains** (verifi
 |------|--------------------|--------------------------|
 | AxelarGasService | `0x2d5d7d31F671F86C782533cc367F14109a082712` | `0xcb5c784dcf8ff342625dbc53b356ed0cbb0ebb9b` |
 | InterchainTokenService | `0xB5FB4BE02232B1bBA4dC8f81dc24C26980dE9e3C` | `0x1b13a9baf8d3116c56ccdf3aa9049ad532a9c03d` |
-| InterchainTokenFactory | `0x83A93500d23Fbc3e82B410aD07A6a9F7A0670D66` | `0xe833e9662cb0a811aa3b1746280ab43507b61946` |
+| InterchainTokenFactory | `0x83a93500d23Fbc3e82B410aD07A6a9F7A0670D66` | `0xe833e9662cb0a811aa3b1746280ab43507b61946` |
 | TokenManager / InterchainToken impl | `0x8832…2a9e` / `0x7f9f…8819` | — |
 
 ### AxelarGateway proxy — per-chain divergent address (shared impl `0x99b5fa03…`)
@@ -290,13 +292,16 @@ These are recorded findings: the gateway/ITS contracts on the seven target chain
 
 | Chain | ID | Gateway | GasService | ITS | Factory |
 |-------|-----|---------|------------|-----|---------|
-| Ethereum | 1 | `0x4F44…56A5` ✓ | `0x2d5d…2712` ✓ | `0xB5FB…9e3C` ✓ | `0x83A9…0D66` ✓ |
-| Base | 8453 | `0xe432…8E31` ✓ | `0x2d5d…2712` ✓ | `0xB5FB…9e3C` ✓ | `0x83A9…0D66` ✓ |
-| BNB | 56 | `0x304a…D895` ✓ | `0x2d5d…2712` ✓ | `0xB5FB…9e3C` ✓ | `0x83A9…0D66` ✓ |
-| Avalanche | 43114 | `0x5029…8f78` ✓ | `0x2d5d…2712` ✓ | `0xB5FB…9e3C` ✓ | `0x83A9…0D66` ✓ |
-| Arbitrum | 42161 | `0xe432…8E31` ✓ | `0x2d5d…2712` ✓ | `0xB5FB…9e3C` ✓ | `0x83A9…0D66` ✓ |
-| Optimism | 10 | `0xe432…8E31` ✓ | `0x2d5d…2712` ✓ | `0xB5FB…9e3C` ✓ | `0x83A9…0D66` ✓ |
-| Polygon | 137 | `0x6f01…FBA8` ✓ | `0x2d5d…2712` ✓ | `0xB5FB…9e3C` ✓ | `0x83A9…0D66` ✓ |
+| Ethereum | 1 | `0x4F4495243837681061C4743b74B3eEdf548D56A5` ✓ | `0x2d5d7d31F671F86C782533cc367F14109a082712` ✓ | `0xB5FB4BE02232B1bBA4dC8f81dc24C26980dE9e3C` ✓ | `0x83a93500d23Fbc3e82B410aD07A6a9F7A0670D66` ✓ |
+| Base | 8453 | `0xe432150cce91c13a887f7D836923d5597adD8E31` ✓ | same ✓ | same ✓ | same ✓ |
+| BNB | 56 | `0x304acf330bbE08d1e512eefaa92F6a57871fD895` ✓ | same ✓ | same ✓ | same ✓ |
+| Avalanche | 43114 | `0x5029C0EFf6C34351a0CEc334542cDb22c7928f78` ✓ | same ✓ | same ✓ | same ✓ |
+| Arbitrum | 42161 | `0xe432150cce91c13a887f7D836923d5597adD8E31` ✓ | same ✓ | same ✓ | same ✓ |
+| Optimism | 10 | `0xe432150cce91c13a887f7D836923d5597adD8E31` ✓ | same ✓ | same ✓ | same ✓ |
+| Polygon | 137 | `0x6f015F16De9fC8791b234eF68D486d2bF203FBA8` ✓ | same ✓ | same ✓ | same ✓ |
+| **Robinhood** | 4663 | ✗ none | ✗ `0x` | ✗ `0x` | ✗ `0x` |
+
+**Robinhood Chain (4663): no Axelar deployment.** On 2026-09-29 `eth_getCode` returned `0x` (nonce 0) on `https://rpc.mainnet.chain.robinhood.com` at the constant GasService, ITS and Factory addresses above, at both gateway literals (`0x4F4495243837681061C4743b74B3eEdf548D56A5`, `0xe432150cce91c13a887f7D836923d5597adD8E31`) and at the gateway implementation `0x99b5fa03a5ea4315725c43346e55a6a6fbd94098`. Axelar's registry `axelarnetwork/axelar-contract-deployments` `axelar-chains-config/info/mainnet.json` lists 30 chains and no chain with id 4663. The eleven measured transfer and message events (`ContractCall`, `ContractCallWithToken`, `TokenSent`, `ContractCallApproved`, `ContractCallApprovedWithMint`, `Executed`, `ContractCallExecuted`, `MessageApproved`, `MessageExecuted`, `InterchainTransfer`, `InterchainTransferReceived`) had 0 logs from any emitter on Robinhood Chain in the pinned 12-hour window of 2026-09-28.
 
 **Vanity / decoy tells:**
 - GasService `0x2d5d…2712`, ITS `0xB5FB…9e3C`, Factory `0x83A9…0D66` are **identical on all 7** (CREATE3 constant-address). Key on the address alone is safe for these three, but **always key gateways on `(chainId, address)`**.
@@ -343,8 +348,11 @@ These are recorded findings: the gateway/ITS contracts on the seven target chain
 11. **TokenManager/InterchainToken are clones, one per `tokenId`** — there is no global registry event listing them. Derive addresses with `ITS.tokenManagerAddress(tokenId)` / `interchainTokenAddress(tokenId)`, or index `TokenManagerDeployed`/`InterchainTokenDeployed`. Their `FlowLimitSet`/`Transfer`/`Mint` events fire on the **clone address**, not on ITS.
 12. **`Transfer` and `Approval` topic0s are generic ERC-20** — only meaningful when filtered to a known InterchainToken clone address.
 13. **Express execution is a separate flow.** `expressExecute` lets a liquidity provider front the funds before consensus; watch `ExpressExecuted`/`ExpressExecutionFulfilled` — the user receives funds at express time, but the gateway `ContractCallApproved` lands later. Attributing the "real" settlement to the gateway approval will miss express fills.
-14. **No Amplifier gateway on any of the seven.** They run the consensus gateway (§1.1). The `MessageApproved`/`MessageExecuted` topics (§1.6) will not appear on these chains; don't scan for them here.
+14. **No Amplifier gateway on any of the seven.** They run the consensus gateway (§1.1). The `MessageApproved`/`MessageExecuted` topics (§1.6) will not appear on these chains; don't scan for them here. If you index the Amplifier `MessageApproved`, use the six-parameter topic0 `0xcda53a2698efcca41b57faaddeb19bcb237bb1c71b479721fcc3a6fd41ba8097`, not the five-parameter `0x6d338c7b274d71c344e745d8639ee21c8dff7afea59173f79375f4b25de06e7e` of earlier versions of this doc (§1.6).
 15. **Same `Upgraded` impl across chains.** Because the gateway/GasService/ITS/Factory impls are byte-identical and shared across all 7, an upgrade is typically rolled out as separate `Upgraded` events per chain pointing at the same new impl address — correlate by impl address, not by chain.
+16. **Where the tokens move on the gateway-token path (measured).** Source: the app's `callContractWithToken` makes the gateway pull the token; for a token native to the chain the gateway **locks** it (Ethereum sample `0xf1fa0012d68f0a5f36eb348369a9e1f9ae32531b6bcf56b56d611525c3dd0033`: USDC `Transfer` app → gateway `0x4F4495243837681061C4743b74B3eEdf548D56A5`, then `ContractCallWithToken`; the GasService logged `NativeGasPaidForExpressCallWithToken` in the same transaction). Destination, transaction 1: the relayer's `execute(bytes)` emits `ContractCallApprovedWithMint` + `Executed` and **moves no token** (Base sample `0x6330c44078ba8860841d3d1852a384d6f33bd3f8750b3f7273728cd4b6bc8278`). Destination, transaction 2: the app's `executeWithToken` calls `validateContractCallAndMint`; the gateway emits `ContractCallExecuted(commandId)` and **mints** the gateway token to the app in the same transaction (Base sample `0x317bdcc8d5dabe8085a3d1e068f7c6f82c10e58250dc45ee4e96c2123210bca4`: axlUSDC `0xEB466342C4d449BC9f53A865D5Cb90586f405215` `Transfer` `0x0` → app, same `commandId` as the approval). Key payouts on `ContractCallExecuted` joined to `ContractCallApprovedWithMint` by `commandId`. The reverse direction (burn of a wrapped token on its non-home chain, release from the gateway on its home chain) was not sampled.
+17. **Robinhood Chain (4663) has no Axelar contract** (§6): no gateway, no GasService, no ITS, and no entry in the official chain registry. A `destinationChain` string never names it today.
+18. **`Executed(bytes32)` (`0xa74c8847d513feba22a0f0cb38d53081abf97562cdb293926ba243689e7c41ca`) is not unique to Axelar.** In the pinned window it came from 4 other contracts on Base and 1 other on Ethereum besides the gateways. Always filter it on the gateway address of the chain.
 
 ---
 
@@ -393,6 +401,10 @@ TOPIC_OWNERSHIP_TRANSFERRED         = '\x8be0079c531659141344cd1fd0a4f28419497f9
 TOPIC_ROLES_ADDED                   = '\xf77b8a946fdd43f9bcc59a65414e31d8ce6bff4d577ba280b22a4e0076f1fbae'
 TOPIC_ROLES_REMOVED                 = '\xb505728de48a106a73e5121ceb7de508f9038d2e7cb59049084f92b7b4060bc4'
 TOPIC_ERC20_TRANSFER                = '\xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef'
+-- Amplifier gateway (not deployed on the eight target chains; reference only)
+TOPIC_AMPLIFIER_MESSAGE_APPROVED    = '\xcda53a2698efcca41b57faaddeb19bcb237bb1c71b479721fcc3a6fd41ba8097'
+TOPIC_AMPLIFIER_MESSAGE_EXECUTED    = '\xe7d1e1f435233f7a187624ac11afaf32ee0da368cef8a5625be394412f619254'
+TOPIC_AMPLIFIER_SIGNERS_ROTATED     = '\xe7cf1d3405bd906f8500af030e1130f3affbe991be73471a0d3983fe3ca61ebc'
 
 -- ===== Selectors =====
 -- AxelarGateway
@@ -466,7 +478,8 @@ ARB_GATEWAY                         = '\xe432150cce91c13a887f7d836923d5597add8e3
 AVAX_GATEWAY                        = '\x5029c0eff6c34351a0cec334542cdb22c7928f78'
 BNB_GATEWAY                         = '\x304acf330bbe08d1e512eefaa92f6a57871fd895'
 POLY_GATEWAY                        = '\x6f015f16de9fc8791b234ef68d486d2bf203fba8'
--- NOTE: 0x4f4495…56a5 is a NON-Axelar decoy on BNB and Arbitrum — Ethereum gateway only.
+-- NOTE: 0x4f4495243837681061c4743b74b3eedf548d56a5 is a NON-Axelar decoy on BNB and Arbitrum — Ethereum gateway only.
+-- Robinhood Chain (4663): no Axelar contract; every address of this block returns 0x there.
 ```
 
 ---
@@ -479,6 +492,24 @@ How every constant was verified (2026-06-09):
 - **Addresses:** the four core proxies existence-checked via `eth_getCode` (non-empty) on every one of the seven chains' publicnode RPCs. Per-chain gateway proxy addresses confirmed and their `implementation()` getter read live (all return the shared `0x99b5fa03…`). Constant-address claim for GasService/ITS/Factory verified by reading identical impl addresses on all seven chains and identical `owner()` (ITS `0x5f93…0c10`). Wiring cross-checked live: `ITS.gateway()/gasService()/interchainTokenFactory()`, `Factory.interchainTokenService()`, `ITS.tokenManagerImplementation(0)`, `InterchainTokenDeployer.implementationAddress()`.
 - **Proxy classification:** EIP-1967 impl slot `0x3608…2bbc` read via `eth_getStorageAt` on each proxy — populated for GasService/ITS/Factory (impl matches the `implementation()` getter), **empty** for the gateway (custom `AxelarGatewayProxy` — impl exposed only by the getter) and for the deployers/handlers (not proxies). Admin slot `0xb531…6103` empty on all (Ownable-governed, not transparent-admin).
 - **Decoy finding:** `eth_getCode` at the Ethereum gateway literal `0x4F44…56A5` on BNB returns a 23,932-byte non-Axelar contract (impl getter returns 0) and on Arbitrum a 3,874-byte contract (impl getter reverts); recorded as a look-alike, not the gateway.
+
+Additions of 2026-09-29:
+
+- **Amplifier events:** the event lines read from `contracts/interfaces/IBaseAmplifierGateway.sol` (`MessageApproved` with six parameters, `MessageExecuted`) and `contracts/interfaces/IBaseWeightedMultisig.sol` (`SignersRotated`); topic0 values recomputed with `keccak256`.
+- **Measured activity** (pinned 12-hour window 2026-09-28 00:00–12:00 UTC, all emitters of each topic0; order Ethereum / Base / Arbitrum / Optimism / Polygon / BNB / Avalanche / Robinhood). Every gateway count comes from the chain's gateway of §4, and every ITS count from `0xB5FB4BE02232B1bBA4dC8f81dc24C26980dE9e3C`:
+  - `ContractCallWithToken` (source, token locked or burned): 26 / 22 / 7 / 5 / 17 / 27 / 9 / 0.
+  - `ContractCall` (source message): 69 / 11 / 9 / 1 / 7 / 15 / 15 / 0.
+  - `ContractCallApproved` (destination approval, no value): 42 / 20 / 7 / 6 / 3 / 15 / 6 / 0.
+  - `ContractCallApprovedWithMint` (destination approval, no value): 59 / 62 / 31 / 6 / 8 / 40 / 9 / 0.
+  - `ContractCallExecuted` (destination payout for the token path): 102 / 82 / 38 / 12 / 11 / 55 / 15 / 0.
+  - `InterchainTransfer` (ITS source): 26 / 9 / 8 / 0 / 1 / 13 / 13 / 0.
+  - `InterchainTransferReceived` (ITS destination): 23 / 7 / 1 / 3 / 1 / 9 / 2 / 0.
+  - `TokenSent`, `MessageApproved` (six-parameter), `MessageExecuted`: 0 on all eight chains.
+- **Samples** (read with `eth_getTransactionReceipt`): the three transactions of §9, item 16.
+- **Robinhood Chain:** §6 lists the addresses read with `eth_getCode` on 2026-09-29 (all `0x`, nonce 0) and the registry checked. The same registry confirms the gateway, GasService, ITS and Factory addresses of §4 for the seven chains.
+- **Checksum fix:** the Factory address was written with an invalid EIP-55 case; it is now `0x83a93500d23Fbc3e82B410aD07A6a9F7A0670D66` (same hex).
+
+Additional sources (2026-09-29): [`axelar-gmp-sdk-solidity` `IBaseAmplifierGateway.sol`](https://github.com/axelarnetwork/axelar-gmp-sdk-solidity/blob/main/contracts/interfaces/IBaseAmplifierGateway.sol) · [`axelar-contract-deployments` `axelar-chains-config/info/mainnet.json`](https://github.com/axelarnetwork/axelar-contract-deployments/blob/main/axelar-chains-config/info/mainnet.json).
 
 Authoritative sources:
 - Canonical repos: [`axelarnetwork/axelar-cgp-solidity`](https://github.com/axelarnetwork/axelar-cgp-solidity) (gateway + gas service), [`axelarnetwork/interchain-token-service`](https://github.com/axelarnetwork/interchain-token-service) (ITS + factory + token manager), [`axelarnetwork/axelar-gmp-sdk-solidity`](https://github.com/axelarnetwork/axelar-gmp-sdk-solidity) (proxy/base contracts).

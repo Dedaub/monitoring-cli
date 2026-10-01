@@ -1,6 +1,6 @@
 # Butter Network — MAP Omnichain Service V2 (MOS V2, LEGACY) — Topics, Selectors, Addresses (Ethereum, Base, BNB, Arbitrum, Optimism, Polygon + MAP relay)
 
-**Status:** verified against live RPC on Ethereum (1), Base (8453), BNB (56), Arbitrum One (42161), Optimism (10), Polygon PoS (137), and the canonical `butternetwork/butter-mos-contracts` (`evmv2/`) repo on 2026-06-09. **Avalanche (43114): not deployed** (`eth_getCode` = `0x`).
+**Status:** verified against live RPC on Ethereum (1), Base (8453), BNB (56), Arbitrum One (42161), Optimism (10), Polygon PoS (137), and the canonical `butternetwork/butter-mos-contracts` (`evmv2/`) repo on 2026-06-09. **Avalanche (43114): not deployed** (`eth_getCode` = `0x`). **Robinhood Chain (4663): not deployed** (`eth_getCode` = `0x`, nonce 0, at the spoke and AuthorityManager literals on 2026-09-29; not in the official "v2.1 (deprecated)" list).
 **Scope:** the **legacy, superseded** MAP Omnichain Service bridge — `MAPOmnichainServiceV2` on spoke chains, `MAPOmnichainServiceRelayV2` on the MAP relay, plus `TokenRegisterV2`. **MOS V2 is fully replaced by MOS V3** ([mos-v3.md](mos-v3.md)); the V2 proxy still has bytecode on most chains but shows **~0 recent on-chain activity** (0 logs in a 49k-block window on Ethereum). Documented for completeness / historical indexing. Topics + selectors are chain-agnostic; addresses are network-specific.
 
 MOS V2 used the same hub-and-spoke design as V3 (every transfer routes through the MAP relay, chainId 22776), but with an older event vocabulary: outbound transfers emit **`mapSwapOut`** / `mapTransferOut` / `mapDepositOut`, inbound emit **`mapSwapIn`** / `mapDepositIn`. The V3 redesign collapsed these into the generic `MessageOut`/`MessageIn`/`MessageRelay` triplet.
@@ -76,8 +76,9 @@ Verified via `eth_getCode` on each chain. The **spoke proxy literal `0xfeB2b97e�
 | Optimism | 10 | ✓ (**177 B**, distinct deploy) | `0xdfad86ba2d2d6580b534f447b54798a968da6a00` | `0xbbcfbbec…` |
 | Polygon | 137 | ✓ (680 B) | `0x6f41c425f1bd258a12ee2850467683b1a3462e14` | `0xbbcfbbec…` |
 | **Avalanche** | 43114 | **✗ (0x — never deployed)** | — | — |
+| **Robinhood Chain** | 4663 | **✗ (`0x`, nonce 0)** | — | — |
 
-AuthorityManager `0xAaaAa8a3…` (4609 B) is present on ETH/Base/BNB/Arb/OP/Polygon, **absent on Avalanche**.
+AuthorityManager `0xAaaAa8a316ab372Af9BC4cDD2ae040b03f9D4d88` (4609 B) is present on ETH/Base/BNB/Arb/OP/Polygon, **absent on Avalanche and Robinhood Chain**. The per-chain impls above were re-read on 2026-09-29 and had not changed.
 
 ## 5. Cross-chain summary
 
@@ -90,6 +91,7 @@ AuthorityManager `0xAaaAa8a3…` (4609 B) is present on ETH/Base/BNB/Arb/OP/Poly
 | Optimism | 10 | ✓ 177 B | distinct smaller proxy |
 | Polygon | 137 | ✓ 680 B | impl `0x6f41c425…` |
 | **Avalanche** | 43114 | **✗** | MOS V3 only there |
+| **Robinhood Chain** | 4663 | **✗** | MOS V3 only there (see mos-v3.md §4.1) |
 | **MAP relay (MAPO)** | **22776** | ✓ (`MAPOmnichainServiceRelayV2`) + TokenRegisterV2 `0xE00219ec…` | not a target chain |
 
 **Counterparty chains outside the seven:** MAP relay (22776), zkSync Era (324, different literal `0xBEf06a32…`), Linea, Mantle, Scroll, zkLink (`0xB666A84a…`), Merlin, Bevm, AINN, B2, Conflux, Klaytn, plus **Tron** (`TYMpgB8Q9vSoGtkyE3hXsvUrpte3KCDGj6`).
@@ -154,6 +156,7 @@ How every constant was verified (2026-06-09):
 - **Topic0 / selectors:** recomputed locally as `keccak256(canonical signature)` / `[0:4]` from `butternetwork/butter-mos-contracts/evmv2/contracts/` (`MAPOmnichainServiceV2.sol`, `MAPOmnichainServiceRelayV2.sol`, `interface/IButterMosV2.sol`).
 - **Addresses:** parsed from `evmv2/deployments/mos.json` and existence-checked via `eth_getCode` on all seven target RPCs — present on ETH/Base/BNB/Arb/OP/Polygon, `0x` (absent) on Avalanche. Bytecode sizes recorded (680 B vs 177 B variants).
 - **Proxy classification + deprecation:** EIP-1967 impl **and** admin slots read live via `eth_getStorageAt` on `0xfeB2b97e…` per chain — both populated ⇒ Transparent proxy (per-chain impls in §4). Deprecation confirmed by `eth_getLogs` returning **0 logs** for the V2 proxy on Ethereum across a 49k-block window (all current traffic is on MOS V3, mos-v3.md).
+- **2026-09-29 re-check:** `eth_getCode` at `0xfeB2b97e4Efce787c08086dC16Ab69E063911380` and `0xAaaAa8a316ab372Af9BC4cDD2ae040b03f9D4d88` on all eight chains (Robinhood Chain and Avalanche: `0x`, nonce 0); impl slots unchanged. In the pinned 12-hour window 2026-09-28 00:00–12:00 UTC, `mapSwapOut`, `mapTransferOut`, `mapDepositOut` and `mapSwapIn` returned 0 logs from any emitter on all eight chains. The official "v2.1 (deprecated)" table on <https://docs.butternetwork.io/butter-bridge-integration/deployed-bridge-contracts> lists Ethereum, BNB, Polygon, Arbitrum, Optimism and Base, and no Avalanche or Robinhood Chain.
 
 **Authoritative sources:**
 - Bridge repo: <https://github.com/butternetwork/butter-mos-contracts> (`evmv2/`)

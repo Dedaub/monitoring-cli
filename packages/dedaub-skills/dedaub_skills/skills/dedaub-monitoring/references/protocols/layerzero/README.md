@@ -18,8 +18,9 @@ Generic cross-chain **messaging** protocol (not a token bridge): it moves arbitr
 | Arbitrum | 42161 | 30110 | 110 | `0x1a44…728c` | `0x3c22…cf62` |
 | Optimism | 10 | 30111 | 111 | `0x1a44…728c` | `0x3c22…cf62` |
 | Polygon | 137 | 30109 | 109 | `0x1a44…728c` | `0x3c22…cf62` |
+| Robinhood Chain | 4663 | 30416 | 416 (deployed, no library registered) | `0x6f475642a6e85809b1c36fa62763669b1b48dd5b` | `0xb6319cc6c8c27a8f5daf0dd3df91ea35c4720dd7` |
 
-**Both V1 and V2 are deployed on all seven target chains.** LayerZero also connects to ~100+ counterparty chains **outside** the seven (zkSync Era, Linea, Scroll, Blast, Mantle, Metis, Sei, Sonic, Berachain, Aptos, Solana, TON, Hyperliquid, …) — these are recorded in the official registry but are not target chains for this doc set.
+**Both V1 and V2 are deployed on all seven older target chains.** **Robinhood Chain (4663)** has V2 at a different EndpointV2 address (`0x6f475642a6e85809b1c36fa62763669b1b48dd5b`, eid 30416, live traffic) and a V1 stack with no registered library (inert) — checked 2026-09-29 ([v2.md](./v2.md) §4.1, [v1.md](./v1.md) §5a). Major OFT deployments per chain: [v2.md](./v2.md) §4.2; V1 OFT proxies: [v1.md](./v1.md) §5b. LayerZero also connects to ~100+ counterparty chains **outside** the seven (zkSync Era, Linea, Scroll, Blast, Mantle, Metis, Sei, Sonic, Berachain, Aptos, Solana, TON, Hyperliquid, …) — these are recorded in the official registry but are not target chains for this doc set.
 
 ## Cross-cutting facts (apply to both files)
 

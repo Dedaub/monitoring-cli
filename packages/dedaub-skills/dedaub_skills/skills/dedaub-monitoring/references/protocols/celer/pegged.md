@@ -1,7 +1,7 @@
-# Celer Pegged-Token Bridge — Topics, Selectors, Addresses (Ethereum, BNB, Avalanche, Arbitrum, Optimism, Polygon)
+# Celer Pegged-Token Bridge — Topics, Selectors, Addresses (Ethereum, BNB, Avalanche, Arbitrum, Optimism, Polygon, Base)
 
-**Status:** verified against live RPC on every listed chain and the canonical `celer-network/sgn-v2-contracts` repo on 2026-06-09.
-**Scope:** the **pegged-token (mint/burn) bridge** — `OriginalTokenVault` (v1) / `OriginalTokenVaultV2` (the lock side) and `PeggedTokenBridge` (v1) / `PeggedTokenBridgeV2` (the mint/burn side). This is a **separate product** from the liquidity-pool cBridge + MessageBus in [core.md](./core.md). Topics/selectors are **chain-agnostic**; addresses are **network-specific**. **None of these pegged contracts are deployed on Base** (Base has only the pool Bridge — see core.md).
+**Status:** verified against live RPC on every listed chain and the canonical `celer-network/sgn-v2-contracts` repo on 2026-06-09. Extended on 2026-09-29: the Base `PeggedTokenBridgeV2`, the Optimism `OriginalTokenVaultV2`, the `TransferAgent` (Ethereum, BNB) from the official cBridge contract list, and the Robinhood Chain (4663) check.
+**Scope:** the **pegged-token (mint/burn) bridge** — `OriginalTokenVault` (v1) / `OriginalTokenVaultV2` (the lock side), `PeggedTokenBridge` (v1) / `PeggedTokenBridgeV2` (the mint/burn side), and the `TransferAgent` front door that routes into them. This is a **separate product** from the liquidity-pool cBridge + MessageBus in [core.md](./core.md). Topics/selectors are **chain-agnostic**; addresses are **network-specific**. **Base carries only a `PeggedTokenBridgeV2`** (`0x5471ea8f739dd37E9B81Be9c5c77754D8AA953E4`: no vault and no v1 bridge). **Robinhood Chain carries no Celer contract.**
 
 The pegged bridge runs a classic **lock-and-mint** model. On the *canonical* (original-token) chain an `OriginalTokenVault` **locks** the real token (`deposit` → emits `Deposited`); the SGN attests; on the *pegged* chain a `PeggedTokenBridge` **mints** a wrapped representation (`mint` → emits `Mint`). To go back, the user **burns** the pegged token (`burn` → emits `Burn`) and the vault **releases** the original (`withdraw` → emits `Withdrawn`). All four contracts inherit the same safeguard mixins as the pool `Bridge` (`Pauser`, `VolumeControl`, `DelayedTransfer`) and use the pool `Bridge` as their **`sigsVerifier`** (SGN signature checker).
 
@@ -19,6 +19,7 @@ The pegged bridge runs a classic **lock-and-mint** model. On the *canonical* (or
 | **OriginalTokenVaultV2** | lock | `+uint64 nonce` in `Deposited` | No | Same role; nonce-unique deposit IDs. |
 | **PeggedTokenBridge** (v1) | mint/burn (pegged chain) | — | No | Mints/burns wrapped token; `mint`→`Mint`, `burn`→`Burn`. |
 | **PeggedTokenBridgeV2** | mint/burn | `+uint64 nonce` in `Burn`, `supplies` map (`SupplyUpdated`), `burnFrom` | No | Current default; per-token supply cap accounting. |
+| **TransferAgent** (`contracts/proxy/TransferAgent.sol`) | front door (Ethereum, BNB) | routes a user `transfer`/`transferNative` to the vault or bridge chosen by `bridgeSendType`; emits `Supplement` | No (immutable, 7,063 B) | Adds a `Supplement` event with the same `transferId` as the vault/bridge event in the same tx. |
 
 ---
 
@@ -74,6 +75,15 @@ The same `Paused`/`Unpaused`/`SignersUpdated`/`DelayPeriodUpdated`/`DelayThresho
 | `0x62e78cea01bee320cd4e420270b5ea74000d11b0c9f74754ebdbfc544b05a258` / `0x5db9ee0a495bf2e6ff9c91a7834c1ba4fdd244a5e8aa4e537bd38aeae4b073aa` | `Paused(address)` / `Unpaused(address)` |
 | `0x8be0079c531659141344cd1fd0a4f28419497f9722a3daafe3b4186f6b6457e0` | `OwnershipTransferred(address,address)` |
 
+### 1.6 TransferAgent (Ethereum, BNB) — front door into the pegged contracts
+
+`BridgeSendType` is an enum → `uint8`: `0 Null, 1 Liquidity, 2 PegDeposit, 3 PegBurn, 4 PegV2Deposit, 5 PegV2Burn, 6 PegV2BurnFrom`. `Extension` is `(uint8 Type, bytes Value)`. Both topic0s were found in the runtime bytecode of both TransferAgent addresses.
+
+| topic0 | Event |
+|--------|-------|
+| `0x3f2b4c063a18045940932b9fba423a72e3b8d36e63ca462720d880f7b64504ca` | `Supplement(uint8 bridgeSendType, bytes32 transferId, address sender, bytes receiver, (uint8 Type, bytes Value)[] extensions)` — status only (the value moves in the vault/bridge event of the same tx). `transferId` = the `depositId`/`burnId` of that event; `sender` is the real user and `receiver` may be a non-EVM address. |
+| `0xe85507dd8a6159a69bf9f4aa5ae1283824ec9948b7d4a03d5cb457070f312dfc` | `BridgeUpdated(uint8 bridgeSendType, address bridgeAddr)` — admin: the vault/bridge that a send type routes to changed. |
+
 ---
 
 ## 2. Function signatures (chain-agnostic — `keccak256(canonical sig)[0:4]`)
@@ -99,7 +109,16 @@ The same `Paused`/`Unpaused`/`SignersUpdated`/`DelayPeriodUpdated`/`DelayThresho
 | `0x01e64725` | `records(bytes32)` → `bool` | both | Replay-guard. |
 | `0x274cee31` | `supplies(address)` → `uint256` | **v2 only** | Per-token minted supply (drives `SupplyUpdated`). Absent on v1. |
 
-`minBurn(address)` / `maxBurn(address)` getters: `0x...` per-token caps (auto-generated public mappings). `maxBurn == 0` = no cap; `minBurn` is a strict `>` lower bound.
+`minBurn(address)` / `maxBurn(address)` getters: per-token caps (auto-generated public mappings). `maxBurn == 0` = no cap; `minBurn` is a strict `>` lower bound.
+
+### 2.3 TransferAgent
+
+| Selector | Signature | Notes |
+|----------|-----------|-------|
+| `0x39b0070c` | `transfer(bytes _receiver, address _token, uint256 _amount, uint64 _dstChainId, uint64 _nonce, uint32 _maxSlippage, uint8 _bridgeSendType, (uint8 Type, bytes Value)[] _extensions)` | Pulls `_token` from the user and calls the routed vault/bridge; emits `Supplement`. |
+| `0xc5d8ac7e` | `transferNative(bytes _receiver, uint256 _amount, uint64 _dstChainId, uint64 _nonce, uint32 _maxSlippage, uint8 _bridgeSendType, (uint8 Type, bytes Value)[] _extensions)` | `payable`; native variant (the vault wraps to WETH). Emits `Supplement`. |
+| `0x65d67c33` | `bridges(uint8)` → `address` | view: routing table. Read on 2026-09-29: Ethereum `2` → OTV v1, `3` → PegBridge v1, `4` → OTV V2, `5` → PegBridge V2, `1` and `6` → `0x0`; BNB `4` → OTV V2, `5` → PegBridge V2, `1` → `0x0`. |
+| `0x6701d514` | `setBridgeAddress(uint8 _bridgeSendType, address _addr)` | owner only; emits `BridgeUpdated`. |
 
 ---
 
@@ -113,6 +132,7 @@ All verified via `eth_getCode` returning non-empty bytecode on `https://ethereum
 | **OriginalTokenVaultV2** | `0x7510792A3B1969F9307F3845CE88e39578f2bAE1` | Lock vault v2, 13,534 B immutable. |
 | **PeggedTokenBridge** (v1) | `0x16365b45EB269B5B5dACB34B4a15399Ec79b95eB` | Mint/burn, 10,983 B immutable. |
 | **PeggedTokenBridgeV2** | `0x52E4f244f380f8fA51816c8a10A63105dd4De084` | Mint/burn v2, 12,011 B immutable. |
+| TransferAgent | `0x9b274BC73940d92d0Af292Bde759cbFCCE661a0b` | Front door, 7,063 B immutable; `owner()` = `0xf380166f8490f24af32bf47d1aa217fba62b6575`; routes send types 2–5 to the four contracts above (`bridges(uint8)`). |
 
 ## 4. Addresses — BNB Smart Chain (chain ID 56)
 
@@ -122,6 +142,7 @@ All verified via `eth_getCode` returning non-empty bytecode on `https://ethereum
 | OriginalTokenVaultV2 | `0x11a0c9270D88C99e221360BCA50c2f6Fda44A980` | 13,534 |
 | PeggedTokenBridge (v1) | `0xd443FE6bf23A4C9B78312391A30ff881a097580E` | 10,983 |
 | PeggedTokenBridgeV2 | `0x26c76F7FeF00e02a5DD4B5Cc8a0f717eB61e1E4b` | 12,011 (literal also = Avalanche MessageBus impl — `(chainId,addr)` keying) |
+| TransferAgent | `0x3d85B598B734a0E7c8c1b62B00E972e9265dA541` | 7,063 (same code hash as the Ethereum TransferAgent); routes send types 4 and 5 to OTV V2 and PegBridge V2 |
 
 ## 5. Addresses — Avalanche C-Chain (chain ID 43114)
 
@@ -146,7 +167,7 @@ All verified via `eth_getCode` returning non-empty bytecode on `https://ethereum
 | Role | Address | Bytes |
 |------|---------|-------|
 | OriginalTokenVault (v1) | `0xbCfeF6Bb4597e724D720735d32A9249E0640aA11` | 13,536 |
-| OriginalTokenVaultV2 | **not in the canonical address doc** | — |
+| OriginalTokenVaultV2 | `0x6e380ad5D15249eF2DE576E3189fc49B5713BE4f` | 13,488 (listed in the official cBridge contract list as of 2026-09-29; bytecode carries the v2 `Deposited` and `Withdrawn` topic0s; `sigsVerifier()` = the Optimism Bridge `0x9D39Fc627A6d9d9F8C831c16995b209548cc3401`; `owner()` = `0xf380166f8490f24af32bf47d1aa217fba62b6575`) |
 | PeggedTokenBridge (v1) | `0x61f85fF2a2f4289Be4bb9B72Fc7010B3142B5f41` | 10,983 |
 | PeggedTokenBridgeV2 | `0xC3c5B9474273113efB74e7Da43B5AAba0Cd9699A` | 12,142 |
 
@@ -161,27 +182,41 @@ All verified via `eth_getCode` returning non-empty bytecode on `https://ethereum
 
 ## 9. Addresses — Base (chain ID 8453)
 
-**No pegged contracts deployed.** Base has only the pool `Bridge` (see core.md §9). `OriginalTokenVault[V2]` and `PeggedTokenBridge[V2]` all return `0x` on Base.
+Base carries **one pegged contract**, listed in the official cBridge contract list ("PeggedTokenBridge V2 Contract" → Base) and verified with `eth_getCode` on 2026-09-29:
+
+| Role | Address | Bytes |
+|------|---------|-------|
+| **PeggedTokenBridgeV2** | `0x5471ea8f739dd37E9B81Be9c5c77754D8AA953E4` | 12,104, immutable (EIP-1967 impl slot `0x0`). Bytecode carries `Mint`, the v2 `Burn` and `SupplyUpdated` topic0s and the `mint`/`burn`/`burnFrom`/`supplies` selectors. `sigsVerifier()` = the Base pool Bridge `0x7d43AABC515C356145049227CeE54B608342c0ad`; `owner()` = `0xf380166f8490f24af32bf47d1aa217fba62b6575`. |
+
+**Not on Base:** `OriginalTokenVault` (v1 and V2), `PeggedTokenBridge` v1, TransferAgent, MessageBus. An earlier revision of this file said that Base had no pegged contract; this section corrects it. Activity: 0 `Mint` and 0 `Burn` in the pinned 12-hour window 2026-09-28 00:00–12:00 UTC; the Blockscout log list shows `Mint` at block 51,777,202 (tx `0xad781811fc9459810be08de48c703bbff39e8b0cef573cbde4f7c55db7557911`, a `Transfer` from `0x0` of the pegged token to the recipient) and a v2 `Burn` at block 49,663,651 (tx `0x42bafec39237a99bae3ecd351425931ff3ef3188033d79d18176af6d1911bedc`).
+
+## 9a. Robinhood Chain (chain ID 4663) — no Celer deployment
+
+Robinhood Chain is in neither the official cBridge contract list nor the Celer IM contract list. `eth_getCode` returned `0x` (nonce 0) on 2026-09-29 at all 24 distinct pegged-contract literals of §3–§9, at both TransferAgent literals, at the four pool-Bridge literals reused across Celer chains (`0x9B36f165baB9ebe611d491180418d8De4b8f3a1f`, `0x841ce48F9446C8E281D3F1444cB859b4A6D0738C`, `0xf5C6825015280CdfD0b56903F9F8B5A2233476F5`, `0x9Bb46D5100d2Db4608112026951c9C965b233f4D`), and at the TransferAgent literals. The pegged `Mint`/`Burn`/`Deposited`/`Withdrawn` topic0s returned 0 logs on Robinhood Chain in the pinned window.
 
 ---
 
 ## 10. Cross-chain summary
 
-| Chain | ID | OTV v1 | OTV V2 | PegBridge v1 | PegBridge V2 |
-|---|---|---|---|---|---|
-| Ethereum | 1 | `0xB37D31b2…8595` | `0x7510792A…bAE1` | `0x16365b45…95eB` | `0x52E4f244…E084` |
-| BNB | 56 | `0x78bc5Ee9…02DC` | `0x11a0c927…A980` | `0xd443FE6b…580E` | `0x26c76F7F…1E4b` |
-| Avalanche | 43114 | `0x5427FEFA…1820` | `0xb51541df…02BB` | `0x88DCDC47…8a78` | `0xb774C6f8…D195` |
-| Arbitrum | 42161 | `0xFe31bFc4…0f76` | `0xEA4B1b0a…a58b` | `0xbdd2739A…E778` | `0xc72e7fC2…aF6B` |
-| Optimism | 10 | `0xbCfeF6Bb…aA11` | — (not in doc) | `0x61f85fF2…5f41` | `0xC3c5B947…699A` |
-| Polygon | 137 | `0xc1a2D967…1EeA` | `0x4C882ec2…7c0C` | `0x4d58FDC7…6F7A` | `0xb51541df…02BB` |
-| **Base** | 8453 | — | — | — | — |
+| Chain | ID | OTV v1 | OTV V2 | PegBridge v1 | PegBridge V2 | TransferAgent |
+|---|---|---|---|---|---|---|
+| Ethereum | 1 | `0xB37D31b2A74029B5951a2778F959282E2D518595` | `0x7510792A3B1969F9307F3845CE88e39578f2bAE1` | `0x16365b45EB269B5B5dACB34B4a15399Ec79b95eB` | `0x52E4f244f380f8fA51816c8a10A63105dd4De084` | `0x9b274BC73940d92d0Af292Bde759cbFCCE661a0b` |
+| BNB | 56 | `0x78bc5Ee9F11d133A08b331C2e18fE81BE0Ed02DC` | `0x11a0c9270D88C99e221360BCA50c2f6Fda44A980` | `0xd443FE6bf23A4C9B78312391A30ff881a097580E` | `0x26c76F7FeF00e02a5DD4B5Cc8a0f717eB61e1E4b` | `0x3d85B598B734a0E7c8c1b62B00E972e9265dA541` |
+| Avalanche | 43114 | `0x5427FEFA711Eff984124bFBB1AB6fbf5E3DA1820` | `0xb51541df05DE07be38dcfc4a80c05389A54502BB` | `0x88DCDC47D2f83a99CF0000FDF667A468bB958a78` | `0xb774C6f82d1d5dBD36894762330809e512feD195` | — |
+| Arbitrum | 42161 | `0xFe31bFc4f7C9b69246a6dc0087D91a91Cb040f76` | `0xEA4B1b0aa3C110c55f650d28159Ce4AD43a4a58b` | `0xbdd2739AE69A054895Be33A22b2D2ed71a1DE778` | `0xc72e7fC220e650e93495622422F3c14fb03aAf6B` | — |
+| Optimism | 10 | `0xbCfeF6Bb4597e724D720735d32A9249E0640aA11` | `0x6e380ad5D15249eF2DE576E3189fc49B5713BE4f` | `0x61f85fF2a2f4289Be4bb9B72Fc7010B3142B5f41` | `0xC3c5B9474273113efB74e7Da43B5AAba0Cd9699A` | — |
+| Polygon | 137 | `0xc1a2D967DfAa6A10f3461bc21864C23C1DD51EeA` | `0x4C882ec256823eE773B25b414d36F92ef58a7c0C` | `0x4d58FDC7d0Ee9b674F49a0ADE11F26C3c9426F7A` | `0xb51541df05DE07be38dcfc4a80c05389A54502BB` | — |
+| **Base** | 8453 | — | — | — | `0x5471ea8f739dd37E9B81Be9c5c77754D8AA953E4` | — |
+| **Robinhood Chain** | 4663 | — | — | — | — | — (no Celer contract; not in the official lists) |
+
+All present addresses re-checked with `eth_getCode` on 2026-09-29; every one has code and none is an EIP-1967 proxy.
 
 **Collision tells (key on `(chainId, address)` always):**
-- `0x5427FEFA…1820` = Ethereum **Bridge** AND Avax **OriginalTokenVault v1** (the Avax **Bridge** is the different literal `0xef3c714c…e5d4`).
-- `0x88DCDC47…8a78` = Polygon **Bridge** AND Avax **PeggedTokenBridge v1**.
-- `0xb51541df…02BB` = Avax **OriginalTokenVaultV2** AND Polygon **PeggedTokenBridgeV2**.
-- `0x26c76F7F…1E4b` = BNB **PeggedTokenBridgeV2** AND Avax **MessageBus impl**.
+- `0x5427FEFA711Eff984124bFBB1AB6fbf5E3DA1820` = Ethereum **Bridge** AND Avax **OriginalTokenVault v1** (the Avax **Bridge** is the different literal `0xef3c714c9425a8F3697A9C969Dc1af30ba82e5d4`).
+- `0x88DCDC47D2f83a99CF0000FDF667A468bB958a78` = Polygon **Bridge** AND Avax **PeggedTokenBridge v1**.
+- `0xb51541df05DE07be38dcfc4a80c05389A54502BB` = Avax **OriginalTokenVaultV2** AND Polygon **PeggedTokenBridgeV2**.
+- `0x26c76F7FeF00e02a5DD4B5Cc8a0f717eB61e1E4b` = BNB **PeggedTokenBridgeV2** AND Avax **MessageBus impl**.
+- `0x5471ea8f739dd37E9B81Be9c5c77754D8AA953E4` = Base **PeggedTokenBridgeV2**, but the same literal also has code on Arbitrum (a 1,554 B EIP-1967 proxy, impl `0x223fb0ceb2c6e5310264efe38151d7d083db91f1`) and Polygon (11,620 B). The official lists do not name those two contracts; do not treat them as a Base-style pegged bridge.
 
 ---
 
@@ -190,7 +225,8 @@ All verified via `eth_getCode` returning non-empty bytecode on `https://ethereum
 | Contract | Pattern | Detection | Upgrade auth |
 |----------|---------|-----------|--------------|
 | **OriginalTokenVault / V2** | **Immutable, no proxy** | EIP-1967 impl slot `0x3608…2bbc` = `0x0`; full 11–14 KB runtime. | none (params only). |
-| **PeggedTokenBridge / V2** | **Immutable, no proxy** | EIP-1967 impl slot = `0x0`; full 11–12 KB runtime. | none (params only). |
+| **PeggedTokenBridge / V2** | **Immutable, no proxy** | EIP-1967 impl slot = `0x0`; full 11–12 KB runtime (Base: 12,104 B). | none (params only). |
+| **TransferAgent** (Ethereum, BNB) | **Immutable, no proxy** | EIP-1967 impl slot = `0x0`; 7,063 B runtime, same code hash on both chains. | `owner()` (Ethereum: `0xf380166f8490f24af32bf47d1aa217fba62b6575`) can re-route a send type with `setBridgeAddress` (`BridgeUpdated`). |
 
 EIP-1967 impl slot `0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc`; admin slot `0xb53127684a568b3173ae13b9f8a6016e243e63b6e8ee1178d6a717850b5d6103`. **All four pegged contracts are immutable** — there is **no `Upgraded` event** to watch; to "upgrade", Celer deploys a fresh contract and re-points the MessageBus `peg*` getters (watch `PegBridgeUpdated`/`PegVaultUpdated`/`PegBridgeV2Updated`/`PegVaultV2Updated` on the MessageBus — core.md §1.4). `sigsVerifier()` on each pegged contract returns the chain's pool `Bridge` address.
 
@@ -207,8 +243,11 @@ EIP-1967 impl slot `0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d
 7. **`supplies`/`SupplyUpdated` exist only on PeggedTokenBridgeV2.** It is the per-token minted-supply accountant (burn decrements, mint increments). v1 has no supply cap accounting. A sudden `SupplyUpdated` divergence from on-chain `totalSupply` is a risk signal.
 8. **`maxBurn`/`maxDeposit == 0` means "no cap"**, not "zero". `minBurn`/`minDeposit` are strict `>` lower bounds.
 9. **These are immutable** — no `Upgraded` event. A contract swap is signalled by the MessageBus `Peg*Updated` events, not by an in-place upgrade.
-10. **Not on Base.** All pegged contracts return `0x` on Base. They also span many out-of-scope counterparty chains (the pegged model is how Celer bridges to chains without deep liquidity).
+10. **Base has a PeggedTokenBridgeV2 only** (`0x5471ea8f739dd37E9B81Be9c5c77754D8AA953E4`): Base can be the mint side (`Mint`) or the burn side (v2 `Burn`) of a pegged route, never the lock side (no vault). The pegged contracts also span many out-of-scope counterparty chains (the pegged model is how Celer bridges to chains without deep liquidity).
 11. **Fee-on-transfer / rebasing tokens unsupported** (vault/bridge assume 1:1 transfers) — listing such a token mis-accounts the lock/supply.
+12. **A TransferAgent deposit hides the user from the vault event.** When a user enters through the TransferAgent, `Deposited.depositor` (or the `Burn` account) is the TransferAgent address, and the real user is `Supplement.sender` in the same tx. `Supplement.transferId` equals the vault/bridge id (`depositId`/`burnId`), and `Supplement.receiver` is `bytes` (a non-EVM address is possible; then `mintAccount` is `0x0`). Sample: Ethereum tx `0xfc8c58b8e3f0134185e7740aa189676142a88288d7f2ab01555c1680ba45bead` — `transferNative` with 0.5 ETH, WETH `Deposit` to OTV V2, v2 `Deposited` (depositor = TransferAgent, `mintChainId` 12360001, `mintAccount` `0x0`), then `Supplement` (`bridgeSendType` 4, same id, `sender` = the user, 32-byte `receiver`).
+13. **Robinhood Chain has no Celer contract** (§9a). A pegged or pool event on chain 4663 is not a Celer event.
+14. **Value legs.** Lock: ERC-20 `Transfer` user → vault (or WETH `Deposit` for native) next to `Deposited`. Mint: `Transfer` from `0x0` of the pegged token to the recipient next to `Mint`. Burn: `Transfer` from the user to `0x0` next to `Burn`. Release: `Transfer` vault → recipient next to `Withdrawn`.
 
 ---
 
@@ -235,8 +274,15 @@ TOPIC_PEG_MAX_BURN_UPDATED    = '\xa3181379f6db47d9037efc6b6e8e3efe8c55ddb090b4f
 -- shared delay-queue
 TOPIC_DELAYED_ADDED           = '\xcbcfffe5102114216a85d3aceb14ad4b81a3935b1b5c468fadf3889eb9c5dce6'
 TOPIC_DELAYED_EXECUTED        = '\x3b40e5089937425d14cdd96947e5661868357e224af59bd8b24a4b8a330d4426'
+-- TransferAgent (Ethereum, BNB)
+TOPIC_AGENT_SUPPLEMENT        = '\x3f2b4c063a18045940932b9fba423a72e3b8d36e63ca462720d880f7b64504ca'   -- status only; transferId = vault/bridge id
+TOPIC_AGENT_BRIDGE_UPDATED    = '\xe85507dd8a6159a69bf9f4aa5ae1283824ec9948b7d4a03d5cb457070f312dfc'
 
 -- ===== Selectors =====
+SEL_AGENT_TRANSFER            = '\x39b0070c'
+SEL_AGENT_TRANSFER_NATIVE     = '\xc5d8ac7e'
+SEL_AGENT_BRIDGES             = '\x65d67c33'
+SEL_AGENT_SET_BRIDGE_ADDRESS  = '\x6701d514'
 SEL_OTV_DEPOSIT               = '\x23463624'
 SEL_OTV_DEPOSIT_NATIVE        = '\x00a95fd7'
 SEL_OTV_WITHDRAW              = '\xa21a9280'   -- also Bridge.withdraw
@@ -256,13 +302,15 @@ ETH_OTV_V1                    = '\xb37d31b2a74029b5951a2778f959282e2d518595'
 ETH_OTV_V2                    = '\x7510792a3b1969f9307f3845ce88e39578f2bae1'
 ETH_PEGBRIDGE_V1              = '\x16365b45eb269b5b5dacb34b4a15399ec79b95eb'
 ETH_PEGBRIDGE_V2              = '\x52e4f244f380f8fa51816c8a10a63105dd4de084'
+ETH_TRANSFER_AGENT            = '\x9b274bc73940d92d0af292bde759cbfcce661a0b'
 -- ===== BNB (chain ID 56) =====
 BNB_OTV_V1                    = '\x78bc5ee9f11d133a08b331c2e18fe81be0ed02dc'
 BNB_OTV_V2                    = '\x11a0c9270d88c99e221360bca50c2f6fda44a980'
 BNB_PEGBRIDGE_V1              = '\xd443fe6bf23a4c9b78312391a30ff881a097580e'
 BNB_PEGBRIDGE_V2              = '\x26c76f7fef00e02a5dd4b5cc8a0f717eb61e1e4b'
+BNB_TRANSFER_AGENT            = '\x3d85b598b734a0e7c8c1b62b00e972e9265da541'
 -- ===== Avalanche (chain ID 43114) =====
-AVAX_OTV_V1                   = '\x5427fefa711eff984124bfbb1ab6fbf5e3da1820'   -- also = Ethereum Bridge literal (Avax Bridge is 0xef3c714c…e5d4)
+AVAX_OTV_V1                   = '\x5427fefa711eff984124bfbb1ab6fbf5e3da1820'   -- also = Ethereum Bridge literal (Avax Bridge is 0xef3c714c9425a8f3697a9c969dc1af30ba82e5d4)
 AVAX_OTV_V2                   = '\xb51541df05de07be38dcfc4a80c05389a54502bb'
 AVAX_PEGBRIDGE_V1             = '\x88dcdc47d2f83a99cf0000fdf667a468bb958a78'   -- also = Polygon Bridge literal
 AVAX_PEGBRIDGE_V2             = '\xb774c6f82d1d5dbd36894762330809e512fed195'
@@ -273,6 +321,7 @@ ARB_PEGBRIDGE_V1              = '\xbdd2739ae69a054895be33a22b2d2ed71a1de778'
 ARB_PEGBRIDGE_V2              = '\xc72e7fc220e650e93495622422f3c14fb03aaf6b'
 -- ===== Optimism (chain ID 10) =====
 OP_OTV_V1                     = '\xbcfef6bb4597e724d720735d32a9249e0640aa11'
+OP_OTV_V2                     = '\x6e380ad5d15249ef2de576e3189fc49b5713be4f'
 OP_PEGBRIDGE_V1               = '\x61f85ff2a2f4289be4bb9b72fc7010b3142b5f41'
 OP_PEGBRIDGE_V2               = '\xc3c5b9474273113efb74e7da43b5aaba0cd9699a'
 -- ===== Polygon (chain ID 137) =====
@@ -280,6 +329,9 @@ POLY_OTV_V1                   = '\xc1a2d967dfaa6a10f3461bc21864c23c1dd51eea'
 POLY_OTV_V2                   = '\x4c882ec256823ee773b25b414d36f92ef58a7c0c'
 POLY_PEGBRIDGE_V1             = '\x4d58fdc7d0ee9b674f49a0ade11f26c3c9426f7a'
 POLY_PEGBRIDGE_V2             = '\xb51541df05de07be38dcfc4a80c05389a54502bb'   -- also = Avax OTV V2 literal
+-- ===== Base (chain ID 8453) =====
+BASE_PEGBRIDGE_V2             = '\x5471ea8f739dd37e9b81be9c5c77754d8aa953e4'   -- the only pegged contract on Base
+-- ===== Robinhood Chain (chain ID 4663): no Celer contract; every literal above returns 0x =====
 ```
 
 ---
@@ -290,10 +342,18 @@ How constants were verified (2026-06-09):
 
 - **Topic0 / selectors:** recomputed locally as `keccak256(canonical signature)` (`[0:4]` for selectors), `uint`→`uint256`, from the exact event/function declarations in `celer-network/sgn-v2-contracts` (`pegged-bridge/OriginalTokenVault.sol`, `OriginalTokenVaultV2.sol`, `PeggedTokenBridge.sol`, `PeggedTokenBridgeV2.sol`). The v1↔v2 `Mint`/`Withdrawn` topic-identity and the v1↔v2 `Burn`/`Deposited` divergence were confirmed by computing both from source.
 - **Live cross-check (eth_getLogs, Ethereum):** `OriginalTokenVault.Deposited` topic0 `0x15d2eeef…` returned 10 logs on `0xB37D…8595` in a 50k-block window. (Pegged mint/burn volume is now low — Celer has wound down most pegged-token routes — so some contracts show few recent logs; topic0s are computed from verified canonical source regardless.)
-- **Addresses:** parsed from the official cBridge contract-addresses doc, then existence-checked via `eth_getCode` per chain (byte sizes recorded: OTV v1 ≈ 11.8–13.5 KB, OTV V2 ≈ 13.5 KB, PegBridge v1 ≈ 11.0 KB, PegBridge V2 ≈ 12.0–12.1 KB). The four ETH addresses were independently confirmed by reading the ETH MessageBus `pegBridge/pegVault/pegBridgeV2/pegVaultV2` getters live (they resolve to exactly these). **None deployed on Base** (`eth_getCode` = `0x`).
+- **Addresses:** parsed from the official cBridge contract-addresses doc, then existence-checked via `eth_getCode` per chain (byte sizes recorded: OTV v1 ≈ 11.8–13.5 KB, OTV V2 ≈ 13.5 KB, PegBridge v1 ≈ 11.0 KB, PegBridge V2 ≈ 12.0–12.1 KB). The four ETH addresses were independently confirmed by reading the ETH MessageBus `pegBridge/pegVault/pegBridgeV2/pegVaultV2` getters live (they resolve to exactly these). The 2026-06-09 revision recorded no pegged contract on Base; the 2026-09-29 check corrects that (§9: PeggedTokenBridgeV2 `0x5471ea8f739dd37E9B81Be9c5c77754D8AA953E4`).
 - **Proxy classification:** EIP-1967 impl slot read `0x0` (immutable, non-proxy) on Ethereum for all four contract families.
 
+Extension of 2026-09-29:
+
+- **New addresses:** the Base PeggedTokenBridgeV2, the Optimism OriginalTokenVaultV2 and both TransferAgents come from the official cBridge contract list. Each was existence-checked with `eth_getCode`, its role confirmed by finding its event topic0s (`PUSH32`) and function selectors (`PUSH4`) in the runtime bytecode, and its wiring read with `eth_call` (`sigsVerifier()`, `owner()`, `bridges(uint8)`). EIP-1967 impl slot `0x0` on each (not proxies). TransferAgent signatures from `contracts/proxy/TransferAgent.sol` and `contracts/libraries/BridgeTransferLib.sol` (`BridgeSendType` enum → `uint8`), hashed as `keccak256(sig)`.
+- **Robinhood Chain:** `eth_getCode` = `0x` (nonce 0) at every literal of this file and at the Celer pool-Bridge literals reused on other chains (§9a).
+- **Activity** (`eth_getLogs`, pinned 12-hour window 2026-09-28 00:00–12:00 UTC, all emitters): v2 `Burn` — Ethereum 1 (PegBridge V2), BNB 5 (PegBridge V2), 0 on the other six. `Mint` — Ethereum 1 (PegBridge V2), BNB 9 (PegBridge V2), Avalanche 1 (PegBridge v1), 0 on the other five. v1 `Deposited` — Ethereum 2 (OTV v1), 0 elsewhere. v2 `Deposited` — Ethereum 1 (OTV V2), 0 elsewhere. `Withdrawn` and v1 `Burn` — 0 on all eight chains. `Supplement` — Ethereum 1 (TransferAgent), BNB 0 (TransferAgent, address-filtered count). Base PeggedTokenBridgeV2: 0 `Mint` / 0 `Burn` in the window (latest `Mint` at block 51,777,202 per the Blockscout log list). A 0 is a 12-hour measurement, not proof that a contract is unused.
+- **Sample transactions** (`eth_getTransactionReceipt`, data decoded for the TransferAgent case): Ethereum `0xfc8c58b8e3f0134185e7740aa189676142a88288d7f2ab01555c1680ba45bead` (TransferAgent `transferNative`, §12 item 12); Ethereum `0xca3ac36f07537da53fe6196f131a98715cb24ac9a2472516d104b5e9b9c572d3` (PegBridge V2 `burn`: v2 `Burn`, then the pegged token `Transfer` user → `0x0`); Base `0xad781811fc9459810be08de48c703bbff39e8b0cef573cbde4f7c55db7557911` (`mint` from an SGN relayer: pegged token `Transfer` `0x0` → recipient, then `Mint`).
+- **Source disagreements:** an earlier revision of this file said Base had no pegged contract and that the Optimism OriginalTokenVaultV2 was not in the official list; the official list of 2026-09-29 names both, and both have code.
+
 **Authoritative sources:**
-- Canonical contracts: [`celer-network/sgn-v2-contracts`](https://github.com/celer-network/sgn-v2-contracts) (`contracts/pegged-bridge/`).
-- Addresses: [cBridge docs — Contract Addresses](https://cbridge-docs.celer.network/reference/contract-addresses).
-- Explorers: [Etherscan PeggedTokenBridge](https://etherscan.io/address/0x16365b45eb269b5b5dacb34b4a15399ec79b95eb) · [Etherscan OriginalTokenVault](https://etherscan.io/address/0xB37D31b2A74029B5951a2778F959282E2D518595).
+- Canonical contracts: [`celer-network/sgn-v2-contracts`](https://github.com/celer-network/sgn-v2-contracts) (`contracts/pegged-bridge/`, `contracts/proxy/TransferAgent.sol`, `contracts/libraries/BridgeTransferLib.sol`).
+- Addresses: [cBridge docs — Contract Addresses](https://cbridge-docs.celer.network/reference/contract-addresses) · [Celer IM — Contract Addresses & RPC Info](https://im-docs.celer.network/developer/contract-addresses-and-rpc-info).
+- Explorers: [Etherscan PeggedTokenBridge](https://etherscan.io/address/0x16365b45eb269b5b5dacb34b4a15399ec79b95eb) · [Etherscan OriginalTokenVault](https://etherscan.io/address/0xB37D31b2A74029B5951a2778F959282E2D518595) · [BaseScan PeggedTokenBridgeV2](https://basescan.org/address/0x5471ea8f739dd37e9b81be9c5c77754d8aa953e4) · [Base Blockscout log list](https://base.blockscout.com/address/0x5471ea8f739dd37e9b81be9c5c77754d8aa953e4) · [Robinhood Chain Blockscout](https://robinhoodchain.blockscout.com).
