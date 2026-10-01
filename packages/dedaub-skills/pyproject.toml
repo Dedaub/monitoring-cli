@@ -14,3 +14,9 @@ build-backend = "hatchling.build"
 # git-subdirectory reference without pulling the CLI or its deps.
 [tool.hatch.build.targets.wheel]
 packages = ["dedaub_skills"]
+
+# uv rebuilds a path package only when a cache key changes, and the default key
+# is pyproject.toml alone. Key on the shipped markdown too, so an edited
+# reference reaches `uv tool install` without a version bump.
+[tool.uv]
+cache-keys = [{ file = "pyproject.toml" }, { file = "dedaub_skills/**" }]
