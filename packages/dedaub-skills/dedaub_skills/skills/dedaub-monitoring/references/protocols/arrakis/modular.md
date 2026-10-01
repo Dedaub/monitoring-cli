@@ -84,7 +84,7 @@ Plus the standard ERC-20 `Transfer`/`Approval` (`0xddf252ad…`, `0x8c5be1e5…`
 
 | topic0 | Event |
 |--------|-------|
-| `0x79ee3df02fcb86d2989c21c1a792c528d6c4f38c0ad427eec754c8096b020606` | `Swapped(bool zeroForOne, uint256 amount0Diff, uint256 amount1Diff, uint256 amountOutSwap, uint256 amountInSwap)` — emitted on swap-and-add flows |
+| `0x119b826bd7674fc7a81f6d3ca9ab22e807915d4befc1e7a7122535474845a9aa` | `Swapped(bool zeroForOne, uint256 amount0Diff, uint256 amount1Diff, uint256 amountOutSwap)` — emitted on swap-and-add flows (4 arguments, as in the verified `IArrakisPublicVaultRouter.sol`; the topic is in the router bytecode) |
 
 ### Guardian
 
@@ -136,7 +136,7 @@ Read helpers (view): `numOfPublicVaults()` `0x…` , `numOfPrivateVaults()`, `pu
 |----------|-----------|-------|
 | `0x96006260` | `addLiquidity((uint256 amount0Max, uint256 amount1Max, uint256 amount0Min, uint256 amount1Min, uint256 amountSharesMin, address vault, address receiver))` | primary user entry to mint public-vault shares. |
 | `0x543c520e` | `removeLiquidity((uint256 burnAmount, uint256 amount0Min, uint256 amount1Min, address vault, address receiver))` | |
-| `0x1675b064` | `swapAndAddLiquidity(((bytes,uint256,uint256,address,bool),(uint256,uint256,uint256,uint256,uint256,address,address)))` | swap then add; emits `Swapped`. |
+| `0x9aef21b0` | `swapAndAddLiquidity(((bytes,uint256,uint256,address,bool),(uint256,uint256,uint256,uint256,uint256,address,address)))` | swap then add; emits `Swapped`. `SwapAndAddData(SwapData(swapPayload, amountInSwap, amountOutSwap, swapRouter, zeroForOne), AddLiquidityData)`. Selector present in the router bytecode on Ethereum and Base; live-confirmed as the `tx.input` selector of router calls on Ethereum. |
 
 (There are also `*Permit2` and `wrap*` variants — same `AddLiquidityData`/`RemoveLiquidityData` structs wrapped with Permit2/WETH.)
 
@@ -281,7 +281,7 @@ TOPIC_MGR_SET_FACTORY            = '\x68ec1681f33885e64cf3268f285f4789bd226f23a3
 TOPIC_MODULE_LOG_WITHDRAW        = '\x9744d0a120f7c7d7906cfe3c05b50669fb49aa6d778b099d5d6edc386dee5b59'
 TOPIC_MODULE_SET_MGR_FEE_PIPS    = '\x5b5a6a8527892eb1e879279ea1addd664eef55099889d3fe13e926a5fd7c3605'
 -- ===== Topics — Router / Guardian =====
-TOPIC_ROUTER_SWAPPED             = '\x79ee3df02fcb86d2989c21c1a792c528d6c4f38c0ad427eec754c8096b020606'
+TOPIC_ROUTER_SWAPPED             = '\x119b826bd7674fc7a81f6d3ca9ab22e807915d4befc1e7a7122535474845a9aa'
 TOPIC_GUARDIAN_SET_PAUSER        = '\x6980d5b2e749d15ffa2ae3cd57c4c552f4d4b8fc0942e00316d39219d51aec79'
 
 -- ===== Selectors =====
@@ -298,7 +298,7 @@ SEL_MGR_REBALANCE                = '\x4302e56d'
 SEL_MGR_SET_MODULE               = '\xa9bf260c'
 SEL_ROUTER_ADD_LIQUIDITY         = '\x96006260'
 SEL_ROUTER_REMOVE_LIQUIDITY      = '\x543c520e'
-SEL_ROUTER_SWAP_ADD_LIQUIDITY    = '\x1675b064'
+SEL_ROUTER_SWAP_ADD_LIQUIDITY    = '\x9aef21b0'
 SEL_GUARDIAN_SET_PAUSER          = '\x2d88af4a'
 
 -- ===== Addresses (CREATE3 — SAME on every chain; presence per-chain, see table) =====

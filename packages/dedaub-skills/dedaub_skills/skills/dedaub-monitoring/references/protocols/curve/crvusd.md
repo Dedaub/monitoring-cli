@@ -131,7 +131,7 @@ scrvUSD is a Yearn V3 vault, so it emits the Yearn governance/accounting events 
 | `0x406e5474c6819832e7834a919ce48a8c8d909e2d9a3a0fe5378844c3b51b46a2` | `PriceDeviation(uint256 price_deviation)` | PegKeeperRegulator |
 | `0x069906c4131a2e2c0b2f32f351644b280d95237fa3f095f91ac69cac88ab9234` | `DebtParameters(uint256 alpha, uint256 beta)` | PegKeeperRegulator |
 | `0x2640b4015d3473fd09bf2b30939e17deb4068cdacf3892136e737e166ceb3210` | `SetRate(uint256 rate)` | AggMonetaryPolicy (**1-arg** — distinct from the AMM 3-arg `SetRate` `0x52543716…`) |
-| `0xfc47ca1d88e8137eb4cc32afb4bb62d3eb485c114be5e98f0533d9825311c748` | `AddPricePair(uint256 n, address pool, bool is_inverse)` | AggregateStablePrice |
+| `0xfa41d19543baad0c0257c3430e1b3cecfa57f753cdc21330b9ec0862cde1b258` | `AddPricePair(uint256 n, address pool, bool is_inverse)` | AggregateStablePrice (topic0 in the bytecode of both `0x18672b1b…` and `0xe5afcf33…`; 8 live logs at `0x18672b1b…`, the first at block 17382260) |
 | `0x017592f2f16e82cccce60102865c737270289c308f34ff88e754d5e99ea0bae1` | `RemovePricePair(uint256 n)` | AggregateStablePrice |
 | `0xc76f1b4fe4396ac07a9fa55a415d4ca430e72651d37d3401f3bed7cb13fc4f12` | `FlashLoan(address indexed caller, address indexed receiver, uint256 amount)` | FlashLender (EIP-3156) |
 
@@ -229,11 +229,11 @@ Standard ERC-20 `Transfer` `0xddf252ad…` / `Approval` `0x8c5be1e5…` (EIP-261
 
 | Selector | Signature | Contract |
 |----------|-----------|----------|
-| `0x8d685bd3` | `provide(uint256 amount)` | PegKeeper (note: same 4-bytes as the `Provide` event prefix) |
-| `0x5b6b431d` | `withdraw(uint256 amount)` | PegKeeper |
+| `0xa2e62045` | `update()` | PegKeeper v1 + PegKeeperV2 — the public peg action; `_beneficiary` defaults to `msg.sender`. It calls the internal `_provide` / `_withdraw`, which emit `Provide` / `Withdraw`. There is **no** external `provide(uint256)` or `withdraw(uint256)`: watch the events, not a call selector. |
+| `0x1c1b8772` | `update(address _beneficiary)` | PegKeeper v1 + PegKeeperV2 — the same action; the caller share of the profit goes to `_beneficiary`. |
 | `0x16f0115b` | `pool()` → address | PegKeeper (its peg pool) |
 | `0xdd8fee14` | `regulator()` → address | **PegKeeperV2 only** (returns the Regulator; v1 reverts — use this to tell v1 from v2) |
-| `0x245a7bfc` | `aggregator()` → address | PegKeeper |
+| `0x245a7bfc` | `aggregator()` → address | PegKeeper v1 only (`0xaa346781dDD7009caa644A4980f044C50cD2ae22` set); absent from PegKeeperV2 `0x9201Da0D97CaAAff53f01B2fb56767C7072dE340` |
 | `0xf6235138` | `peg_keepers(uint256)` → address | AggMonetaryPolicy & PegKeeperRegulator |
 | `0x0a19399a` | `PRICE_ORACLE()` → address | AggMonetaryPolicy (→ AggregateStablePrice) |
 | `0xafdf31cd` | `sigma()` → int256 | AggMonetaryPolicy |
@@ -524,7 +524,7 @@ TOPIC_REGULATOR_WORST_PRICE_THRESH  = '\xb4a3856a5d3f85a0db622badf557a5c47e98ef4
 TOPIC_REGULATOR_PRICE_DEVIATION     = '\x406e5474c6819832e7834a919ce48a8c8d909e2d9a3a0fe5378844c3b51b46a2'
 TOPIC_REGULATOR_DEBT_PARAMETERS     = '\x069906c4131a2e2c0b2f32f351644b280d95237fa3f095f91ac69cac88ab9234'
 TOPIC_AGGMP_SET_RATE                = '\x2640b4015d3473fd09bf2b30939e17deb4068cdacf3892136e737e166ceb3210'  -- 1-arg (NOT the AMM 3-arg SetRate)
-TOPIC_AGG_ADD_PRICE_PAIR            = '\xfc47ca1d88e8137eb4cc32afb4bb62d3eb485c114be5e98f0533d9825311c748'
+TOPIC_AGG_ADD_PRICE_PAIR            = '\xfa41d19543baad0c0257c3430e1b3cecfa57f753cdc21330b9ec0862cde1b258'
 TOPIC_AGG_REMOVE_PRICE_PAIR         = '\x017592f2f16e82cccce60102865c737270289c308f34ff88e754d5e99ea0bae1'
 TOPIC_FLASHLENDER_FLASHLOAN         = '\xc76f1b4fe4396ac07a9fa55a415d4ca430e72651d37d3401f3bed7cb13fc4f12'
 -- ===== Fee plumbing =====
