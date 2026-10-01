@@ -1,11 +1,13 @@
-# Hop Protocol v1 — Topics, Selectors, Addresses (Ethereum + Optimism + Arbitrum + Polygon + Base; not on BNB/Avalanche)
+# Hop Protocol v1 — Topics, Selectors, Addresses (Ethereum + Optimism + Arbitrum + Polygon + Base; not on BNB/Avalanche/Robinhood)
 
-**Status:** verified against live RPC on every listed chain and the canonical `hop-protocol/contracts` (branch `v1`) + `hop-protocol/hop` SDK address registry on 2026-06-09.
-**Scope:** the Hop v1 token bridge — `L1_Bridge` (per token, on Ethereum), `L2_Bridge` + `L2_AmmWrapper` + Saddle `Swap` (per token, on each rollup), the `HopBridgeToken` (hToken) and the LP token. Topics/selectors are **chain-agnostic** (`keccak256` of the canonical signature); addresses are **network-specific and per-token** (every token has its *own* bridge instance). Of the seven requested chains, Hop has bridges on **Ethereum, Optimism, Arbitrum, Polygon, Base**; it is **NOT deployed on BNB Smart Chain or Avalanche C-Chain** (`eth_getCode` = `0x` for every Hop address there).
+**Status:** verified against live RPC on every listed chain and the canonical `hop-protocol/contracts` (branch `v1`) + `hop-protocol/hop` SDK address registry on 2026-06-09. Extended on 2026-09-29 with the USDC-over-CCTP bridges (`HopCCTPImplementation`) and the Robinhood Chain (4663) check.
+**Scope:** the Hop v1 token bridge — `L1_Bridge` (per token, on Ethereum), `L2_Bridge` + `L2_AmmWrapper` + Saddle `Swap` (per token, on each rollup), the `HopBridgeToken` (hToken) and the LP token — plus the separate **USDC-over-CCTP bridge** (`L1_HopCCTPImplementation` / `L2_HopCCTPImplementation`, one per chain, §1.7). Topics/selectors are **chain-agnostic** (`keccak256` of the canonical signature); addresses are **network-specific and per-token** (every token has its *own* bridge instance). Of the eight target chains, Hop has bridges on **Ethereum, Optimism, Arbitrum, Polygon, Base**; it is **NOT deployed on BNB Smart Chain, Avalanche C-Chain or Robinhood Chain** (`eth_getCode` = `0x` for every Hop address there).
 
 Hop is a **bonder-based ("fast") bridge** that mints a synthetic **hToken** (e.g. `hUSDC`, `hETH`) on each L2 and swaps it 1:1-ish against the canonical token through a per-token **Saddle (StableSwap) AMM pool**. A user "sends" on the source chain; an off-chain **Bonder** front-runs canonical L2→L1 (or L2→L2) finality by posting a `WithdrawalBonded` against the destination bridge and is later reimbursed when the Merkle **TransferRoot** propagates and is `settle`d. The whole flow is **non-upgradeable**: every `L1_Bridge`, `L2_Bridge`, `L2_AmmWrapper`, Saddle `Swap`, hToken and LP token is a **plain, directly-deployed contract** (EIP-1967 impl slot reads `0x0` — confirmed on ETH/ARB/OP/Base). There are no proxies anywhere in the v1 system, so there is no `Upgraded` event to watch and an impl can never silently change; the only "admin" surface is the governance multisig (`governance()` = `0x22e3f828b3f47dacfacd875d20bd5cc0879c96e7`, identical across every L1 bridge) that can swap the cross-domain messenger wrapper, pause deposits, set the AMM wrapper, and add/remove bonders.
 
 **The single most important indexing fact:** the live production deployment is the **`v1` branch**, whose event signatures differ from the repo's `master`/next-gen branch. In particular `WithdrawalBonded` is **2-field** (`(bytes32,uint256)`, no `bonder`), `TransferSent` (L2) is the **9-field** variant (`...,uint256 amountOutMin,uint256 deadline`, no `rootIndex`/`tokenIndex`/`bonder`), and `TransfersCommitted` is **4-field** (no `bonder`/`rootIndex`). If you compute topics from `master` you will silently miss every real log. All topics below are the v1 forms and were cross-checked against live logs (§9).
+
+**USDC moves on a second path.** Since 2024 Hop sends native USDC through Circle CCTP with a small per-chain contract (the SDK registry calls it `cctpL1Bridge`/`cctpL2Bridge`). The user calls `send`/`swapAndSend`; the contract takes the USDC (and a bonder fee), calls Circle's TokenMessenger `depositForBurn`, and emits `CCTPTransferSent(cctpNonce, chainId, recipient, amount, bonderFee)`. **There is no Hop event on the destination chain:** the payout is Circle's `MessageReceived`/`MintAndWithdraw` for the same CCTP nonce (see [`../cctp/`](../cctp/)). No hToken, no Saddle pool and no bonder bond take part in this path.
 
 ---
 
@@ -20,6 +22,7 @@ Hop is a **bonder-based ("fast") bridge** that mints a synthetic **hToken** (e.g
 | **HopBridgeToken** (hToken) | ERC-20 synthetic (`hUSDC`, `hETH`, …); `mint`/`burn` are bridge-only (`onlyOwner`). | each L2 | No |
 | **Saddle LP token** (`l2SaddleLpToken`) | ERC-20 LP share of the Saddle pool. | each L2 | No |
 | **Bonder** | Off-chain relayer EOA (`0xa6a688F1…`, code len 0). Posts bonds; not a contract. | — | n/a (EOA) |
+| **L1_HopCCTPImplementation / L2_HopCCTPImplementation** | USDC-over-CCTP bridge: `send` (and on L2 `swapAndSend`, a Uniswap-V3-style swap of USDC.e into USDC first) → Circle `depositForBurn`; emits `CCTPTransferSent`. **One per chain, USDC only.** | Ethereum, Optimism, Arbitrum, Polygon, Base | No (direct, immutable) |
 
 The HOP-governance-token bridges (HOP, and the HOP token itself `0xc5102fE9…`) ship a `L2_Bridge` **with `l2AmmWrapper = 0x0` and `l2SaddleSwap = 0x0`** — they have no AMM because the hToken *is* the canonical token. Don't expect `TokenSwap`/AmmWrapper events on HOP-token routes.
 
@@ -89,6 +92,14 @@ All recomputed locally with keccak on 2026-06-09. The ones marked ✓live were c
 | `0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925` | `Approval(address indexed owner, address indexed spender, uint256 value)` |
 
 **No topic0 collisions inside the Hop set.** The only generic ones are ERC-20 `Transfer`/`Approval` (§1.6). `TransferSent` (L2) and `TransferSentToL2` (L1) are distinct topics — never conflate them. `Withdrew`/`WithdrawalBonded`/`WithdrawalBondSettled`/`TransferRootSet`/`Stake`/`BonderAdded` come from the shared base and therefore fire on **both** the L1 and the L2 bridge of a token — disambiguate by `(chainId, emitter address)`.
+
+### 1.7 HopCCTPImplementation (USDC over Circle CCTP; L1 and L2 share the event)
+
+| topic0 | Event |
+|--------|-------|
+| `0x10bf4019e09db5876a05d237bfcc676cd84eee2c23f820284906dd7cfa70d2c4` | `CCTPTransferSent(uint64 indexed cctpNonce, uint256 indexed chainId, address indexed recipient, uint256 amount, uint256 bonderFee)` ✓live — **source leg**. `cctpNonce` = the nonce of Circle's `DepositForBurn`/`MessageSent` in the same transaction; `chainId` = the destination EVM chain id (not a CCTP domain). |
+
+The source transaction also carries Circle's `DepositForBurn` (TokenMessenger), `MessageSent` (MessageTransmitter) and the USDC burn (`Transfer` to `0x0`). The destination leg has **no Hop log**: key it on Circle's `MessageReceived` for `(source domain, cctpNonce)` and the USDC mint to `recipient`.
 
 ---
 
@@ -168,6 +179,21 @@ All recomputed locally with keccak on 2026-06-09. The ones marked ✓live were c
 | `0x40c10f19` | `mint(address account, uint256 amount)` | `onlyOwner` (= the L2_Bridge). Emits ERC-20 `Transfer(0x0,…)`. |
 | `0x9dc29fac` | `burn(address account, uint256 amount)` | `onlyOwner`. Emits `Transfer(…,0x0)`. |
 
+### 2.7 HopCCTPImplementation (L1 and L2; `ExactInputParams = (bytes path, address recipient, uint256 amountIn, uint256 amountOutMinimum)`)
+
+| Selector | Signature | Notes |
+|----------|-----------|-------|
+| `0xa134ce5b` | `send(uint256 chainId, address recipient, uint256 amount, uint256 bonderFee)` | **User entrypoint (USDC).** Pulls `amount` of USDC, pays `bonderFee` to the fee collector, burns the rest through CCTP. Emits `CCTPTransferSent`. |
+| `0x070d46e4` | `swapAndSend(uint256 chainId, address recipient, uint256 amount, uint256 bonderFee, (bytes path, address recipient, uint256 amountIn, uint256 amountOutMinimum) swapParams)` | L2 only. Pulls the bridged USDC (`bridgedToken()`, e.g. USDbC on Base), swaps it to native USDC through `amm()` (Uniswap V3 SwapRouter02 on Base), then sends as above. |
+| `0xc97d172e` | `activeChainIds(uint256)` → `bool` | View: destination chain enabled. |
+| `0x89aad5dc` | `destinationDomains(uint256)` → `uint32` | View: EVM chain id → CCTP domain (live on Base: `destinationDomains(10)` = 2). |
+| `0xe3329e32` | `cctp()` → `address` | View: Circle's TokenMessenger on this chain. |
+| `0xe1758bd8` | `nativeToken()` → `address` | View: native USDC on this chain. |
+| `0xf108e225` | `feeCollectorAddress()` → `address` | View: `0x9f8d2dafe9978268ac7c67966b366d6d55e97f07` (an EOA) on all 5 chains. |
+| `0x50fc2401` | `minBonderFee()` → `uint256` | View: 10,000 (0.01 USDC) on Base. |
+| `0x2a943945` | `amm()` → `address` | L2 view: the swap router of `swapAndSend`. |
+| `0xee383937` | `bridgedToken()` → `address` | L2 view: the bridged USDC that `swapAndSend` accepts. |
+
 ---
 
 ## 3. Addresses — Ethereum mainnet (chain ID 1)
@@ -186,6 +212,7 @@ All verified via `eth_getCode` returning non-empty bytecode on `https://ethereum
 | **sUSD** | `0x36443fC70E073fe9D50425f82a3eE19feF697d62` | Optimism-only route. |
 | **rETH** | `0x87269B23e73305117D0404557bAdc459CEd0dbEc` | Optimism + Arbitrum routes. |
 | **MAGIC** | `0xf074540eb83c86211F305E145eB31743E228E57d` | Arbitrum + Nova routes (Nova ∉ the 7). |
+| **USDC over CCTP** (`L1_HopCCTPImplementation`) | `0x7e77461CA2a9d82d26FD5e0Da2243BF72eA45747` | Emits `CCTPTransferSent`; 4,877 B, no proxy; `cctp()` = Circle TokenMessenger `0xBd3fa81B58Ba92a82136038B25aDec7066af3155`; `nativeToken()` = USDC `0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48`; deployed at block 19,466,442 (SDK registry). |
 
 Other canonical Ethereum-side addresses: the L1 token contracts themselves are the well-known mainnet tokens (USDC `0xA0b8…eB48`, WETH-as-ETH handled natively, HOP token `0xc5102fE9359FD9a28f877a67E36B0F050d81a3CC`). Each token also has a per-destination **L1 MessengerWrapper** (see §4–§7, the `l1MessengerWrapper` rows) deployed on Ethereum that bridges governance/root messages to a specific L2 — these live on chain 1 but are keyed by destination.
 
@@ -206,6 +233,8 @@ All verified via `eth_getCode` on `https://optimism-rpc.publicnode.com`. L2_Brid
 | sUSD | `0x33Fe5bB8DA466dA55a8A32D6ADE2BB104E2C5201` | `0x29Fba7d2A6C95DB162ee09C6250e912D6893DCa6` | `0x8d4063E82A4Db8CdAed46932E1c71e03CA69Bede` | `0x6F03052743CD99ce1b29265E377e320CD24Eb632` | `0xBD08972Cef7C9a5A046C9Ef13C9c3CE13739B8d6` |
 | rETH | `0xA0075E8cE43dcB9970cB7709b9526c1232cc39c2` | `0x19B2162CA4C2C6F08C6942bFB846ce5C396aCB75` | `0x9Dd8685463285aD5a94D2c128bda3c5e8a6173c8` | `0x755569159598f3702bdD7DFF6233A317C156d3Dd` | `0x0699BC1Ca03761110929b2B56BcCBeb691fa9ca6` |
 
+**USDC over CCTP** (`L2_HopCCTPImplementation`, 7,811 B, no proxy): `0x469147af8Bde580232BE9DC84Bb4EC84d348De24` — `nativeToken()` = USDC `0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85`, `cctp()` = TokenMessenger `0x2B4069517957735bE00ceE0fadAE88a26365528f`.
+
 Note USDT and ETH/HOP reuse some addresses with Base/Polygon — **always key on `(chainId, address)`** (e.g. `0x46ae9BaB…` = USDT-L2Bridge on OP **and** USDC-L2Bridge on Base; `0x86cA30bE…` = ETH-AmmWrapper on OP **and** MATIC-AmmWrapper on Gnosis).
 
 ---
@@ -224,6 +253,8 @@ All verified via `eth_getCode` on `https://arbitrum-one-rpc.publicnode.com`. L2_
 | rETH | `0xc315239cFb05F1E130E7E28E603CEa4C014c57f0` | `0x16e08C02e4B78B0a5b3A917FF5FeaeDd349a5a95` | `0x0Ded0d521AC7B0d312871D18EA4FDE79f03Ee7CA` | `0x588Bae9C85a605a7F14E551d144279984469423B` | `0xbBA837dFFB3eCf4638D200F11B8c691eA641AdCb` |
 | MAGIC | `0xEa5abf2C909169823d939de377Ef2Bf897A6CE98` | `0x50a3a623d00fd8b8a4F3CbC5aa53D0Bc6FA912DD` | `0xFFe42d3Ba79Ee5Ee74a999CAd0c60EF1153F0b82` | `0xB76e673EBC922b1E8f10303D0d513a9E710f5c4c` | `0x163A9E12787dBFa2836caa549aE02ed67F73e7C2` |
 
+**USDC over CCTP** (`L2_HopCCTPImplementation`, 7,811 B, no proxy): `0x6504BFcaB789c35325cA4329f1f41FaC340bf982` — `nativeToken()` = USDC `0xaf88d065e77c8cC2239327C5EDb3A432268e5831`, `cctp()` = TokenMessenger `0x19330d10D9Cc8751218eaf51E8885D058642E08A`.
+
 ---
 
 ## 6. Addresses — Polygon PoS (chain ID 137)
@@ -239,6 +270,8 @@ All verified via `eth_getCode` on `https://polygon-bor-rpc.publicnode.com`. L2_B
 | MATIC | `0x553bC791D746767166fA3888432038193cEED5E2` | `0x884d1Aa15F9957E1aEAA86a82a72e49Bc2bfCbe3` | `0x3d4Cc8A61c7528Fd86C55cfe061a78dCBA48EDd1` | `0x712F0cf37Bdb8299D0666727F73a5cAbA7c1c24c` | `0xbc4FB4ED825C65fF48163AF7E59d49e32edb5269` |
 | HOP | `0x58c61AeE5eD3D748a1467085ED2650B697A66234` | *(none — `0x0`)* | *(none — `0x0`)* | `0xc5102fE9359FD9a28f877a67E36B0F050d81a3CC` | *(none)* |
 
+**USDC over CCTP** (`L2_HopCCTPImplementation`, 7,811 B, no proxy): `0x1CD391bd1D915D189dE162F0F1963C07E60E4CD6` — `nativeToken()` = USDC `0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359`, `cctp()` = TokenMessenger `0x9daF8c91AEFAE50b9c0E69629D3F6Ca40cA3B3FE`.
+
 Polygon-USDC `l2CanonicalToken` in the registry is `0x3c499c54…` (native USDC) but the live Saddle pool token is the bridged USDC.e — verify per-pool with `getToken(0)`. The MATIC-DAI Saddle pool (`0x3d4Cc8A6…`) shares its literal with the **Ethereum DAI L1_Bridge** — `(chainId,address)` keying again.
 
 ---
@@ -252,6 +285,8 @@ All verified via `eth_getCode` on `https://base-rpc.publicnode.com`. L2_Bridge ~
 | USDC | `0x46ae9BaB8CEA96610807a275EBD36f8e916b5C61` | `0x7D269D3E0d61A05a0bA976b7DBF8805bF844AF3F` | `0x022C5cE6F1Add7423268D41e08Df521D5527C2A0` | `0x74fa978EaFFa312bC92e76dF40FcC1bFE7637Aeb` | `0x3b507422EBe64440f03BCbE5EEe4bdF76517f320` |
 | ETH | `0x3666f603Cc164936C1b87e207F36BEBa4AC5f18a` | `0x10541b07d8Ad2647Dc6cD67abd4c03575dade261` | `0x0ce6c85cF43553DE10FC56cecA0aef6Ff0DD444d` | `0xC1985d7a3429cDC85E59E2E4Fcc805b857e6Ee2E` | `0xe9605BEc1c5C3E81F974F80b8dA9fBEFF4845d4D` |
 | HOP | `0xe22D2beDb3Eca35E6397e0C6D62857094aA26F52` | *(none — `0x0`)* | *(none — `0x0`)* | `0xc5102fE9359FD9a28f877a67E36B0F050d81a3CC` | *(none)* |
+
+**USDC over CCTP** (`L2_HopCCTPImplementation`, 7,811 B, no proxy): `0xe7F40BF16AB09f4a6906Ac2CAA4094aD2dA48Cc2` — `nativeToken()` = USDC `0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913`, `bridgedToken()` = USDbC `0xd9aAEc86B65D86f6A7B5B1b0c42FFA531710b6CA`, `amm()` = Uniswap V3 SwapRouter02 `0x2626664c2603336E57B271c5C0b26F421741e481`, `cctp()` = TokenMessenger `0x1682Ae6375C4E4A97e4B583BC394c861A46D8962`. The same literal is the **Arbitrum DAI L2_AmmWrapper** (§5): key on `(chainId, address)`.
 
 **Collision tell on Base:** `0x46ae9BaB…` is the Base **USDC** L2_Bridge but the OP **USDT** L2_Bridge; `0x3666f603…` is the Base **ETH** L2_Bridge but the Ethereum **USDC** L1_Bridge; `0x10541b07…` is the Base **ETH** AmmWrapper but the Arbitrum **USDC** Saddle Swap. These are deterministic-deploy / nonce-aligned coincidences, not the same contract — never resolve a Hop address without its chainId.
 
@@ -268,21 +303,24 @@ Hop's primary counterparties span more chains than the seven requested. From the
 
 Each of these has its own `l1MessengerWrapper` deployed on Ethereum (chain 1). **BNB Smart Chain (56) and Avalanche C-Chain (43114) have no Hop deployment of any kind** — confirmed by `eth_getCode = 0x` for the USDC/ETH L2_Bridge addresses and for the HOP token `0xc5102fE9…` on both. Hop is an optimistic/canonical-rollup bridge and never expanded to those non-rollup L1s.
 
+**Robinhood Chain (4663) has no Hop deployment either.** On 2026-09-29 `eth_getCode` returned `0x` (nonce 0) on `https://rpc.mainnet.chain.robinhood.com` at the five CCTP bridges (`0x7e77461CA2a9d82d26FD5e0Da2243BF72eA45747`, `0xe7F40BF16AB09f4a6906Ac2CAA4094aD2dA48Cc2`, `0x6504BFcaB789c35325cA4329f1f41FaC340bf982`, `0x469147af8Bde580232BE9DC84Bb4EC84d348De24`, `0x1CD391bd1D915D189dE162F0F1963C07E60E4CD6`), the Ethereum USDC and ETH L1_Bridges (`0x3666f603Cc164936C1b87e207F36BEBa4AC5f18a`, `0xb8901acB165ed027E32754E0FFe830802919727f`), the Base USDC and HOP L2_Bridges (`0x46ae9BaB8CEA96610807a275EBD36f8e916b5C61`, `0xe22D2beDb3Eca35E6397e0C6D62857094aA26F52`), the Optimism ETH and Arbitrum USDC L2_Bridges (`0x83f6244Bd87662118d96D9a6D44f09dffF14b30E`, `0x0e0E3d2C5c292161999474247956EF542caBF8dd`) and the HOP token `0xc5102fE9359FD9a28f877a67E36B0F050d81a3CC`. The SDK registry (`packages/sdk/src/addresses/mainnet.ts`, `packages/sdk/src/config/mainnet.ts`) has no Robinhood entry.
+
 ---
 
 ## 9. Cross-chain summary
 
 Presence matrix (✓ = `eth_getCode` non-empty on 2026-06-09; — = not deployed / not in registry).
 
-| Chain | ID | Bridge contract | USDC | USDT | DAI | ETH | MATIC | HOP | SNX | sUSD | rETH | MAGIC |
-|-------|----|------------------|------|------|-----|-----|-------|-----|-----|------|------|-------|
-| **Ethereum** | 1 | L1_Bridge | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| **Optimism** | 10 | L2_Bridge | ✓ | ✓ | ✓ | ✓ | — | ✓ | ✓ | ✓ | ✓ | — |
-| **Arbitrum** | 42161 | L2_Bridge | ✓ | ✓ | ✓ | ✓ | — | ✓ | — | — | ✓ | ✓ |
-| **Polygon** | 137 | L2_Bridge | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | — | — | — | — |
-| **Base** | 8453 | L2_Bridge | ✓ | — | — | ✓ | — | ✓ | — | — | — | — |
-| **BNB** | 56 | — | — | — | — | — | — | — | — | — | — | — |
-| **Avalanche** | 43114 | — | — | — | — | — | — | — | — | — | — | — |
+| Chain | ID | Bridge contract | USDC | USDT | DAI | ETH | MATIC | HOP | SNX | sUSD | rETH | MAGIC | USDC over CCTP |
+|-------|----|------------------|------|------|-----|-----|-------|-----|-----|------|------|-------|----------------|
+| **Ethereum** | 1 | L1_Bridge | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | `0x7e77461CA2a9d82d26FD5e0Da2243BF72eA45747` |
+| **Optimism** | 10 | L2_Bridge | ✓ | ✓ | ✓ | ✓ | — | ✓ | ✓ | ✓ | ✓ | — | `0x469147af8Bde580232BE9DC84Bb4EC84d348De24` |
+| **Arbitrum** | 42161 | L2_Bridge | ✓ | ✓ | ✓ | ✓ | — | ✓ | — | — | ✓ | ✓ | `0x6504BFcaB789c35325cA4329f1f41FaC340bf982` |
+| **Polygon** | 137 | L2_Bridge | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | — | — | — | — | `0x1CD391bd1D915D189dE162F0F1963C07E60E4CD6` |
+| **Base** | 8453 | L2_Bridge | ✓ | — | — | ✓ | — | ✓ | — | — | — | — | `0xe7F40BF16AB09f4a6906Ac2CAA4094aD2dA48Cc2` |
+| **BNB** | 56 | — | — | — | — | — | — | — | — | — | — | — | — |
+| **Avalanche** | 43114 | — | — | — | — | — | — | — | — | — | — | — | — |
+| **Robinhood** | 4663 | — | — | — | — | — | — | — | — | — | — | — | — (`0x` at every Hop address, §8) |
 
 **Vanity / collision tells:** Hop uses **no vanity prefix**; bridges are nonce-deployed and addresses collide across chains by coincidence (see §4/§6/§7). The recurring tells are (a) the HOP token `0xc5102fE9359FD9a28f877a67E36B0F050d81a3CC` reused as the hToken on every L2 HOP bridge, and (b) the governance multisig `0x22e3f828b3f47dacfacd875d20bd5cc0879c96e7` returned by `governance()` on every L1_Bridge. The bonder EOA `0xa6a688F107851131F0E1dce493EbBebFAf99203e` is the same across all routes for USDC (and most others).
 
@@ -298,6 +336,7 @@ Presence matrix (✓ = `eth_getCode` non-empty on 2026-06-09; — = not deployed
 | L2_AmmWrapper | **Immutable** | impl slot `0x0`; ~4.4 KB; `bridge()`/`hToken()`/`exchangeAddress()` present | none. |
 | Saddle `Swap` | **Immutable** | impl slot `0x0`; ~17.7 KB; `getToken(uint8)` present | pool owner (Hop gov) can set fees / ramp A, not replace code. |
 | HopBridgeToken / LP token | **Immutable** | standard ERC-20 bytecode | `mint`/`burn` are owner-gated (owner = L2_Bridge). |
+| L1/L2_HopCCTPImplementation | **Immutable** | EIP-1967 impl slot empty (read 2026-09-29); 4,877 B on Ethereum, 7,811 B on each L2 (same size, four different code hashes) | none. |
 
 There is **no `Upgraded(address)` event** to watch in the Hop set. The closest "code/wiring change" signals are `setCrossDomainMessengerWrapper` (`0xd4448163`) and `setChainIdDepositsPaused` (`0x14942024`) on the L1 bridges, and `setAmmWrapper` (`0x64c6fdb4`) on the L2 bridges — monitor those calls as governance/risk events.
 
@@ -319,6 +358,10 @@ There is **no `Upgraded(address)` event** to watch in the Hop set. The closest "
 12. **Not on BNB or Avalanche.** Every Hop address returns `0x` there. A "Hop on BNB/Avax" claim is wrong; treat as absence.
 13. **Counterparty chains outside the seven exist** (Gnosis, Nova, Linea, Polygon zkEVM — §8). A `TransferSentToL2`/`TransferSent` whose `chainId` ∉ {1,10,137,8453,42161} is targeting one of those — record the chainId, don't drop the event.
 14. **No proxies ⇒ no `Upgraded` topic.** Code is immutable; the only governance "change" signals are `setCrossDomainMessengerWrapper`, `setChainIdDepositsPaused`, `setAmmWrapper`, and `BonderAdded`/`BonderRemoved`. Monitor those as admin/risk events.
+15. **USDC over CCTP is a one-sided Hop flow.** The source leg is `CCTPTransferSent` (`0x10bf4019e09db5876a05d237bfcc676cd84eee2c23f820284906dd7cfa70d2c4`) on the chain's CCTP bridge (§1.7); the same transaction holds the user's USDC `Transfer` into the bridge (or USDbC/USDC.e plus a swap for `swapAndSend`), the fee `Transfer` to `0x9f8d2dafe9978268ac7c67966b366d6d55e97f07`, the burn to `0x0`, and Circle's `DepositForBurn` with the **same nonce** as `cctpNonce`. The destination leg is Circle's `MessageReceived` + a USDC mint to `recipient`: join on `(source CCTP domain, cctpNonce)`. `transferId`, `WithdrawalBonded` and the Saddle pools do not take part.
+16. **`CCTPTransferSent.chainId` is an EVM chain id** (10, 137, 8453, 42161, 1), and the bridge maps it to a CCTP domain with `destinationDomains(chainId)`. Do not compare it with Circle's `destinationDomain`.
+17. **The Base CCTP bridge literal `0xe7F40BF16AB09f4a6906Ac2CAA4094aD2dA48Cc2` is also the Arbitrum DAI L2_AmmWrapper.** Another nonce-aligned coincidence: key on `(chainId, address)`.
+18. **Hop was quiet in the pinned window.** The six transfer topics `TransferSentToL2`, `TransferSent`, `TransferFromL1Completed`, `WithdrawalBonded`, `Withdrew` and `CCTPTransferSent` had 0 logs from any emitter on all eight chains in the pinned 12-hour window of 2026-09-28 (the root and bonder topics were not measured). That is a measurement of one window, not a statement that the contracts are retired: the Base CCTP bridge has a long log history (§13).
 
 ---
 
@@ -355,6 +398,8 @@ TOPIC_REMOVE_LIQUIDITY_ONE       = '\x43fb02998f4e03da2e0e6fff53fdbf0c40a9f45f14
 TOPIC_REMOVE_LIQUIDITY_IMBALANCE = '\x3631c28b1f9dd213e0319fb167b554d76b6c283a41143eb400a0d1adb1af1755'
 -- ERC-20 (hToken / LP / canonical)
 TOPIC_ERC20_TRANSFER             = '\xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef'
+-- HopCCTPImplementation (USDC over CCTP; source leg only)
+TOPIC_CCTP_TRANSFER_SENT         = '\x10bf4019e09db5876a05d237bfcc676cd84eee2c23f820284906dd7cfa70d2c4'
 
 -- ===== Selectors =====
 -- L1_Bridge
@@ -400,6 +445,11 @@ SEL_GET_TOKEN_INDEX              = '\x66c0bd24'
 -- HopBridgeToken
 SEL_MINT                         = '\x40c10f19'
 SEL_BURN                         = '\x9dc29fac'
+-- HopCCTPImplementation
+SEL_CCTP_SEND                    = '\xa134ce5b'
+SEL_CCTP_SWAP_AND_SEND           = '\x070d46e4'
+SEL_CCTP_DESTINATION_DOMAINS     = '\x89aad5dc'
+SEL_CCTP_FEE_COLLECTOR           = '\xf108e225'
 
 -- ===== Proxy slot (reads 0x0 everywhere — Hop has NO proxies) =====
 EIP1967_IMPL_SLOT                = '\x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc'
@@ -408,6 +458,15 @@ EIP1967_IMPL_SLOT                = '\x360894a13ba1a3210667c828492db98dca3e2076cc
 HOP_GOVERNANCE                   = '\x22e3f828b3f47dacfacd875d20bd5cc0879c96e7'   -- governance() on every L1_Bridge
 HOP_TOKEN                        = '\xc5102fe9359fd9a28f877a67e36b0f050d81a3cc'   -- HOP ERC-20 = hToken on every HOP L2 bridge
 USDC_BONDER                      = '\xa6a688f107851131f0e1dce493ebbebfaf99203e'   -- bonder EOA (USDC + most routes)
+HOP_CCTP_FEE_COLLECTOR_EOA       = '\x9f8d2dafe9978268ac7c67966b366d6d55e97f07'   -- feeCollectorAddress() of all 5 CCTP bridges
+
+-- ===== USDC over CCTP bridge per chain (HopCCTPImplementation) =====
+ETH_CCTP_L1_BRIDGE_USDC          = '\x7e77461ca2a9d82d26fd5e0da2243bf72ea45747'
+OP_CCTP_L2_BRIDGE_USDC           = '\x469147af8bde580232be9dc84bb4ec84d348de24'
+ARB_CCTP_L2_BRIDGE_USDC          = '\x6504bfcab789c35325ca4329f1f41fac340bf982'
+POLY_CCTP_L2_BRIDGE_USDC         = '\x1cd391bd1d915d189de162f0f1963c07e60e4cd6'
+BASE_CCTP_L2_BRIDGE_USDC         = '\xe7f40bf16ab09f4a6906ac2caa4094ad2da48cc2'
+-- BNB, Avalanche, Robinhood Chain (4663): no Hop contract; every Hop address returns 0x there
 
 -- ===== Ethereum (chain 1) L1_Bridge per token =====
 ETH_L1BRIDGE_USDC                = '\x3666f603cc164936c1b87e207f36beba4ac5f18a'
@@ -474,6 +533,15 @@ How every constant was verified (2026-06-09):
 - **Wiring confirmation (`eth_call`):** `getChainId()` = 42161 on the ARB USDC L2_Bridge; `governance()` = `0x22e3f828…` identical on the USDC and HOP L1 bridges; OP USDC AmmWrapper `bridge()` = the USDC L2_Bridge; OP ETH AmmWrapper `l2CanonicalTokenIsEth()` = 1, `hToken()`/`exchangeAddress()`/`l2CanonicalToken()` match the registry; the bonder `0xa6a688F1…` and HOP token on BNB/Avax have code length 0.
 - **Proxy classification:** EIP-1967 impl slot `0x360894…bbc` read via `eth_getStorageAt` returns `0x0` on the ETH USDC L1_Bridge, ARB USDC L2_Bridge, OP USDC L2_AmmWrapper, and ARB USDC Saddle Swap ⇒ **no proxies; immutable code; no `Upgraded` event.**
 - **Chain coverage:** the seven requested chains were each probed with the USDC and ETH bridge addresses; counterparty chains outside the seven (Gnosis, Arbitrum Nova, Linea, Polygon zkEVM) are present in the registry and recorded in §8.
+
+Additions of 2026-09-29:
+
+- **USDC over CCTP:** addresses from the SDK registry `bridges.USDC.<chain>.cctpL1Bridge`/`cctpL2Bridge`; the event and function signatures from the SDK ABIs `packages/sdk/abi/L1_HopCCTPImplementation.ts` and `L2_HopCCTPImplementation.ts`, and the event line `event CCTPTransferSent(uint64 indexed cctpNonce,uint256 indexed chainId,address indexed recipient,uint256 amount,uint256 bonderFee)` in `packages/v2-hop-node/src/cctp/sdk/utils.ts`. The topic0 `0x10bf4019e09db5876a05d237bfcc676cd84eee2c23f820284906dd7cfa70d2c4` recomputed with `keccak256` equals the constant in `packages/sdk/src/HopBridge.ts`. `eth_getCode`, the EIP-1967 slot, `cctp()`, `nativeToken()` and `feeCollectorAddress()` read live on the five chains; `amm()`, `bridgedToken()`, `destinationDomains(10)` and `minBonderFee()` read live on Base. The fee collector `0x9f8d2dafe9978268ac7c67966b366d6d55e97f07` has no code on Ethereum (nonce 150): an EOA.
+- **Measured activity** (pinned 12-hour window 2026-09-28 00:00–12:00 UTC): `CCTPTransferSent` at each CCTP bridge — Ethereum 0, Optimism 0, Arbitrum 0, Polygon 0, Base 0 (BNB, Avalanche and Robinhood have no bridge). `TransferSentToL2`, `TransferSent`, `TransferFromL1Completed`, `WithdrawalBonded` and `Withdrew` from any emitter: 0 on all eight chains.
+- **Positive control and sample:** the Base Blockscout logs API returns at least 1,000 `CCTPTransferSent` logs (its page limit) at `0xe7F40BF16AB09f4a6906Ac2CAA4094aD2dA48Cc2` from block 12,015,010. The receipt of `0xdadae6c2915b1a183a2d886b44b6797b522b8c303e77534e4c5279704f311c34` (Base, block 12,015,010, `swapAndSend`) shows USDbC user → bridge, a Uniswap V3 swap to USDC, a USDC fee to the fee collector, USDC bridge → TokenMinter and the burn to `0x0`, `MessageSent`, `DepositForBurn` with nonce 46,380, and `CCTPTransferSent` with `cctpNonce` 46,380, `chainId` 10 and the user as `recipient`.
+- **Robinhood Chain:** §8 lists the addresses read with `eth_getCode` on 2026-09-29 (all `0x`, nonce 0).
+
+Additional sources (2026-09-29): [SDK ABI L2_HopCCTPImplementation](https://github.com/hop-protocol/hop/blob/develop/packages/sdk/abi/L2_HopCCTPImplementation.ts) · [SDK HopBridge.ts](https://github.com/hop-protocol/hop/blob/develop/packages/sdk/src/HopBridge.ts) · [Base Blockscout logs API](https://base.blockscout.com/api?module=logs&action=getLogs&fromBlock=12004192&toBlock=latest&address=0xe7F40BF16AB09f4a6906Ac2CAA4094aD2dA48Cc2&topic0=0x10bf4019e09db5876a05d237bfcc676cd84eee2c23f820284906dd7cfa70d2c4).
 
 **Authoritative sources:**
 - Canonical contracts (production): https://github.com/hop-protocol/contracts/tree/v1/contracts/bridges and `.../saddle/Swap.sol`

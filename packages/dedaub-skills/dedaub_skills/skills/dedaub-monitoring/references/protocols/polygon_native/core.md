@@ -1,6 +1,6 @@
 # Polygon PoS Bridge — Topics, Selectors, Addresses (Ethereum L1 ⇄ Polygon PoS 137)
 
-**Status:** verified against live RPC on every listed chain and the canonical `0xPolygon/pos-portal`, `0xPolygon/fx-portal`, and `maticnetwork/contracts` (Plasma/RootChain) repos on 2026-06-09.
+**Status:** verified against live RPC on every listed chain and the canonical `0xPolygon/pos-portal`, `0xPolygon/fx-portal`, and `maticnetwork/contracts` (Plasma/RootChain) repos on 2026-06-09. Extended on 2026-09-29 with the Plasma withdrawal leg (`WithdrawManagerProxy`, `ExitNFT`, the Plasma predicates) and the Robinhood Chain (4663) check.
 **Scope:** the canonical **Polygon PoS Bridge** — the official trustless bridge between **Ethereum mainnet (chain 1)** and **Polygon PoS (chain 137)**. It is made of three on-chain subsystems that all share the same L1↔137 axis: (a) the **PoS portal** (RootChainManager + token predicates ⇄ ChildChainManager + child tokens), (b) the **FX portal** (FxRoot/FxChild arbitrary-message tunnel), and (c) the legacy **Plasma bridge + checkpoint layer** (DepositManager / WithdrawManager / RootChain). Topics and selectors are **chain-agnostic**; addresses are **network-specific**. **The bridge contracts exist on exactly two chains: Ethereum (L1) and Polygon PoS (137). They are NOT deployed on Base, BNB, Avalanche, Arbitrum, or Optimism** (`eth_getCode = 0x` for every bridge address on those five — verified §6).
 
 The Polygon PoS Bridge is a **lock-and-mint / burn-and-unlock** bridge, not a messaging mesh: the only counterparty chain is Polygon PoS (137). There is **no single cross-chain canonical address** — L1 and 137 use entirely different addresses, and you must key every record on `(chainId, address)`. The PoS-portal and Plasma core contracts are **upgradeable proxies using Polygon's own `matic.network.proxy.*` storage convention (NOT EIP-1967)** — reading the standard EIP-1967 slot returns `0x` and will make you wrongly conclude "immutable" (§7). The FX-portal contracts (FxRoot/FxChild/StateSender) are **immutable** (no proxy). Deposits L1→137 are asynchronous (state-sync, ~22 min); withdrawals 137→L1 require a **checkpoint** (every ~30–60 min) plus a user-submitted Merkle proof `exit(bytes)`.
@@ -17,7 +17,7 @@ The Polygon PoS Bridge is a **lock-and-mint / burn-and-unlock** bridge, not a me
 | **PoS portal — predicates** | ERC20 / Ether / MintableERC20 / ERC721 / ERC1155 / MintableERC721 / MintableERC1155 Predicate | (child tokens are UChildERC20/UChildERC721/…) | Lock L1 collateral on deposit, release on exit; emit `Locked*`/`Exited*` | matic-proxy (predicates); child tokens = UChild proxy |
 | **FX portal (messaging)** | FxRoot + StateSender | FxChild + StateReceiver predeploy | Arbitrary `bytes` message tunnel L1→137 (and 137→L1 via checkpoint) | **immutable** (FxRoot/FxChild/StateSender) |
 | **State sync (L1→137 data)** | StateSender (`0x28e4…`) | StateReceiver predeploy (`0x…001001`) | Validator state-sync transport that delivers every deposit/message to 137 | StateSender immutable; predeploy is a genesis-injected system contract |
-| **Plasma bridge (legacy)** | DepositManager + WithdrawManager + Registry | (Plasma child ledger) | Legacy MATIC/ERC-20 lock-withdraw; `NewDepositBlock` / Plasma exits | matic Plasma-proxy (slot0=owner, slot1=impl) |
+| **Plasma bridge (legacy)** | DepositManager + WithdrawManager + ExitNFT + Plasma ERC20/ERC721 predicates + Registry | (Plasma child ledger) | Legacy MATIC/ERC-20 lock-withdraw; `NewDepositBlock` (deposit), `ExitStarted` → `Withdraw` (exit) | matic Plasma-proxy (slot0=owner, slot1=impl); ExitNFT and predicates plain |
 | **Checkpoint layer** | RootChain (proxy) + StakeManager | — | Heimdall validators checkpoint 137 → L1 (`NewHeaderBlock`); gates all 137→L1 withdrawals | Plasma-proxy / matic-proxy |
 
 There is **no V1/V2/V3 redeploy lineage** — each proxy has been upgraded in place (live impls in §7). Hence this single `core.md`.
@@ -87,8 +87,14 @@ There is **no `Deposit`/`Withdraw` event on the standard UChildERC20** child tok
 |--------|-------|---------|
 | `0xba5de06d22af2685c6c7765f60067f7d2b08c2d29f53cdf14d67f6d1c9bfb527` | `NewHeaderBlock(address indexed proposer, uint256 indexed headerBlockId, uint256 indexed reward, uint256 start, uint256 end, bytes32 root)` | **RootChain** `0x86E4…C287` *(verified live — 58 logs / 10k blocks)* |
 | `0xca1d8316287f938830e225956a7bb10fd5a1a1506dd2eb3a476751a488117205` | `ResetHeaderBlock(address indexed proposer, uint256 indexed headerBlockId)` | RootChain |
-| `0x1dadc8d0683c6f9824e885935c1bec6f76816730dcec148dda8cf25a7b9f797b` | `NewDepositBlock(address indexed owner, address indexed token, uint256 amountOrNFTId, uint256 depositBlockId)` | Plasma DepositManager `0x401F…188b` |
-| `0xbb61bd1b26b3684c7c028ff1a8f6dabcac2fac8ac57b66fa6b1efb6edeab03c4` | (Plasma withdraws also go through WithdrawManager-specific events; ERC20Predicate `ExitedERC20` topic reused on the PoS side) | — |
+| `0x1dadc8d0683c6f9824e885935c1bec6f76816730dcec148dda8cf25a7b9f797b` | `NewDepositBlock(address indexed owner, address indexed token, uint256 amountOrNFTId, uint256 depositBlockId)` | Plasma DepositManager `0x401F6c983eA34274ec46f84D70b31C151321188b` — **Plasma deposit (source leg)** |
+| `0xaa5303fdad123ab5ecaefaf69137bf8632257839546d43a3b3dd148cc2879d6f` | `ExitStarted(address indexed exitor, uint256 indexed exitId, address indexed token, uint256 amount, bool isRegularExit)` | Plasma WithdrawManagerProxy `0x2A88696e0fFA76bAA1338F2C74497cC013495922` — exit queued (status only; the ExitNFT is minted to `exitor`) |
+| `0xfeb2000dca3e617cd6f3a8bbb63014bb54a124aac6ccbf73ee7229b4cd01f120` | `Withdraw(uint256 indexed exitId, address indexed user, address indexed token, uint256 amount)` | WithdrawManagerProxy — **Plasma payout (destination leg)**: the DepositManager pays `user` in the same transaction |
+| `0x87d2daa6e85f166015ebbcf09f5ee4bc50f93677579339fe128e3561a6807cb6` | `ExitUpdated(uint256 indexed exitId, uint256 indexed age, address signer)` | WithdrawManagerProxy — input added to an exit (status only) |
+| `0x93a8052a01c184f88312af177ab8fae2e56a9973b6aa4bdc62dfcf744e09d041` | `ExitCancelled(uint256 indexed exitId)` | WithdrawManagerProxy — exit challenged and removed |
+| `0x06b98f3947a8966918fef150b41170e78ba1d91dd2b1d2fd48a59c91ffbd66a1` | `ExitPeriodUpdate(uint256 indexed oldExitPeriod, uint256 indexed newExitPeriod)` | WithdrawManagerProxy — admin: challenge period changed |
+
+The Plasma exit is the Plasma counterpart of the PoS `Exited*` events (§1.2): `ExitStarted` and `Withdraw` share the indexed `exitId`, which is the link key of the two steps. The PoS `ExitedERC20` topic (`0xbb61bd1b26b3684c7c028ff1a8f6dabcac2fac8ac57b66fa6b1efb6edeab03c4`) is not emitted by the Plasma contracts.
 
 > **Checkpoint-event gotcha (verified live):** the live `NewHeaderBlock` has **SIX** fields including the `reward` — `NewHeaderBlock(address,uint256,uint256,uint256,uint256,bytes32)`, topic0 **`0xba5de06d…`**. The 5-field signature `NewHeaderBlock(address,uint256,uint256,uint256,bytes32)` (topic0 `0xf146921b…`) you'll find in older docs/ABIs **does not match current logs** — using it yields zero results. Always scan `0xba5de06d…`.
 
@@ -164,6 +170,13 @@ All RootChainManager / predicate / RootChain / DepositManager / ChildChainManage
 | `0x8b9e4f93` | `depositERC20ForUser(address token, address user, uint256 amount)` | Plasma DepositManager `0x401F…188b`. Emits `NewDepositBlock`. |
 | `0x98ea5fca` | `depositEther()` | Plasma DepositManager — `payable`. |
 | `0x7b1f7117` | `depositBulk(address[] tokens, uint256[] amounts, address user)` | Plasma DepositManager. |
+| `0x7c5264b4` | `startExitWithBurntTokens(bytes data)` | Plasma ERC20Predicate `0x4EeA1780c06709D7FA0BCaA6D0f1aB29673586c0` — **user starts a Plasma exit** with the burn proof; the predicate calls `addExitToQueue`, which emits `ExitStarted` and mints the ExitNFT. |
+| `0xd931a869` | `addExitToQueue(address exitor, address childToken, address rootToken, uint256 exitAmountOrTokenId, bytes32 txHash, bool isRegularExit, uint256 priority)` | WithdrawManager — predicate-only. Emits `ExitStarted`. |
+| `0x0f6795f2` | `processExits(address _token)` | WithdrawManager — **anyone**; pays every matured exit of `_token` (burns the ExitNFT, the predicate's `onFinalizeExit` releases the funds). Emits `Withdraw`. |
+| `0xc74ab88a` | `processExitsBatch(address[] _tokens)` | WithdrawManager — `processExits` for several tokens. |
+| `0x9492b0b8` | `challengeExit(uint256 exitId, uint256 inputId, bytes challengeData, address adjudicatorPredicate)` | WithdrawManager — a successful challenge emits `ExitCancelled`. |
+| `0x433c76bf` | `updateExitPeriod(uint256 halfExitPeriod)` | WithdrawManager — `onlyOwner`. Emits `ExitPeriodUpdate`. |
+| `0xed4a0be8` | `HALF_EXIT_PERIOD()` → `uint256` | WithdrawManager view — live value **1** (second) on 2026-09-29. |
 
 ### 2.7 Proxy admin (matic-proxy & Plasma-proxy)
 
@@ -204,7 +217,11 @@ All verified via `eth_getCode` returning non-empty bytecode on `https://ethereum
 
 | Role | Address | One-liner |
 |------|---------|-----------|
-| **DepositManager** (Plasma proxy) | `0x401F6c983eA34274ec46f84D70b31C151321188b` | Legacy MATIC/ERC-20 deposits; `NewDepositBlock`. impl `0xb00aa68b…44fc`. |
+| **DepositManager** (Plasma proxy) | `0x401F6c983eA34274ec46f84D70b31C151321188b` | Legacy MATIC/ERC-20 deposits; `NewDepositBlock`. impl `0xb00aa68b87256e2f22058fb2ba3246eec54a44fc`. Also the **vault that pays Plasma exits** (the payout `Transfer` of a `Withdraw` comes from here). |
+| **WithdrawManagerProxy** (Plasma proxy) | `0x2A88696e0fFA76bAA1338F2C74497cC013495922` | Plasma exit queue and payout; emits `ExitStarted`/`Withdraw`. 1,748 B; slot 0 = owner `0xcaf0aa768a3ae1297df20072419db8bb8b5c8cef`, slot 1 = impl `0x6F8a42cf6f3CE657B66A9d5849f1251dE7a35168` (15,730 B; the same value from `implementation()`). |
+| **ExitNFT** | `0xDF74156420Bd57ab387B195ed81EcA36F9fABAca` | ERC-721 that represents a queued exit (`tokenId` = `exitId`); minted at `ExitStarted`, burned at `Withdraw`. 3,212 B. |
+| **ERC20Predicate (Plasma)** | `0x4EeA1780c06709D7FA0BCaA6D0f1aB29673586c0` | Plasma exit starter for ERC-20/MATIC (`startExitWithBurntTokens`). 3,979 B. Not the PoS ERC20Predicate of §3.1. |
+| ERC721Predicate (Plasma) | `0x36C2503d53C6948331144b85D1e74a3B96731d1b` | Plasma exit starter for ERC-721. 4,194 B. |
 | **RootChain** (Plasma proxy) | `0x86E4Dc95c7FBdBf52e33D563BbDB00823894C287` | **Checkpoint contract** — validators post 137 state roots; emits `NewHeaderBlock`. impl `0x536c55cf…bd03`. |
 | **StakeManager** (proxy) | `0x5e3Ef299fDDf15eAa0432E6e66473ace8c13D908` | Validator staking that authorises checkpoints. impl `0x3ad88467…076c`. |
 | Registry | `0x33a02E6cC863D393d6Bf231B697b82F6e499cA71` | Plasma contract registry (DepositManager slot3 points here). |
@@ -248,17 +265,18 @@ Child tokens are **UChildERC20/UChildERC721/UChildERC1155 proxies** (matic-proxy
 
 ## 6. Cross-chain summary
 
-| Chain | ID | RootChainManager / Predicates | FxRoot/StateSender | Plasma+RootChain | ChildChainManager / FxChild |
+| Chain | ID | RootChainManager / Predicates | FxRoot/StateSender | Plasma (DepositManager / WithdrawManager) + RootChain | ChildChainManager / FxChild |
 |---|---|---|---|---|---|
-| **Ethereum** | 1 | ✅ all (`0xA0c6…`, `0x40ec…`, …) | ✅ (`0xfe5e…`, `0x28e4…`) | ✅ (`0x401F…`, `0x86E4…`) | — |
-| **Polygon PoS** | 137 | — | — | — | ✅ (`0xA6FA…`, `0x8397…`) |
+| **Ethereum** | 1 | ✅ all (`0xA0c68C638235ee32657e8f720a23ceC1bFc77C77`, `0x40ec5B33f54e0E8A33A975908C5BA1c14e5BbbDf`, …) | ✅ (`0xfe5e5D361b2ad62c541bAb87C45a0B9B018389a2`, `0x28e4F3a7f651294B9564800b2D01f35189A5bFbE`) | ✅ (`0x401F6c983eA34274ec46f84D70b31C151321188b`, `0x2A88696e0fFA76bAA1338F2C74497cC013495922`, `0x86E4Dc95c7FBdBf52e33D563BbDB00823894C287`) | — |
+| **Polygon PoS** | 137 | — | — | — | ✅ (`0xA6FA4fB5f76172d178d61B04b0ecd319C5d1C0aa`, `0x8397259c983751DAf40400790063935a11afa28a`) |
 | Base | 8453 | ❌ `0x` | ❌ `0x` | ❌ `0x` | ❌ `0x` |
 | BNB Smart Chain | 56 | ❌ `0x` | ❌ `0x` | ❌ `0x` | ❌ `0x` |
 | Avalanche | 43114 | ❌ `0x` | ❌ `0x` | ❌ `0x` | ❌ `0x` |
 | Arbitrum One | 42161 | ❌ `0x` | ❌ `0x` | ❌ `0x` | ❌ `0x` |
 | Optimism | 10 | ❌ `0x` | ❌ `0x` | ❌ `0x` | ❌ `0x` |
+| **Robinhood Chain** | 4663 | ❌ `0x` | ❌ `0x` | ❌ `0x` | ❌ `0x` |
 
-**This bridge connects exactly two chains: Ethereum (1) ⇄ Polygon PoS (137).** There is **no deployment on Base / BNB / Avalanche / Arbitrum / Optimism** — every bridge address returns `0x` on all five (verified 2026-06-09). The only counterparty chain is Polygon PoS; there are no out-of-the-seven counterparty chains (the related **Polygon zkEVM bridge** — chainId 1101 — is a *separate* protocol with its own `PolygonZkEVMBridge` contracts and is out of scope for this file).
+**This bridge connects exactly two chains: Ethereum (1) ⇄ Polygon PoS (137).** There is **no deployment on Base / BNB / Avalanche / Arbitrum / Optimism** — every bridge address returns `0x` on all five (verified 2026-06-09). **Robinhood Chain (4663) has none either:** on 2026-09-29 `eth_getCode` returned `0x` (nonce 0) there for RootChainManager, the PoS ERC20 and Ether predicates, FxRoot, StateSender, DepositManager, WithdrawManagerProxy, RootChain, ChildChainManager and FxChild; the official registry (`static.polygon.technology/network/mainnet/v1/index.json`) has only the `Main` (Ethereum) and `Matic` (Polygon) sections; and none of the bridge events had a log on Robinhood Chain in the pinned 12-hour window of 2026-09-28. The only counterparty chain is Polygon PoS; there are no out-of-the-seven counterparty chains (the related **Polygon zkEVM bridge** — chainId 1101 — is a *separate* protocol with its own `PolygonZkEVMBridge` contracts and is out of scope for this file).
 
 **Address tells:** no vanity. L1 RootChainManager `0xA0c6…`, ERC20Predicate `0x40ec…`; 137 ChildChainManager `0xA6FA…`, FxChild `0x8397…`. The StateReceiver `0x…001001` and native MATIC `0x…1010` are genesis system predeploys (recognisable by their tiny address).
 
@@ -271,7 +289,8 @@ Child tokens are **UChildERC20/UChildERC721/UChildERC1155 proxies** (matic-proxy
 | Contract | Pattern | Detection (impl pointer) | Upgrade auth |
 |----------|---------|--------------------------|--------------|
 | RootChainManager, all 7 predicates, ChildChainManager, child UChild* tokens | **matic-proxy** (OpenZeppelin-fork `Proxy.sol`) | impl at slot `keccak256("matic.network.proxy.implementation")` = `0xbaab7dbf64751104133af04abc7d9979f0fda3b059a322a8333f533d3f32bf7f`; owner at `keccak256("matic.network.proxy.owner")` = `0x44f6e2e8884cba1236b7f22f351fa5d88b17292b7e0225ca47e5ecdf6055cdd6` | proxy owner (`0xcaf0aa76…` on L1, `0x3a635c48…` on 137) via `updateImplementation` |
-| DepositManager, RootChain (Plasma) | **Plasma-proxy** (`UpgradableProxy`) | **slot 0 = owner, slot 1 = implementation** (plain sequential storage, NOT a hashed slot) | proxy owner `0xcaf0aa76…` |
+| DepositManager, RootChain, WithdrawManagerProxy (Plasma) | **Plasma-proxy** (`UpgradableProxy`) | **slot 0 = owner, slot 1 = implementation** (plain sequential storage, NOT a hashed slot) | proxy owner `0xcaf0aa768a3ae1297df20072419db8bb8b5c8cef` (the registry's `Timelock`) |
+| ExitNFT, Plasma ERC20Predicate / ERC721Predicate | **plain contracts** (no proxy) | full runtime bytecode (3,212 B / 3,979 B / 4,194 B); registered in the Plasma Registry | none on the contract itself (not a proxy); which predicates the WithdrawManager accepts is read from the Plasma Registry `0x33a02E6cC863D393d6Bf231B697b82F6e499cA71` |
 | StakeManager | **matic-proxy** | matic impl slot (impl `0x3ad88467…076c`) | proxy owner `0xcaf0aa76…` |
 | **FxRoot, FxChild, StateSender** | **immutable** (no proxy) | EIP-1967 *and* matic impl slots both `0x0`; full runtime bytecode | n/a |
 
@@ -289,6 +308,7 @@ Child tokens are **UChildERC20/UChildERC721/UChildERC1155 proxies** (matic-proxy
 | MintableERC1155Predicate `0x2d64…b1B7` | 1 | `0xfd47e7d657b07b071c3362bbce908a70895ee747` | `0xcaf0aa76…` |
 | DepositManager `0x401F…188b` (slot1) | 1 | `0xb00aa68b87256e2f22058fb2ba3246eec54a44fc` | `0xcaf0aa76…` (slot0) |
 | RootChain `0x86E4…C287` (slot1) | 1 | `0x536c55cfe4892e581806e10b38dfe8083551bd03` | `0xcaf0aa76…` (slot0) |
+| WithdrawManagerProxy `0x2A88696e0fFA76bAA1338F2C74497cC013495922` (slot1, read 2026-09-29) | 1 | `0x6f8a42cf6f3ce657b66a9d5849f1251de7a35168` | `0xcaf0aa768a3ae1297df20072419db8bb8b5c8cef` (slot0) |
 | StakeManager `0x5e3E…D908` | 1 | `0x3ad88467e40399dc6ae10427f8b0842348d9076c` | `0xcaf0aa76…` |
 | ChildChainManager `0xA6FA…C0aa` | 137 | `0xa40fc0782bee28dd2cf8cb4ac2ecdb05c537f1b5` | `0x3a635c48836e7c0b9aeb378640b0bfd516985cf5` |
 | USDC.e `0x2791…4174` | 137 | `0xdd9185db084f5c4fff3b4f70e7ba62123b812226` | (matic owner slot) |
@@ -313,6 +333,11 @@ Child tokens are **UChildERC20/UChildERC721/UChildERC1155 proxies** (matic-proxy
 12. **`StateReceiver` (`0x…001001`) and MATIC (`0x…1010`) are genesis system predeploys** on 137, not normal deployments — they have no L1 counterpart and no constructor history.
 13. **The matic-proxy owner `0xcaf0aa76…` (L1) is a governance contract**, not an EOA. Watch `ProxyUpdated`/`OwnerUpdate`/`RoleGranted` from it for upgrade and admin-change events on any bridge proxy.
 14. **Polygon zkEVM bridge is a different protocol.** If you see `PolygonZkEVMBridge`/`BridgeEvent` (chainId 1101), that is *not* this bridge — different contracts, different chain, different event set.
+15. **The Plasma withdrawal is two transactions on L1, joined by `exitId`.** (a) The user calls the Plasma ERC20Predicate `startExitWithBurntTokens` (`0x7c5264b4`): the ExitNFT is minted (`Transfer` `0x0` → user, `tokenId` = `exitId`) and WithdrawManagerProxy emits `ExitStarted(exitor, exitId, token, amount, isRegularExit)`. No value moves. (b) Anyone calls `processExits(token)` (`0x0f6795f2`): the ExitNFT is burned, the DepositManager `0x401F6c983eA34274ec46f84D70b31C151321188b` pays the exitor, and WithdrawManagerProxy emits `Withdraw(exitId, user, token, amount)`. Key the payout on `Withdraw`; `exitId` links it to its `ExitStarted`.
+16. **The Plasma challenge period is effectively gone.** `HALF_EXIT_PERIOD()` = 1 second (read 2026-09-29), so an exit is payable a few blocks after it starts: in the Ethereum sample, `ExitStarted` was in block 26,073,591 and its `Withdraw` in block 26,073,595. Do not expect a 7-day gap. A change of this value emits `ExitPeriodUpdate` (admin signal).
+17. **A MATIC exit pays POL.** In the sample `Withdraw` the indexed `token` is MATIC `0x7D1AfA7B718fb893dB30A3aBc0Cfc608AaCfeBB0`, but the payout `Transfer` in the same transaction is POL `0x455e53CBB86018Ac2B8092FdCd39d8444aFFC3F6` from the DepositManager to the user. Value the payout from the `Transfer`, not from `Withdraw.token`.
+18. **`Withdraw(uint256,address,address,uint256)` (`0xfeb2000dca3e617cd6f3a8bbb63014bb54a124aac6ccbf73ee7229b4cd01f120`) is a generic signature.** In the pinned window another contract on BNB emitted it. Filter it on `0x2A88696e0fFA76bAA1338F2C74497cC013495922` (Ethereum).
+19. **Robinhood Chain (4663) has no Polygon PoS bridge contract** (§6).
 
 ---
 
@@ -346,6 +371,12 @@ TOPIC_FX_DEPOSIT_ERC20       = '\x8a58355ceb4626422a66b0f36743672dde8507c6be664f
 TOPIC_NEW_HEADER_BLOCK       = '\xba5de06d22af2685c6c7765f60067f7d2b08c2d29f53cdf14d67f6d1c9bfb527'
 TOPIC_RESET_HEADER_BLOCK     = '\xca1d8316287f938830e225956a7bb10fd5a1a1506dd2eb3a476751a488117205'
 TOPIC_NEW_DEPOSIT_BLOCK      = '\x1dadc8d0683c6f9824e885935c1bec6f76816730dcec148dda8cf25a7b9f797b'
+-- Plasma WithdrawManager (exit queue and payout)
+TOPIC_PLASMA_EXIT_STARTED    = '\xaa5303fdad123ab5ecaefaf69137bf8632257839546d43a3b3dd148cc2879d6f'
+TOPIC_PLASMA_WITHDRAW        = '\xfeb2000dca3e617cd6f3a8bbb63014bb54a124aac6ccbf73ee7229b4cd01f120'
+TOPIC_PLASMA_EXIT_UPDATED    = '\x87d2daa6e85f166015ebbcf09f5ee4bc50f93677579339fe128e3561a6807cb6'
+TOPIC_PLASMA_EXIT_CANCELLED  = '\x93a8052a01c184f88312af177ab8fae2e56a9973b6aa4bdc62dfcf744e09d041'
+TOPIC_PLASMA_EXIT_PERIOD_UPD = '\x06b98f3947a8966918fef150b41170e78ba1d91dd2b1d2fd48a59c91ffbd66a1'
 -- Child token & AccessControl
 TOPIC_TRANSFER               = '\xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef'
 TOPIC_ROLE_GRANTED           = '\x2f8788117e7eff1d82e926ec794901d17c78024a50270940304540a733656f0d'
@@ -381,6 +412,13 @@ SEL_SUBMIT_HEADER_BLOCK      = '\x6a791f11'
 SEL_CURRENT_HEADER_BLOCK     = '\xec7e4855'
 SEL_DEPOSIT_ERC20_FOR_USER   = '\x8b9e4f93'
 SEL_DEPOSIT_ETHER            = '\x98ea5fca'
+SEL_START_EXIT_BURNT_TOKENS  = '\x7c5264b4'
+SEL_ADD_EXIT_TO_QUEUE        = '\xd931a869'
+SEL_PROCESS_EXITS            = '\x0f6795f2'
+SEL_PROCESS_EXITS_BATCH      = '\xc74ab88a'
+SEL_CHALLENGE_EXIT           = '\x9492b0b8'
+SEL_UPDATE_EXIT_PERIOD       = '\x433c76bf'
+SEL_HALF_EXIT_PERIOD         = '\xed4a0be8'
 -- Proxy admin
 SEL_UPDATE_IMPLEMENTATION    = '\x025b22bc'
 SEL_IMPLEMENTATION           = '\x5c60da1b'
@@ -407,6 +445,12 @@ ETH_ROOT_CHAIN_CHECKPOINT    = '\x86e4dc95c7fbdbf52e33d563bbdb00823894c287'
 ETH_STAKE_MANAGER            = '\x5e3ef299fddf15eaa0432e6e66473ace8c13d908'
 ETH_REGISTRY                 = '\x33a02e6cc863d393d6bf231b697b82f6e499ca71'
 ETH_PROXY_OWNER_GOV          = '\xcaf0aa768a3ae1297df20072419db8bb8b5c8cef'
+ETH_PLASMA_WITHDRAW_MANAGER  = '\x2a88696e0ffa76baa1338f2c74497cc013495922'
+ETH_PLASMA_WITHDRAW_MGR_IMPL = '\x6f8a42cf6f3ce657b66a9d5849f1251de7a35168'
+ETH_PLASMA_EXIT_NFT          = '\xdf74156420bd57ab387b195ed81eca36f9fabaca'
+ETH_PLASMA_ERC20_PREDICATE   = '\x4eea1780c06709d7fa0bcaa6d0f1ab29673586c0'
+ETH_PLASMA_ERC721_PREDICATE  = '\x36c2503d53c6948331144b85d1e74a3b96731d1b'
+-- Robinhood Chain (4663): no Polygon PoS bridge contract; every address above returns 0x there
 
 -- ===== Polygon PoS (chain ID 137) =====
 POLYGON_CHILD_CHAIN_MANAGER  = '\xa6fa4fb5f76172d178d61b04b0ecd319c5d1c0aa'
@@ -429,6 +473,14 @@ How constants were verified (2026-06-09):
 - **Proxies:** impls read live from the `matic.network.proxy.implementation` slot (`0xbaab7dbf…`, derived locally as `keccak256("matic.network.proxy.implementation")`) for PoS-portal contracts, and from storage slots 0 (owner) / 1 (implementation) for the Plasma DepositManager/RootChain proxies. The standard EIP-1967 impl slot returned `0x0` on every contract (confirming Polygon's non-EIP-1967 convention). FxRoot/FxChild/StateSender returned `0x0` on *both* the EIP-1967 and matic slots and carry full runtime bytecode ⇒ immutable.
 - **Live state (`eth_call`):** RootChain `currentHeaderBlock()` = 1042910000 on 2026-06-09 (confirms it is the active checkpoint contract; this is a live counter that advances by 10000 per checkpoint); proxy impl/owner pointers read via `eth_getStorageAt`.
 - **Chain coverage method:** `eth_getCode` for each canonical address against all seven target RPCs; absence (`0x`) recorded explicitly.
+
+Additions of 2026-09-29:
+
+- **Plasma withdrawal contracts:** names and addresses from the official registry `https://static.polygon.technology/network/mainnet/v1/index.json` (`WithdrawManagerProxy`, `WithdrawManager`, `ExitNFT`, `ERC20Predicate`, `ERC721Predicate` of the `Main.Contracts` section); `eth_getCode` read on Ethereum; WithdrawManagerProxy slots 0/1 and `implementation()` read live; `HALF_EXIT_PERIOD()` = 1. Event and function signatures from `maticnetwork/contracts` `contracts/root/withdrawManager/WithdrawManagerStorage.sol` and `WithdrawManager.sol`; every new topic0 and selector recomputed with `keccak256`.
+- **Measured activity** (pinned 12-hour window 2026-09-28 00:00–12:00 UTC; all logs on Ethereum, from the listed emitter): `LockedERC20` 87, `ExitedERC20` 115, `LockedEther` 6, `ExitedEther` 96, `ExitedMintableERC20` 3, `StateSynced` 142, Plasma `NewDepositBlock` 7, `ExitStarted` 4, `Withdraw` 4. The same topics had 0 logs on Base, Arbitrum, Optimism, Polygon, Avalanche and Robinhood; on BNB, 1 `Withdraw` came from an unrelated contract (§8, item 18).
+- **Samples** (read with `eth_getTransactionReceipt`): `0x6be25bd11f8a6ed67f5f1c6059ad8b170e15b70db681d732ddf101573ef98231` (`startExitWithBurntTokens` on the Plasma ERC20Predicate: ExitNFT mint + `ExitStarted`, MATIC) and `0x5d75796044d0593fee990476512e5f44af38862a81965e524f9ad9aa6e8c4e96` (`processExits`: ExitNFT burn, POL `Transfer` DepositManager → user, `Withdraw` with the same `exitId`).
+- **Robinhood Chain:** §6 lists the addresses read with `eth_getCode` on 2026-09-29 (all `0x`, nonce 0).
+- Source added: [`maticnetwork/contracts` `WithdrawManagerStorage.sol`](https://github.com/maticnetwork/contracts/blob/main/contracts/root/withdrawManager/WithdrawManagerStorage.sol) · [Polygon mainnet registry](https://static.polygon.technology/network/mainnet/v1/index.json).
 
 **Authoritative sources:**
 - Canonical repos: [`0xPolygon/pos-portal`](https://github.com/0xPolygon/pos-portal) (RootChainManager, predicates, ChildChainManager, child tokens), [`0xPolygon/fx-portal`](https://github.com/0xPolygon/fx-portal) (FxRoot/FxChild/State tunnel), [`maticnetwork/contracts`](https://github.com/maticnetwork/contracts) (Plasma DepositManager/WithdrawManager, RootChain checkpoint, StakeManager).

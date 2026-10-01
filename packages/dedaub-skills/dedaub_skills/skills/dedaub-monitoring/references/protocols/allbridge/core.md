@@ -1,7 +1,7 @@
 # Allbridge Core — Topics, Selectors, Addresses (Ethereum, BNB, Polygon, Avalanche, Arbitrum, Optimism, Base)
 
 **Status:** verified against live RPC on all seven chains and the canonical `allbridge-io/allbridge-core-evm-contracts` repo on 2026-06-09. Topic0s/selectors recomputed locally as `keccak256(signature)` and cross-checked against live `eth_getLogs`; addresses parsed from the official Core contracts page (`docs-core.allbridge.io`) and existence-checked via `eth_getCode`.
-**Scope:** Allbridge Core — the stablecoin bridge built on a virtual-USD (vUSD) pool model, plus the bundled CCTP / CCTPv2 / OFT bridge adapters that share the same docs page and admin. Topics + selectors are **chain-agnostic**; addresses are **network-specific**. All seven requested chains carry a Core deployment.
+**Scope:** Allbridge Core — the stablecoin bridge built on a virtual-USD (vUSD) pool model, plus the bundled CCTP / CCTPv2 / OFT bridge adapters that share the same docs page and admin. Topics + selectors are **chain-agnostic**; addresses are **network-specific**. All seven requested chains carry a Core deployment. **Robinhood Chain (4663) has none** (§10; checked 2026-09-29).
 
 Allbridge Core is a **liquidity-pool stablecoin bridge**. A swap-and-bridge transfer routes the source stablecoin into a per-token `Pool`, converting it to an internal accounting unit **vUSD** (`SwappedToVUsd`), emits a `TokensSent` event on the `Bridge`, and ships a 32-byte message hash through a pluggable messaging layer (`Messenger` = Allbridge's own validator protocol, or `WormholeMessenger`). On the destination chain `receiveTokens` validates the message, swaps vUSD back out of the destination `Pool` (`SwappedFromVUsd`), and emits `TokensReceived`. Same-chain swaps between two pools go through `swap` → `Swapped`.
 
@@ -279,6 +279,7 @@ Verified via `eth_getCode` on `https://base-rpc.publicnode.com`.
 | Arbitrum | 42161 | ✓ `0x9Ce3…d189` | ✓ `0xd582…4f9d` | ✓ `0x2476…cb10` | USDC, USDT, USDe | ✓ | ✓ | ✓ |
 | Optimism | 10 | ✓ `0x97E5…d5ab` | ✓ `0x309a…3695` | ✓ `0x4ad8…9d9a`† | USDC, USDT | ✓ | — | — |
 | Base | 8453 | ✓ `0x001E…DEf7` | ✓ `0x9bc6…8271` | ✓ `0x7b80…f6d6` | USDC | ✓ | ✓ | — |
+| Robinhood Chain | 4663 | — | — | — | — | — | — | — |
 
 † OP GasOracle full address `0x4ad835ffa57e5e1e82514b2ba01d21fc15199d9a`.
 
@@ -456,6 +457,7 @@ How every constant was verified (2026-06-09):
 - **Addresses:** Bridge / Pool / CCTP / CCTPv2 / OFT parsed from the official Core contracts page (`docs-core.allbridge.io/.../allbridge-core-contracts`); Messenger + GasOracle (not published) discovered on-chain (Messenger = the `MessageSent` emitter in a real Bridge tx; GasOracle = storage slot 1 of the Messenger). Every address existence-checked via `eth_getCode` returning non-empty bytecode on the listed RPC.
 - **Immutability:** EIP-1967 impl slot `0x360894…382bbc` read live = `0x0` on the ETH Bridge, ETH USDC Pool, and ETH CCTP bridge → no proxies. Admin slot likewise empty.
 - **Admin:** Ownable slot 0 of the Bridge and Messenger reads `0x01a494079dcb715f622340301463ce50cd69a4d0` identically on all seven chains. Classic admin (validator/feeCollector/feeOracle) is in [classic.md](classic.md).
+- **Robinhood Chain (2026-09-29):** the official Core contract page (Main Bridge, CCTP, CCTP v2, xReserve and OFT interface tables) names no Robinhood Chain entry, and `eth_getCode` on `https://rpc.mainnet.chain.robinhood.com` returns `0x` (nonce 0) for the Ethereum and Base Bridge, the Ethereum Messenger, GasOracle, CCTP, CCTP v2, OFT and xReserve interface addresses. `TokensSent` / `TokensReceived` had 0 logs on Robinhood Chain in the pinned window 2026-09-28 00:00–12:00 UTC.
 - **Chain coverage:** `eth_getCode` run for every Bridge/Pool/Messenger/GasOracle/CCTP/OFT address on all seven RPCs; absences (`0x`) recorded explicitly in §4–§9 and §10 (BNB has no CCTP/OFT; OP/Polygon/BNB have no CCTP v2; only ETH+Arb have OFT).
 
 **Authoritative sources:**

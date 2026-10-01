@@ -1,9 +1,11 @@
-# Synapse Bridge (classic) — Topics, Selectors, Addresses (Ethereum, BNB, Avalanche, Arbitrum, Optimism, Polygon, Base)
+# Synapse Bridge (classic) — Topics, Selectors, Addresses (Ethereum, BNB, Avalanche, Arbitrum, Optimism, Polygon, Base; NOT Robinhood)
 
-**Status:** verified against live RPC on every listed chain and the canonical `synapsecns/synapse-contracts` + `synapsecns/sanguine` repos on 2026-06-09.
-**Scope:** the **classic Synapse "mint/burn + nexus-pool" bridge** — `SynapseBridge` (the upgradeable vault that emits `TokenDeposit`/`TokenRedeem`/`TokenMint`/`TokenWithdraw`), the unified `SynapseRouter`, the `L1BridgeZap`/`L2BridgeZap` helpers, and the `SwapFlashLoan` nUSD/nETH stableswap pools that wrap the bridge. The newer **RFQ FastBridge** is documented in [rfq.md](./rfq.md); the **Circle-CCTP** router is summarised in §6 here. Chains + IDs: Ethereum 1, Base 8453, BNB 56, Avalanche 43114, Arbitrum 42161, Optimism 10, Polygon 137. **Topics/selectors are chain-agnostic; addresses are network-specific.**
+**Status:** verified against live RPC on every listed chain and the canonical `synapsecns/synapse-contracts` + `synapsecns/sanguine` repos on 2026-06-09. Extended on 2026-09-29 with the `SynapseBridgeAdapter` (LayerZero V2) path, `TokenRedeemV2`, and the Robinhood Chain (4663) check.
+**Scope:** the **classic Synapse "mint/burn + nexus-pool" bridge** — `SynapseBridge` (the upgradeable vault that emits `TokenDeposit`/`TokenRedeem`/`TokenMint`/`TokenWithdraw`), the `SynapseBridgeAdapter` that now carries its cross-chain messages over LayerZero V2, the unified `SynapseRouter`, the `L1BridgeZap`/`L2BridgeZap` helpers, and the `SwapFlashLoan` nUSD/nETH stableswap pools that wrap the bridge. The newer **RFQ FastBridge** is documented in [rfq.md](./rfq.md); the **Circle-CCTP** router is summarised in §6 here. Chains + IDs: Ethereum 1, Base 8453, BNB 56, Avalanche 43114, Arbitrum 42161, Optimism 10, Polygon 137; **Robinhood Chain 4663 has no Synapse deployment** (§4.7). **Topics/selectors are chain-agnostic; addresses are network-specific.**
 
-Synapse is a **lock/burn-and-mint bridge with a swap layer on each end**. The bridge token (e.g. `nUSD`, `nETH`) is the canonical cross-chain asset; on the *origin* chain a user `deposit`s (Ethereum-anchored assets locked) or `redeem`s (burns the bridge token), the off-chain validator network ("NodeGroup") observes the event, then on the *destination* chain the relayer calls `mint`/`withdraw`, optionally swapping nUSD→USDC through the local `SwapFlashLoan` nexus pool. **There is no on-chain message-passing contract** — attribution is by the `kappa` (a `bytes32` = origin tx hash digest) carried in the destination `TokenMint`/`TokenWithdraw` event.
+Synapse is a **lock/burn-and-mint bridge with a swap layer on each end**. The bridge token (e.g. `nUSD`, `nETH`) is the canonical cross-chain asset; on the *origin* chain a user `deposit`s (Ethereum-anchored assets locked) or `redeem`s (burns the bridge token), the off-chain validator network ("NodeGroup") observes the event, then on the *destination* chain the relayer calls `mint`/`withdraw`, optionally swapping nUSD→USDC through the local `SwapFlashLoan` nexus pool. **In this legacy validator path there is no on-chain message-passing contract** — attribution is by the `kappa` (a `bytes32` = origin tx hash digest) carried in the destination `TokenMint`/`TokenWithdraw` event.
+
+**The current path runs through the `SynapseBridgeAdapter`** (`0x5Ba000Bb06230E0582e111F08e1f2F2F200005BA`, the same address on all seven chains, a LayerZero V2 OApp; source in `synapsecns/sanguine` `packages/contracts-adapter`). On the source chain the user calls `bridgeERC20`: the adapter burns the token from the user (`burnFrom`, a `Transfer` to `0x0`) or moves it from the user into the local `SynapseBridge` (a `Transfer` user → bridge), sends a LayerZero message, and emits `TokenSent`. **`SynapseBridge` emits no `TokenDeposit`/`TokenRedeem` on this path.** On the destination chain the LayerZero executor delivers the message, and the adapter calls `SynapseBridge.mint`/`withdraw` with `fee = 0` and **`kappa = the LayerZero guid`**, then emits `TokenReceived`. The guid is in `TokenSent`, `TokenReceived` and the destination `TokenMint`/`TokenWithdraw`, so this path has an on-chain link key on both sides. In the pinned 12-hour window of 2026-09-28 every destination `TokenMint`/`TokenWithdraw` on the seven chains came with an adapter `TokenReceived` in the same transaction (§10).
 
 Three deployment facts a monitoring engineer must internalise before indexing:
 
@@ -18,6 +20,7 @@ Three deployment facts a monitoring engineer must internalise before indexing:
 | Contract | Role | Proxy? | Notes |
 |----------|------|--------|-------|
 | **SynapseBridge** | The mint/burn vault. Emits every §1.1 bridge event. | **Transparent proxy** (OZ `TransparentUpgradeableProxy`) | Per-chain proxy address; **shared live impl `0x5b00…005b` on all 7** (repo `_Implementation.json` is stale). Admin = a per-chain `ProxyAdmin`. |
+| **SynapseBridgeAdapter** | LayerZero V2 OApp. Source leg: `bridgeERC20` burns or escrows and emits `TokenSent`. Destination leg: `lzReceive` calls the bridge's `mint`/`withdraw` (`kappa` = LayerZero guid) and emits `TokenReceived`. | **No** (immutable, 10,604 B, `Ownable`) | Single address `0x5Ba000Bb06230E0582e111F08e1f2F2F200005BA` on all 7; `bridge()` = the chain's SynapseBridge proxy; endpoint = LayerZero EndpointV2 `0x1a44076050125825900e736c501f859c50fE728c`. |
 | **SynapseRouter** | Unified swap+bridge entrypoint; re-dispatches into the bridge. | **No** (immutable, 21 KB) | Single vanity `0x7E7A…C96a` on all 7. |
 | **SynapseCCTPRouter** | Front for the Circle-CCTP path. | **No** (immutable) | Single vanity `0xd5a5…2F48`; on 6/7 (**not BSC** — Circle CCTP has no BNB domain). |
 | **SynapseCCTP** | The CCTP burn/mint base contract behind the router. | proxy (small) | ETH `0x12715a66…`. Emits `CircleRequestSent`/`CircleRequestFulfilled`. |
@@ -40,6 +43,7 @@ All values recomputed locally with keccak256 on 2026-06-09. `TokenWithdraw`/`Tok
 |--------|-------|------|
 | `0xda5273705dbef4bf1b902a131c2eac086b7e1476a8ab0cb4da08af1fe1bd8e3b` | `TokenDeposit(address indexed to, uint256 chainId, address token, uint256 amount)` | origin (lock) |
 | `0xdc5bad4651c5fbe9977a696aadc65996c468cde1448dd468ec0d83bf61c4b57c` | `TokenRedeem(address indexed to, uint256 chainId, address token, uint256 amount)` | origin (burn) |
+| `0x8e57e8c5fea426159af69d47eda6c5052c7605c9f70967cf749d4aa55b70b499` | `TokenRedeemV2(bytes32 indexed to, uint256 chainId, address token, uint256 amount)` | origin (burn to a non-EVM `bytes32` recipient; emitted by `redeemV2`) |
 | `0xbf14b9fde87f6e1c29a7e0787ad1d0d64b4648d8ae63da21524d9fd0f283dd38` | `TokenMint(address indexed to, address token, uint256 amount, uint256 fee, bytes32 indexed kappa)` | dest (mint) |
 | `0x8b0afdc777af6946e53045a4a75212769075d30455a212ac51c9b16f9c5c9b26` | `TokenWithdraw(address indexed to, address token, uint256 amount, uint256 fee, bytes32 indexed kappa)` | dest (release) |
 | `0x79c15604b92ef54d3f61f0c40caab8857927ca3d5092367163b4562c1699eb5f` | `TokenDepositAndSwap(address indexed to, uint256 chainId, address token, uint256 amount, uint8 tokenIndexFrom, uint8 tokenIndexTo, uint256 minDy, uint256 deadline)` | origin |
@@ -48,7 +52,7 @@ All values recomputed locally with keccak256 on 2026-06-09. `TokenWithdraw`/`Tok
 | `0x4f56ec39e98539920503fd54ee56ae0cbebe9eb15aa778f18de67701eeae7c65` | `TokenMintAndSwap(address indexed to, address token, uint256 amount, uint256 fee, uint8 tokenIndexFrom, uint8 tokenIndexTo, uint256 minDy, uint256 deadline, bool swapSuccess, bytes32 indexed kappa)` | dest |
 | `0xc1a608d0f8122d014d03cc915a91d98cef4ebaf31ea3552320430cba05211b6d` | `TokenWithdrawAndRemove(address indexed to, address token, uint256 amount, uint256 fee, uint8 swapTokenIndex, uint256 swapMinAmount, uint256 swapDeadline, bool swapSuccess, bytes32 indexed kappa)` | dest |
 
-> **`*AndSwap`/`*AndRemove` are legacy.** The *current* shared bridge impl `0x5b00…005b` still defines and can emit these topics, but the swap-on-destination is now done by `SynapseRouter` after a plain `mint`/`withdraw`, so most recent flows emit only `TokenMint`/`TokenWithdraw`. Index all eight, but expect the plain pair to dominate post-2023.
+> **`*AndSwap`/`*AndRemove` are legacy.** The *current* shared bridge impl `0x5b0000258c622551a1c7c45b9f860ef90200005b` still defines and can emit these topics, but the swap-on-destination is now done by `SynapseRouter` after a plain `mint`/`withdraw`, so most recent flows emit only `TokenMint`/`TokenWithdraw`. Index all ten, but expect the plain pair to dominate post-2023. `TokenRedeemV2` (canonical form `TokenRedeemV2(bytes32,uint256,address,uint256)`, the `token` parameter is `IERC20` in source) had 0 logs on all eight chains in the pinned 12-hour window of 2026-09-28; no historical log was sampled for it.
 
 ### 1.2 SynapseRouter
 
@@ -87,6 +91,21 @@ The router declares **no events** (verified against source) — it delegates eco
 | `0x5db9ee0a495bf2e6ff9c91a7834c1ba4fdd244a5e8aa4e537bd38aeae4b073aa` | `Unpaused(address account)` |
 | `0x2f8788117e7eff1d82e926ec794901d17c78024a50270940304540a733656f0d` | `RoleGranted(bytes32 indexed role, address indexed account, address indexed sender)` (AccessControl — NODEGROUP_ROLE/GOVERNANCE_ROLE) |
 
+### 1.6 SynapseBridgeAdapter (LayerZero V2 path) — emitter `0x5Ba000Bb06230E0582e111F08e1f2F2F200005BA` on all 7
+
+`TokenSent` is the **source leg** (value leaves the user in the same transaction: a burn to `0x0` or a `Transfer` into the SynapseBridge). `TokenReceived` is the **destination leg** and fires in the same transaction as the bridge's `TokenMint`/`TokenWithdraw`. The `guid` (LayerZero message id, in the data of both events) equals the destination `kappa`. `dstEid`/`srcEid` are LayerZero endpoint ids (§8, item 15). `BridgeSet`, `TokenAdded`, `PeerSet` and `OwnershipTransferred` are admin events (no value moves).
+
+| topic0 | Event | Side |
+|--------|-------|------|
+| `0xe24e6284bb4ec2f5820189573deff7603191eb850be5a872ac3b72d477cdc58d` | `TokenSent(uint32 indexed dstEid, address indexed to, address indexed token, uint256 amount, bytes32 guid)` | origin (burn or escrow) |
+| `0xdacad4857568b1be1bc81a68218d331a0b5cb59e116a32d2121cb960c6c7f4f5` | `TokenReceived(uint32 indexed srcEid, address indexed to, address indexed token, uint256 amount, bytes32 guid)` | dest (mint or release) |
+| `0xa49730bff544fd0b716395c592e39c6fd2d2481a19b9229b5b240483db95a495` | `BridgeSet(address bridge)` | admin (set once) |
+| `0x704ec8f592a58838b2937e7bddea11f797098b397e89b4651afccd08b7e33f9c` | `TokenAdded(address token, uint8 tokenType, (uint32 eid, address addr)[] remoteTokens)` | admin (`tokenType`: 1 MintBurn, 2 WithdrawDeposit) |
+| `0x238399d427b947898edb290f5ff0f9109849b1c3ba196a42e35f00c50a54b98b` | `PeerSet(uint32 eid, bytes32 peer)` | admin (LayerZero OApp peer) |
+| `0x8be0079c531659141344cd1fd0a4f28419497f9722a3daafe3b4186f6b6457e0` | `OwnershipTransferred(address indexed previousOwner, address indexed newOwner)` | admin |
+
+The LayerZero EndpointV2 (`0x1a44076050125825900e736c501f859c50fE728c`) emits `PacketSent` in the source transaction and `PacketDelivered` in the destination transaction; see [`../layerzero/`](../layerzero/) for those topics.
+
 ---
 
 ## 2. Function signatures (chain-agnostic — `keccak256(canonical sig)[0:4]`)
@@ -99,7 +118,7 @@ All present in the live shared impl `0x5b00…005b` (PUSH4 dispatch scan on Ethe
 |----------|-----------|-------|
 | `0x90d25074` | `deposit(address to, uint256 chainId, address token, uint256 amount)` | Locks an Ethereum-anchored asset. Emits `TokenDeposit`. |
 | `0xf3f094a1` | `redeem(address to, uint256 chainId, address token, uint256 amount)` | Burns the bridge token. Emits `TokenRedeem`. |
-| `0xa07ed975` | `redeemV2(bytes32 to, uint256 chainId, address token, uint256 amount)` | Newer redeem to a non-EVM `bytes32` recipient. Emits `TokenRedeem` variant. |
+| `0xa07ed975` | `redeemV2(bytes32 to, uint256 chainId, address token, uint256 amount)` | Newer redeem to a non-EVM `bytes32` recipient. Burns the bridge token. Emits `TokenRedeemV2`. |
 | `0xa2a2af0b` | `depositAndSwap(address,uint256,address,uint256,uint8,uint8,uint256,uint256)` | Emits `TokenDepositAndSwap`. |
 | `0x839ed90a` | `redeemAndSwap(address,uint256,address,uint256,uint8,uint8,uint256,uint256)` | Emits `TokenRedeemAndSwap`. |
 | `0x36e712ed` | `redeemAndRemove(address,uint256,address,uint256,uint8,uint256,uint256)` | Emits `TokenRedeemAndRemove`. |
@@ -156,7 +175,8 @@ The router uses `SwapQuery = (address swapAdapter, address tokenOut, uint256 min
 | `0x4d49e87d` | `addLiquidity(uint256[] amounts, uint256 minToMint, uint256 deadline)` → `uint256` | Emits `AddLiquidity`. |
 | `0x31cd52b0` | `removeLiquidity(uint256 amount, uint256[] minAmounts, uint256 deadline)` → `uint256[]` | Emits `RemoveLiquidity`. |
 | `0x3e3a1560` | `removeLiquidityOneToken(uint256 tokenAmount, uint8 tokenIndex, uint256 minAmount, uint256 deadline)` → `uint256` | Emits `RemoveLiquidityOne`. |
-| `0x66c0bd24` | `getToken(uint8)` → `address` | Index → underlying. |
+| `0x82b86600` | `getToken(uint8 index)` → `address` | Index → underlying. Live check: `getToken(0)` on the Ethereum nUSD pool returns DAI. |
+| `0x66c0bd24` | `getTokenIndex(address tokenAddress)` → `uint8` | Underlying → index. Live check: `getTokenIndex(USDC)` on the Ethereum nUSD pool returns 1. |
 | `0xd46300fd` | `getA()` → `uint256` | Amplification coefficient. |
 
 ### 2.6 SynapseCCTP
@@ -174,6 +194,21 @@ The router uses `SwapQuery = (address swapAdapter, address tokenOut, uint256 min
 | `0x4f1ef286` | `upgradeToAndCall(address,bytes)` | |
 | `0x8f283970` | `changeAdmin(address)` | Emits `AdminChanged`. |
 
+### 2.8 SynapseBridgeAdapter (`RemoteToken = (uint32 eid, address addr)`, `TokenType` = `uint8`)
+
+| Selector | Signature | Notes |
+|----------|-----------|-------|
+| `0xa811504f` | `bridgeERC20(uint32 dstEid, address to, address token, uint256 amount, uint64 gasLimit)` | **User entrypoint (source leg).** `payable`: `msg.value` is the LayerZero native fee. Burns or escrows `amount`; emits `TokenSent`. |
+| `0x13137d65` | `lzReceive((uint32 srcEid, bytes32 sender, uint64 nonce) origin, bytes32 guid, bytes message, address executor, bytes extraData)` | Called by the LayerZero EndpointV2 only (destination leg). Calls the bridge's `mint`/`withdraw`; emits `TokenReceived`. |
+| `0x1c3eab28` | `getNativeFee(uint32 dstEid, uint64 gasLimit)` → `uint256` | View: the LayerZero fee quote. |
+| `0xe78cea92` | `bridge()` → `address` | View: the local SynapseBridge proxy (read live on all 7). |
+| `0xd82d0531` | `getLocalAddress(uint32 eid, address remoteAddr)` → `address` | View: remote token → local token. |
+| `0x6e035876` | `getRemoteAddress(uint32 eid, address localAddr)` → `address` | View: local token → remote token. |
+| `0x93272baf` | `getTokenType(address localAddr)` → `uint8` | View: 0 Unknown, 1 MintBurn, 2 WithdrawDeposit. |
+| `0x4099dba0` | `addToken(address token, uint8 tokenType, (uint32 eid, address addr)[] remoteTokens)` | `onlyOwner`. Emits `TokenAdded`. **Route-change signal.** |
+| `0x8dd14802` | `setBridge(address newBridge)` | `onlyOwner`, once only. Emits `BridgeSet`. |
+| `0x3400288b` | `setPeer(uint32 eid, bytes32 peer)` | `onlyOwner` (OApp). Emits `PeerSet`. **A peer change redirects trust for a chain.** |
+
 ---
 
 ## 3. Addresses — Ethereum mainnet (chain ID 1)
@@ -185,6 +220,7 @@ All verified via `eth_getCode` returning non-empty bytecode on `https://ethereum
 | **SynapseBridge** (proxy) | `0x2796317b0fF8538F253012862c06787Adfb8cEb6` | Mint/burn vault; emits all §1.1 events. Live impl `0x5b00…005b`; admin `0x7b3c1f09…`. |
 | SynapseBridge live impl | `0x5b0000258c622551a1c7c45b9f860ef90200005b` | **Shared CREATE2 impl across all 7 chains** (repo's `0x31fe3938…` is stale). |
 | SynapseBridge ProxyAdmin | `0x7b3c1f09088bdc9f136178e170ac668c8ed095f2` | OZ ProxyAdmin (2.7 KB) — upgrade authority on Ethereum. |
+| **SynapseBridgeAdapter** | `0x5Ba000Bb06230E0582e111F08e1f2F2F200005BA` | LayerZero V2 path; **same address on all 7 chains**; immutable. `bridge()` = `0x2796317b0fF8538F253012862c06787Adfb8cEb6`; `owner()` = `0x67F60b0891EBD842Ebe55E4CCcA1098d7Aac1A55` (a 2-of-3 Safe). |
 | **SynapseRouter** | `0x7E7A0e201FD38d3ADAA9523Da6C109a07118C96a` | Vanity, **same on all 7 chains**; immutable. |
 | **SynapseCCTPRouter** | `0xd5a597d6e7ddf373a92C8f477DAAA673b0902F48` | Vanity, on 6/7 (not BSC); immutable. |
 | SynapseCCTP (base) | `0x12715a66773BD9C54534a01aBF01d05F6B4Bd35E` | CCTP burn/mint contract behind the router; emits §1.3 events. |
@@ -201,7 +237,20 @@ All verified via `eth_getCode` returning non-empty bytecode on `https://ethereum
 
 ## 4. Addresses — other chains
 
-`SynapseRouter` (`0x7E7A…C96a`) and `SynapseCCTPRouter` (`0xd5a5…2F48`) are **byte-identical addresses on every chain that has them**; only the bridge proxy, its per-chain ProxyAdmin, the zap, the pools, and the bridge tokens diverge. Every address below verified live via `eth_getCode` on its chain's publicnode RPC, 2026-06-09.
+`SynapseRouter` (`0x7E7A0e201FD38d3ADAA9523Da6C109a07118C96a`), `SynapseCCTPRouter` (`0xd5a597d6e7ddf373a92C8f477DAAA673b0902F48`) and `SynapseBridgeAdapter` (`0x5Ba000Bb06230E0582e111F08e1f2F2F200005BA`) are **byte-identical addresses on every chain that has them**; only the bridge proxy, its per-chain ProxyAdmin, the zap, the pools, and the bridge tokens diverge. Every address below verified live via `eth_getCode` on its chain's publicnode RPC, 2026-06-09; the adapter rows on 2026-09-29.
+
+**SynapseBridgeAdapter per chain** (one runtime, 10,604 bytes, code hash `0x4de8c184d0cc14beb38bf3b7245cc253650f5d0cae411893f54e32bd2fa078c1` on all 7; `bridge()` and `owner()` read live on 2026-09-29; deployment files in `synapsecns/sanguine` `packages/contracts-adapter/deployments/<chain>/SynapseBridgeAdapter.json`):
+
+| Chain | `bridge()` (the local SynapseBridge proxy) | `owner()` |
+|-------|--------------------------------------------|-----------|
+| Ethereum 1 | `0x2796317b0fF8538F253012862c06787Adfb8cEb6` | `0x67F60b0891EBD842Ebe55E4CCcA1098d7Aac1A55` |
+| Base 8453 | `0xf07d1C752fAb503E47FEF309bf14fbDD3E867089` | `0xE48de7c3A9094b2CbA88D4f72E3cbc2E60Fad8cF` |
+| Arbitrum 42161 | `0x6F4e8eBa4D337f874Ab57478AcC2Cb5BACdc19c9` | `0x1d9Bfc24d9e7EeDa4119Ceca11EaF4c24E622E62` |
+| Optimism 10 | `0xAf41a65F786339e7911F4acDAD6BD49426F2Dc6b` | `0x2431CBdc0792F5485c4cb0a9bEf06C4f21541D52` |
+| Polygon 137 | `0x8F5BBB2BB8c2Ee94639E55d5F41de9b4839C1280` | `0xBdD38B2eaae34C9FCe187909e81e75CBec0dAA7A` |
+| BNB 56 | `0xd123f70AE324d34A9E76b67a27bf77593bA8749f` | `0xA316d83e67EEfD136f4C077de1cD4163A681F8A8` |
+| Avalanche 43114 | `0xC05e61d0E7a63D27546389B7aD62FdFf5A91aACE` | `0xE9530411510c4D6CF699712904bECA2849488176` |
+| Robinhood 4663 | — (no code at `0x5Ba000Bb06230E0582e111F08e1f2F2F200005BA`) | — |
 
 ### 4.1 BNB Smart Chain (chain ID 56) — RPC `https://bsc-rpc.publicnode.com`
 
@@ -283,26 +332,33 @@ All verified via `eth_getCode` returning non-empty bytecode on `https://ethereum
 | **L2BridgeZap** | **NOT DEPLOYED** (`0x` — Base post-dates the zap pattern; bridging goes through `SynapseRouter`). |
 | nUSD | **none** as a Base-native nUSD pool (Base is an nETH + USDC-via-CCTP/RFQ chain). |
 
+### 4.7 Robinhood Chain (chain ID 4663) — **no Synapse deployment**
+
+`eth_getCode` returns `0x` (nonce 0) on `https://rpc.mainnet.chain.robinhood.com` on 2026-09-29 at every Synapse address of this doc and of [rfq.md](./rfq.md): SynapseBridgeAdapter `0x5Ba000Bb06230E0582e111F08e1f2F2F200005BA`, SynapseRouter `0x7E7A0e201FD38d3ADAA9523Da6C109a07118C96a`, SynapseCCTPRouter `0xd5a597d6e7ddf373a92C8f477DAAA673b0902F48`, SynapseCCTP `0x12715a66773BD9C54534a01aBF01d05F6B4Bd35E`, the shared bridge implementation `0x5b0000258c622551a1c7c45b9f860ef90200005b`, the Ethereum and Base bridge proxy literals `0x2796317b0fF8538F253012862c06787Adfb8cEb6` and `0xf07d1C752fAb503E47FEF309bf14fbDD3E867089`, FastBridge `0x5523D3c98809DdDB82C686E152F5C58B1B0fB59E`, FastBridgeRouterV2 `0x00cD000000003f7F682BE4813200893d4e690000`, FastBridgeRouter `0x0000000000489d89D2B233D3375C045dfD05745F` and FastBridgeInterceptor `0xFb1fb1060C550A9b274C64f70dadF16f2aD34fB1`. Chain id 4663 is not in the SDK's `SupportedChainId` enum (`synapsecns/sanguine` `packages/sdk-router/src/constants/chainIds.ts`), and `packages/contracts-adapter/deployments/` has no Robinhood folder. The bridge events of §1.1 had 0 logs on Robinhood Chain in the pinned 12-hour window of 2026-09-28.
+
 ---
 
 ## 5. Cross-chain summary
 
-| Chain | ID | SynapseBridge (proxy) | SynapseRouter | CCTPRouter | FastBridge (RFQ) | L2/L1 Zap | nUSD pool | nETH pool |
-|---|---|---|---|---|---|---|---|---|
-| Ethereum | 1 | `0x2796317b…` | ✓ `0x7E7A…` | ✓ | ✓ | L1 ✓ | ✓ | (via ETHPool elsewhere) |
-| BNB | 56 | `0xd123f70A…` | ✓ | ✗ | ✓ | ✓ | ✓ | ✗ |
-| Avalanche | 43114 | `0xC05e61d0…` | ✓ | ✓ | ✗ | ✓ | ✓ | ✓ (token) |
-| Arbitrum | 42161 | `0x6F4e8eBa…` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| Optimism | 10 | `0xAf41a65F…` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| Polygon | 137 | `0x8F5BBB2B…` | ✓ | ✓ | ✗ | ✓ | ✓ | ✗ |
-| Base | 8453 | `0xf07d1C75…` | ✓ | ✓ | ✓ | ✗ | ✗ | ✓ |
+| Chain | ID | SynapseBridge (proxy) | SynapseBridgeAdapter | SynapseRouter | CCTPRouter | FastBridge (RFQ) | L2/L1 Zap | nUSD pool | nETH pool |
+|---|---|---|---|---|---|---|---|---|---|
+| Ethereum | 1 | `0x2796317b0fF8538F253012862c06787Adfb8cEb6` | ✓ | ✓ `0x7E7A0e201FD38d3ADAA9523Da6C109a07118C96a` | ✓ | ✓ | L1 ✓ | ✓ | (via ETHPool elsewhere) |
+| BNB | 56 | `0xd123f70AE324d34A9E76b67a27bf77593bA8749f` | ✓ | ✓ | ✗ | ✓ | ✓ | ✓ | ✗ |
+| Avalanche | 43114 | `0xC05e61d0E7a63D27546389B7aD62FdFf5A91aACE` | ✓ | ✓ | ✓ | ✗ | ✓ | ✓ | ✓ (token) |
+| Arbitrum | 42161 | `0x6F4e8eBa4D337f874Ab57478AcC2Cb5BACdc19c9` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Optimism | 10 | `0xAf41a65F786339e7911F4acDAD6BD49426F2Dc6b` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Polygon | 137 | `0x8F5BBB2BB8c2Ee94639E55d5F41de9b4839C1280` | ✓ | ✓ | ✓ | ✗ | ✓ | ✓ | ✗ |
+| Base | 8453 | `0xf07d1C752fAb503E47FEF309bf14fbDD3E867089` | ✓ | ✓ | ✓ | ✓ | ✗ | ✗ | ✓ |
+| **Robinhood** | 4663 | ✗ `0x` | ✗ `0x` | ✗ `0x` | ✗ `0x` | ✗ `0x` | ✗ | ✗ | ✗ |
 
 **Vanity / address tells:**
-- `SynapseRouter` = `0x7E7A0e20…` on **all 7** (CREATE2 vanity).
-- `SynapseBridge` **impl** = `0x5b0000258c…00005b` on **all 7** (note the symmetric `5b…5b` vanity) — the *proxy* address differs per chain.
-- `SynapseCCTPRouter` = `0xd5a597d6…` (6/7, not BNB).
-- `FastBridge` (RFQ) = `0x5523D3c9…` (5/7, not Avax/Polygon — see [rfq.md](./rfq.md)).
+- `SynapseRouter` = `0x7E7A0e201FD38d3ADAA9523Da6C109a07118C96a` on **all 7** (CREATE2 vanity).
+- `SynapseBridgeAdapter` = `0x5Ba000Bb06230E0582e111F08e1f2F2F200005BA` on **all 7** (a vanity address: it starts with `5ba0` and ends with `05ba`), one code hash on all 7.
+- `SynapseBridge` **impl** = `0x5b0000258c622551a1c7c45b9f860ef90200005b` on **all 7** (note the symmetric `5b…5b` vanity) — the *proxy* address differs per chain.
+- `SynapseCCTPRouter` = `0xd5a597d6e7ddf373a92C8f477DAAA673b0902F48` (6/7, not BNB).
+- `FastBridge` (RFQ) = `0x5523D3c98809DdDB82C686E152F5C58B1B0fB59E` (5/7, not Avax/Polygon — see [rfq.md](./rfq.md)).
 - The bridge **proxies have no shared vanity**; key bridge presence on `(chainId, proxy address)`.
+- **Robinhood Chain (4663): nothing** — no code at any Synapse address, not in the SDK chain list (§4.7).
 
 **Counterparty chains outside the seven:** Synapse also bridges to/from chains *not* in this set — historically Fantom, Harmony, Boba, Moonbeam, Moonriver, Aurora, Metis, Cronos, Canto, Klaytn, DFK, Blast (router exception `0x0000000000365b1d…`), Linea, Scroll, Berachain, HyperEVM, Unichain, Worldchain (all present in the SDK `SWAP_QUOTER_V2`/router maps). The `chainId` field inside `TokenDeposit`/`TokenRedeem` may therefore reference a destination outside these seven — treat an out-of-set `chainId` as a valid cross-chain leg, not bad data.
 
@@ -321,6 +377,7 @@ EIP-1967 implementation slot `0x360894a13ba1a3210667c828492db98dca3e2076cc3735a9
 | Contract | Pattern | Detection | Upgrade auth |
 |----------|---------|-----------|--------------|
 | **SynapseBridge** | **Transparent (OZ) proxy** | Impl slot populated (= `0x5b00…005b` on all 7); admin slot populated (per-chain ProxyAdmin); `Upgraded`/`AdminChanged` topics. | Per-chain `ProxyAdmin` (ETH `0x7b3c1f09…`), itself owned by Synapse multisig/DAO. |
+| **SynapseBridgeAdapter** | **Immutable** (`Ownable` OApp) | 10,604-byte runtime, code hash `0x4de8c184d0cc14beb38bf3b7245cc253650f5d0cae411893f54e32bd2fa078c1` on all 7; EIP-1967 impl slot empty (read live 2026-09-29). | No upgrade path. `owner()` (per chain, §4) can `setPeer`, `addToken`, and `setBridge` once; watch `PeerSet`/`TokenAdded`/`OwnershipTransferred` (§1.6). |
 | **SynapseRouter** | **Immutable** | 21,216-byte runtime; EIP-1967 impl slot = `0x000…0`. | none. |
 | **SynapseCCTPRouter** | **Immutable** | 13,019-byte runtime; impl slot empty. | none. |
 | **SwapFlashLoan pools** | **EIP-1167 minimal-proxy clone** | 45-byte runtime `0x363d3d373d3d3d363d73<master>5af43d…`; impl slot **empty** (the target is hard-coded in the clone bytecode, not in the EIP-1967 slot). ETH clone → master `0x5A5fFf6F…1655`. | none (clone target fixed at deploy). |
@@ -336,18 +393,23 @@ The `synapse-contracts` repo records a *different* per-chain `SynapseBridge_Impl
 
 ## 8. Detection invariants & gotchas
 
-1. **Origin vs destination is the event, not the contract.** `TokenDeposit`/`TokenRedeem`/`TokenDepositAndSwap`/`TokenRedeemAndSwap`/`TokenRedeemAndRemove` fire on the **source** chain; `TokenMint`/`TokenWithdraw`/`TokenMintAndSwap`/`TokenWithdrawAndRemove` fire on the **destination** chain and carry the indexed `bytes32 kappa`. A complete transfer = an origin event on chain A linked to a destination event on chain B sharing the same `kappa`.
-2. **`kappa` is the cross-chain join key** (a `bytes32` digest of the origin tx). It is `indexed` in `TokenMint`/`TokenWithdraw` (topic[2]) but **absent from the origin events** — to link both legs you compute/track the kappa off-chain or watch `kappaExists(kappa)` flipping true. Use `kappa` to dedupe destination replays.
-3. **`to` is the recipient, not the sender.** It is `indexed` (topic[1]) in every bridge event. The actual `msg.sender` on the origin is often `SynapseRouter`/a zap/an aggregator, and on the destination is always the NODEGROUP relayer. Attribute the user by `to`, never `tx.from`.
+1. **Origin vs destination is the event, not the contract.** `TokenDeposit`/`TokenRedeem`/`TokenRedeemV2`/`TokenDepositAndSwap`/`TokenRedeemAndSwap`/`TokenRedeemAndRemove` fire on the **source** chain; `TokenMint`/`TokenWithdraw`/`TokenMintAndSwap`/`TokenWithdrawAndRemove` fire on the **destination** chain and carry the indexed `bytes32 kappa`. A complete transfer = an origin event on chain A linked to a destination event on chain B sharing the same `kappa`. On the adapter path (item 13) the origin event is the adapter's `TokenSent`, not a bridge event.
+2. **`kappa` is the cross-chain join key** (a `bytes32` digest of the origin tx in the legacy path; the LayerZero `guid` on the adapter path). It is `indexed` in `TokenMint`/`TokenWithdraw` (topic[2]) but **absent from the origin bridge events** — to link both legs of a legacy transfer you compute/track the kappa off-chain or watch `kappaExists(kappa)` flipping true. On the adapter path the same value is in the data of the source `TokenSent` (`guid`), so both legs join on chain. Use `kappa` to dedupe destination replays.
+3. **`to` is the recipient, not the sender.** It is `indexed` (topic[1]) in every bridge event. The actual `msg.sender` on the origin is often `SynapseRouter`/a zap/an aggregator, and on the destination it is the NODEGROUP relayer (legacy) or the `SynapseBridgeAdapter` (adapter path; `tx.to` is then the LayerZero executor). Attribute the user by `to`, never `tx.from`.
 4. **The router, not the bridge, is what users call now.** Most modern origin transfers are `SynapseRouter.bridge(...)` (`0xc2288147`) which swaps then internally calls `deposit`/`redeem` on the bridge — so the `TokenDeposit`/`TokenRedeem` log's `tx.to` is the router `0x7E7A…`. Don't filter origin volume by `tx.to == bridge`.
 5. **Live bridge impl ≠ repo impl** (§7.1). Read `0x5b00…005b` from the slot; the per-chain `_Implementation.json` addresses are stale decoys.
-6. **`*AndSwap`/`*AndRemove` minter functions are gone from the current impl**, but their *event topics* are still defined and historical logs exist. Index the eight bridge topics for backfill; expect only the plain `TokenMint`/`TokenWithdraw` (+ origin `TokenDeposit`/`TokenRedeem`) going forward.
+6. **`*AndSwap`/`*AndRemove` minter functions are gone from the current impl**, but their *event topics* are still defined and historical logs exist. Index the ten bridge topics for backfill; expect only the plain `TokenMint`/`TokenWithdraw` (+ origin `TokenDeposit`/`TokenRedeem`, or the adapter's `TokenSent`) going forward.
 7. **`TokenSwap` (`0xc6c1…f8a36`) is a generic Saddle topic** shared by every Saddle/StableSwap fork — filter on `(chainId, pool address)`. Pools are 45-byte **EIP-1167 clones**; the clone, not the master, is the emitter.
 8. **`SynapseRouter`/`SynapseCCTPRouter` are the SAME literal address on every chain that has them** — always key on `(chainId, address)` to avoid cross-chain confusion; the bridge proxy is the only per-chain-unique core address.
 9. **Chain absences are real:** **no FastBridge on Avalanche or Polygon**; **no SynapseCCTP on BNB**; **no L2BridgeZap on Base**; **no nETH market on BNB/Polygon**; **no nUSD pool on Base**. Each is `0x` on `eth_getCode` (verified), not an indexing miss.
 10. **Out-of-set destination chainIds are valid** (§5) — Synapse spans ~25 chains; an inner `chainId` of e.g. 250 (Fantom) or 81457 (Blast) in a `TokenDeposit` is a genuine bridge leg to a chain outside the seven.
 11. **Replay/pause watch:** the bridge is **pausable** (`Paused`/`Unpaused` topics, `pause()` `0x8456cb59`) and has `setChainGasAmount` + `withdrawFees` admin functions — monitor `Upgraded`, `AdminChanged`, `RoleGranted`, `Paused`, and `withdrawFees` as security signals on each proxy.
 12. **`nUSD` ERC-20 on Ethereum is a 45-byte clone too** (`0x1B84…dE4F`) — it is the nexus LP-style token, not a full ERC-20 deploy; reading its `Transfer` works normally but its code is a clone.
+13. **The adapter path has no bridge event on the source chain.** `bridgeERC20` (`0xa811504f`) on `0x5Ba000Bb06230E0582e111F08e1f2F2F200005BA` burns the token from the user (MintBurn tokens: an ERC-20 `Transfer` user → `0x0`) or moves it straight into the local SynapseBridge proxy (WithdrawDeposit tokens: a `Transfer` user → bridge). The only Synapse log is `TokenSent` (`0xe24e6284bb4ec2f5820189573deff7603191eb850be5a872ac3b72d477cdc58d`). A monitor keyed on `TokenDeposit`/`TokenRedeem` sees no source leg: in the pinned window of 2026-09-28 those had 0 logs on all eight chains, while `TokenSent` had 12 on the seven chains. `msg.value` of `bridgeERC20` is the LayerZero fee, not bridged value.
+14. **On the destination, `TokenReceived` + `TokenMint`/`TokenWithdraw` share one transaction and one id.** The adapter calls `mint`/`withdraw` with `fee = 0` and `kappa = guid`, then emits `TokenReceived(srcEid, to, token, amount, guid)`. Count the value once: `TokenMint`/`TokenWithdraw` is the bridge's record of the same payout.
+15. **`dstEid`/`srcEid` are LayerZero endpoint ids, not chain ids:** Ethereum 30101, BNB 30102, Avalanche 30106, Polygon 30109, Arbitrum 30110, Optimism 30111, Base 30184 (see [`../layerzero/v2.md`](../layerzero/v2.md)). Samples: an Ethereum `TokenSent` with `dstEid` 30110 (Arbitrum); an Ethereum `TokenReceived` with `srcEid` 30184 (Base).
+16. **Adapter admin signals:** `PeerSet` (a new trusted remote adapter for an eid), `TokenAdded` (a new route or token pair) and `OwnershipTransferred` on the adapter; the adapter is immutable, so there is no `Upgraded` to watch on it. The adapter holds `NODEGROUP_ROLE` (`0xb5c00e6706c3d213edd70ff33717fac657eacc5fe161f07180cf1fcab13cc4cd`) on the SynapseBridge proxy (`hasRole` read live on Ethereum, 2026-09-29): a `RoleGranted`/`RoleRevoked` for that role changes who can mint and release.
+17. **Robinhood Chain (4663) has no Synapse contract** (§4.7). A `TokenSent.dstEid` or `TokenDeposit.chainId` never points to it today.
 
 ---
 
@@ -357,6 +419,7 @@ The `synapse-contracts` repo records a *different* per-chain `SynapseBridge_Impl
 -- ===== SynapseBridge event topics (chain-agnostic) =====
 TOPIC_TOKEN_DEPOSIT             = '\xda5273705dbef4bf1b902a131c2eac086b7e1476a8ab0cb4da08af1fe1bd8e3b'
 TOPIC_TOKEN_REDEEM             = '\xdc5bad4651c5fbe9977a696aadc65996c468cde1448dd468ec0d83bf61c4b57c'
+TOPIC_TOKEN_REDEEM_V2          = '\x8e57e8c5fea426159af69d47eda6c5052c7605c9f70967cf749d4aa55b70b499'
 TOPIC_TOKEN_MINT               = '\xbf14b9fde87f6e1c29a7e0787ad1d0d64b4648d8ae63da21524d9fd0f283dd38'
 TOPIC_TOKEN_WITHDRAW           = '\x8b0afdc777af6946e53045a4a75212769075d30455a212ac51c9b16f9c5c9b26'
 TOPIC_TOKEN_DEPOSIT_AND_SWAP   = '\x79c15604b92ef54d3f61f0c40caab8857927ca3d5092367163b4562c1699eb5f'
@@ -379,6 +442,13 @@ TOPIC_ADMIN_CHANGED            = '\x7e644d79422f17c01e4894b5f4f588d331ebfa28653d
 TOPIC_PAUSED                   = '\x62e78cea01bee320cd4e420270b5ea74000d11b0c9f74754ebdbfc544b05a258'
 TOPIC_UNPAUSED                 = '\x5db9ee0a495bf2e6ff9c91a7834c1ba4fdd244a5e8aa4e537bd38aeae4b073aa'
 TOPIC_ROLE_GRANTED             = '\x2f8788117e7eff1d82e926ec794901d17c78024a50270940304540a733656f0d'
+-- ===== SynapseBridgeAdapter (LayerZero V2 path) =====
+TOPIC_SBA_TOKEN_SENT           = '\xe24e6284bb4ec2f5820189573deff7603191eb850be5a872ac3b72d477cdc58d'
+TOPIC_SBA_TOKEN_RECEIVED       = '\xdacad4857568b1be1bc81a68218d331a0b5cb59e116a32d2121cb960c6c7f4f5'
+TOPIC_SBA_BRIDGE_SET           = '\xa49730bff544fd0b716395c592e39c6fd2d2481a19b9229b5b240483db95a495'
+TOPIC_SBA_TOKEN_ADDED          = '\x704ec8f592a58838b2937e7bddea11f797098b397e89b4651afccd08b7e33f9c'
+TOPIC_SBA_PEER_SET             = '\x238399d427b947898edb290f5ff0f9109849b1c3ba196a42e35f00c50a54b98b'
+TOPIC_OWNERSHIP_TRANSFERRED    = '\x8be0079c531659141344cd1fd0a4f28419497f9722a3daafe3b4186f6b6457e0'
 
 -- ===== SynapseBridge selectors =====
 SEL_DEPOSIT                    = '\x90d25074'
@@ -404,9 +474,19 @@ SEL_POOL_SWAP                  = '\x91695586'
 SEL_POOL_CALCULATE_SWAP        = '\xa95b089f'
 SEL_POOL_ADD_LIQUIDITY         = '\x4d49e87d'
 SEL_POOL_REMOVE_LIQUIDITY_ONE  = '\x3e3a1560'
+SEL_POOL_GET_TOKEN             = '\x82b86600'
+SEL_POOL_GET_TOKEN_INDEX       = '\x66c0bd24'
 -- ===== SynapseCCTP selectors =====
 SEL_SEND_CIRCLE_TOKEN          = '\x304ddb4c'
 SEL_RECEIVE_CIRCLE_TOKEN       = '\x4a5ae51d'
+-- ===== SynapseBridgeAdapter selectors =====
+SEL_SBA_BRIDGE_ERC20           = '\xa811504f'
+SEL_SBA_LZ_RECEIVE             = '\x13137d65'
+SEL_SBA_GET_NATIVE_FEE         = '\x1c3eab28'
+SEL_SBA_BRIDGE                 = '\xe78cea92'
+SEL_SBA_ADD_TOKEN              = '\x4099dba0'
+SEL_SBA_SET_BRIDGE             = '\x8dd14802'
+SEL_SBA_SET_PEER               = '\x3400288b'
 -- ===== Proxy slots =====
 EIP1967_IMPL_SLOT              = '\x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc'
 EIP1967_ADMIN_SLOT             = '\xb53127684a568b3173ae13b9f8a6016e243e63b6e8ee1178d6a717850b5d6103'
@@ -416,6 +496,17 @@ SYNAPSE_ROUTER_ALL_CHAINS      = '\x7e7a0e201fd38d3adaa9523da6c109a07118c96a'   
 SYNAPSE_BRIDGE_IMPL_ALL_CHAINS = '\x5b0000258c622551a1c7c45b9f860ef90200005b'   -- shared live impl on all 7
 SYNAPSE_CCTP_ROUTER            = '\xd5a597d6e7ddf373a92c8f477daaa673b0902f48'   -- 6/7 (not BNB)
 FAST_BRIDGE_RFQ                = '\x5523d3c98809dddb82c686e152f5c58b1b0fb59e'   -- 5/7 (not Avax/Polygon)
+SYNAPSE_BRIDGE_ADAPTER         = '\x5ba000bb06230e0582e111f08e1f2f2f200005ba'   -- same on all 7; none on Robinhood
+LZ_ENDPOINT_V2                 = '\x1a44076050125825900e736c501f859c50fe728c'   -- the adapter's endpoint on all 7
+ETH_SYNAPSE_BRIDGE_ADAPTER     = '\x5ba000bb06230e0582e111f08e1f2f2f200005ba'
+BASE_SYNAPSE_BRIDGE_ADAPTER    = '\x5ba000bb06230e0582e111f08e1f2f2f200005ba'
+ARB_SYNAPSE_BRIDGE_ADAPTER     = '\x5ba000bb06230e0582e111f08e1f2f2f200005ba'
+OP_SYNAPSE_BRIDGE_ADAPTER      = '\x5ba000bb06230e0582e111f08e1f2f2f200005ba'
+POLY_SYNAPSE_BRIDGE_ADAPTER    = '\x5ba000bb06230e0582e111f08e1f2f2f200005ba'
+BNB_SYNAPSE_BRIDGE_ADAPTER     = '\x5ba000bb06230e0582e111f08e1f2f2f200005ba'
+AVAX_SYNAPSE_BRIDGE_ADAPTER    = '\x5ba000bb06230e0582e111f08e1f2f2f200005ba'
+ETH_SBA_OWNER_SAFE             = '\x67f60b0891ebd842ebe55e4ccca1098d7aac1a55'   -- 2-of-3 Safe
+-- Robinhood Chain (4663): no Synapse contract; every address of this block returns 0x there
 
 -- ===== SynapseBridge proxy (per chain) =====
 ETH_BRIDGE                     = '\x2796317b0ff8538f253012862c06787adfb8ceb6'
@@ -472,7 +563,22 @@ How every constant was verified (2026-06-09):
 - **Addresses:** parsed from the `synapsecns/synapse-contracts` `deployments/<chain>/*.json` files and the `synapsecns/sanguine` `packages/sdk-router/src/constants/addresses.ts` maps, then **existence-checked via `eth_getCode`** on each chain's publicnode RPC. Non-empty = present; `0x` recorded as not-deployed (FastBridge on Avax/Polygon, CCTP on BNB, L2BridgeZap on Base, nETH on BNB/Polygon, nUSD pool on Base).
 - **Proxies:** the EIP-1967 impl + admin slots were read live via `eth_getStorageAt` on all 7 bridge proxies — every one returned impl `0x5b0000258c…00005b` (the shared CREATE2 impl, contradicting the repo `_Implementation.json`) and a per-chain `ProxyAdmin` in the admin slot. SynapseRouter/CCTPRouter/zaps returned an empty impl slot (immutable); SwapFlashLoan pools are 45-byte EIP-1167 clones with an empty slot and a hard-coded master (`0x363d3d373d3d3d363d73<master>5af43d…`, ETH master `0x5A5f…1655`).
 
+Additions of 2026-09-29:
+
+- **`TokenRedeemV2`:** the event line `event TokenRedeemV2(bytes32 indexed to, uint256 chainId, IERC20 token, uint256 amount);` read from `contracts/bridge/SynapseBridge.sol`; topic0 recomputed as `keccak256("TokenRedeemV2(bytes32,uint256,address,uint256)")`.
+- **Pool selectors:** `getToken(uint8)` is `0x82b86600` and `getTokenIndex(address)` is `0x66c0bd24` (recomputed). The earlier row paired `0x66c0bd24` with `getToken(uint8)`; that was wrong and is corrected in §2.5. Both selectors answered live `eth_call`s on the Ethereum nUSD pool `0x1116898DdA4015eD8dDefb84b6e8Bc24528Af2d8`.
+- **SynapseBridgeAdapter:** source `packages/contracts-adapter/src/SynapseBridgeAdapter.sol` and `src/interfaces/ISynapseBridgeAdapter.sol` in `synapsecns/sanguine`; every topic0 and selector of §1.6 and §2.8 recomputed with `keccak256`. The address and the constructor arguments (EndpointV2 `0x1a44076050125825900e736c501f859c50fE728c`, deployer-owner `0x0fea3e5840334Fc758A3DECf14546bFdfBef5cd3`) come from `deployments/<chain>/SynapseBridgeAdapter.json` for ethereum, base, arbitrum, optimism, polygon, bnb and avalanche. `eth_getCode` on all 8 chains: 10,604 bytes with one code hash on the 7, `0x` on Robinhood Chain; EIP-1967 slot empty. `bridge()` and `owner()` read live on the 7 (§4). Etherscan shows the contract as verified, name `SynapseBridgeAdapter`.
+- **Measured activity** (pinned 12-hour window 2026-09-28 00:00–12:00 UTC, all emitters of each topic0):
+  - SynapseBridge `TokenMint`: Ethereum 0, Base 0, Arbitrum 1, Optimism 1, Polygon 1, BNB 0, Avalanche 4, Robinhood 0.
+  - SynapseBridge `TokenWithdraw`: Ethereum 4, Avalanche 1, all others 0.
+  - `TokenDeposit`, `TokenRedeem`, `TokenRedeemV2` and the `*AndSwap`/`*AndRemove` topics: 0 on all eight chains.
+  - Adapter `TokenSent` at `0x5Ba000Bb06230E0582e111F08e1f2F2F200005BA`: Ethereum 1, Base 1, Arbitrum 4, Optimism 0, Polygon 1, BNB 0, Avalanche 5 (12 in total).
+  - Adapter `TokenReceived`: Ethereum 4, Base 0, Arbitrum 1, Optimism 1, Polygon 1, BNB 0, Avalanche 5. Each chain's count equals its `TokenMint` + `TokenWithdraw` count.
+- **Sample transactions** (read with `eth_getTransactionReceipt`): Ethereum `0xdad3fb07a6a5fa074306012d3f60037639a11d845b538c57ecd6eae346fcd543` (the LayerZero executor calls in; the bridge emits `TokenWithdraw` and moves the token from the bridge to the recipient; the adapter emits `TokenReceived` with `srcEid` 30184; EndpointV2 emits `PacketDelivered`); Avalanche `0xb26c0ce1e5af3ad71448113c0aefffcab0ffc54fade45318b781ab428b3f82e4` (`TokenMint`: a mint from `0x0` to the bridge, then a transfer from the bridge to the recipient, then `TokenReceived`); Ethereum `0xfddcc9841ca69b934e99b7f8aaccbe7a608ec72242d19b421f691cf2d979d432` (`bridgeERC20` with a LayerZero fee in `msg.value`, a burn of the token from the user to `0x0`, `PacketSent`, then `TokenSent` with `dstEid` 30110).
+- **Robinhood Chain:** §4.7 lists the addresses read with `eth_getCode` (all `0x`, nonce 0) and the official lists checked.
+
 Authoritative sources:
-- Canonical repos: [`synapsecns/synapse-contracts`](https://github.com/synapsecns/synapse-contracts) (`deployments/`, `contracts/bridge/`) · [`synapsecns/sanguine`](https://github.com/synapsecns/sanguine) (`packages/sdk-router`, `packages/contracts-rfq`).
+- Canonical repos: [`synapsecns/synapse-contracts`](https://github.com/synapsecns/synapse-contracts) (`deployments/`, `contracts/bridge/`) · [`synapsecns/sanguine`](https://github.com/synapsecns/sanguine) (`packages/sdk-router`, `packages/contracts-rfq`, [`packages/contracts-adapter`](https://github.com/synapsecns/sanguine/tree/master/packages/contracts-adapter), [`sdk-router/src/constants/chainIds.ts`](https://github.com/synapsecns/sanguine/blob/master/packages/sdk-router/src/constants/chainIds.ts)).
+- Explorer: [Etherscan SynapseBridgeAdapter](https://etherscan.io/address/0x5ba000bb06230e0582e111f08e1f2f2f200005ba).
 - Docs: [Synapse contract addresses](https://docs.synapseprotocol.com/reference/contract-addresses) · [SynapseRouter docs](https://docs.synapseprotocol.com/docs/Routers/Synapse-Router/) · [SynapseBridge.md](https://github.com/synapsecns/synapse-contracts/blob/master/docs/bridge/SynapseBridge.md).
 - Explorers: [Etherscan SynapseBridge](https://etherscan.io/address/0x2796317b0ff8538f253012862c06787adfb8ceb6) · [Blockscan multichain](https://blockscan.com/Address/0x2796317b0ff8538f253012862c06787adfb8ceb6).

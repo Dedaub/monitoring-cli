@@ -30,7 +30,7 @@ PROTOCOLS = (
 )
 INDEX = PROTOCOLS / "INDEX.md"
 
-# The seven target chains, and how a per-chain heading names each one. Both
+# The eight target chains, and how a per-chain heading names each one. Both
 # halves must match in the SAME heading: "polygon" alone appears in prose all
 # over these files, and a bare "137" matches any number.
 CHAIN_HEADING = {
@@ -41,7 +41,12 @@ CHAIN_HEADING = {
     "Arb": (r"arbitrum", r"42161"),
     "OP": (r"optimism", r"\b10\b"),
     "Poly": (r"polygon", r"137"),
+    "Robin": (r"robinhood", r"4663"),
 }
+
+# The legend's `7`: the seven chains the index started with. Robinhood Chain
+# came later, so a row names it explicitly (`Robin`) in addition to a `7`.
+SEVEN = {"ETH", "Base", "BNB", "Avax", "Arb", "OP", "Poly"}
 
 # A heading that documents an ABSENCE. Its section may still quote the address
 # it checked and found empty, so the address test alone is not enough.
@@ -64,14 +69,15 @@ def index_rows() -> dict[str, str]:
 
 
 def chains_claimed(cell: str) -> set[str]:
-    """The legend's `7` means all seven; otherwise the codes present."""
-    if re.search(r"(?<![\w.])7(?![\w.])", cell):
-        return set(CHAIN_HEADING)
-    return {
+    """The codes present, plus the seven of the legend's `7`."""
+    codes = {
         code
         for code in CHAIN_HEADING
         if re.search(rf"(?<![A-Za-z]){code}(?![A-Za-z])", cell)
     }
+    if re.search(r"(?<![\w.])7(?![\w.])", cell):
+        codes |= SEVEN
+    return codes
 
 
 def sections(text: str):
@@ -118,3 +124,11 @@ def test_the_index_covers_every_protocol_directory() -> None:
     """A directory with no row is invisible to the lookup that exists to find it."""
     dirs = {p.name for p in PROTOCOLS.iterdir() if p.is_dir()}
     assert not dirs - set(index_rows())
+
+
+def test_the_legend_seven_does_not_claim_robinhood() -> None:
+    """`7` predates Robinhood Chain, so only an explicit `Robin` claims it."""
+    assert chains_claimed("7 +Other (Gnosis)") == SEVEN
+    assert chains_claimed("7 · Robin") == SEVEN | {"Robin"}
+    assert chains_claimed("ETH·Base·Robin") == {"ETH", "Base", "Robin"}
+    assert chains_claimed("ETH +Other (Robinhood L3)") == {"ETH"}

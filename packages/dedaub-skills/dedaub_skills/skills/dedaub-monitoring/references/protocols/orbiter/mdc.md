@@ -110,6 +110,8 @@ State-changing setters mirror their events (e.g. `ORManager.updateChainInfo*`, `
 | **ORManager / ORFeeManager / ORSpvData** | Upgradeable (Hardhat deploy scripts use upgradeable patterns) | EIP-1967 impl slot `0x3608…2bbc` should be read live once an address is known; watch `Upgraded(address)` (`0xbc7cd75a20ee27fd9adebab32041f755214dbc6bffa90cc0225b39da2e5c2d3b`). |
 | **OrbiterXRouter / OPool / Maker EOAs** | (separate — [core.md](./core.md)) | Not part of this framework. |
 
+**Chain coverage (2026-09-29):** no MDC address is published for any of the eight target chains, so presence cannot be checked by address. Robinhood Chain (4663) is not an Orbiter-supported chain, and no Orbiter contract or maker has code or a nonce there ([core.md](./core.md) §10); treat the framework as absent on Robinhood Chain.
+
 ---
 
 ## 4. Detection invariants & gotchas

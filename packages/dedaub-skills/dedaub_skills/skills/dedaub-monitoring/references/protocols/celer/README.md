@@ -1,11 +1,11 @@
 # Celer cBridge / IM — Reference Index
 
-Monitoring-grade on-chain reference for the Celer cross-chain stack (the `celer-network/sgn-v2-contracts` deployment). Verified against live RPC on Ethereum, BNB, Avalanche, Arbitrum, Optimism, Polygon, and Base, plus the canonical repo, on 2026-06-09.
+Monitoring-grade on-chain reference for the Celer cross-chain stack (the `celer-network/sgn-v2-contracts` deployment). Verified against live RPC on Ethereum, BNB, Avalanche, Arbitrum, Optimism, Polygon, and Base, plus the canonical repo, on 2026-06-09. Re-checked on 2026-09-29 on all eight target chains, Robinhood Chain (4663) included, against the official cBridge and Celer IM contract lists.
 
-| File | Component / generation | Pattern | Chains present (of the 7 targets) | Status |
+| File | Component / generation | Pattern | Chains present (of the 8 targets) | Status |
 |------|------------------------|---------|-----------------------------------|--------|
-| [core.md](./core.md) | **Liquidity-pool cBridge** (`Bridge`/`Pool`) + **Celer IM `MessageBus`** | Bridge = immutable singleton; MessageBus = Transparent EIP-1967 proxy | Bridge: ETH, BNB, Avax, Arb, OP, Polygon, **Base** (all 7). MessageBus: same 6 **minus Base** | Active |
-| [pegged.md](./pegged.md) | **Pegged-token bridge** — `OriginalTokenVault`/`V2` (lock) + `PeggedTokenBridge`/`V2` (mint/burn) | All four immutable singletons (no proxy) | ETH, BNB, Avax, Arb, OP, Polygon (**NOT Base**) | Live but low-volume / winding down |
+| [core.md](./core.md) | **Liquidity-pool cBridge** (`Bridge`/`Pool`) + **Celer IM `MessageBus`** | Bridge = immutable singleton; MessageBus = Transparent EIP-1967 proxy | Bridge: ETH, BNB, Avax, Arb, OP, Polygon, **Base** (7 of 8). MessageBus: same 6 **minus Base**. **Robinhood Chain: none** | Active |
+| [pegged.md](./pegged.md) | **Pegged-token bridge** — `OriginalTokenVault`/`V2` (lock) + `PeggedTokenBridge`/`V2` (mint/burn) + `TransferAgent` (front door) | All immutable singletons (no proxy) | ETH, BNB, Avax, Arb, OP, Polygon (all four contracts); **Base: PeggedTokenBridgeV2 only**; TransferAgent: ETH, BNB. **Robinhood Chain: none** | Live but low-volume / winding down |
 
 ## Cross-cutting facts
 
@@ -16,4 +16,6 @@ Monitoring-grade on-chain reference for the Celer cross-chain stack (the `celer-
 - **No events are `indexed`-rich.** `Send`/`Relay`/`Deposited`/`Withdrawn`/`Mint`/`Burn` carry all params in `data` (topics length 1). `MessageBus` `Message`/`Executed` index only `sender`/`receiver`. Filter `(address, topic0)` then ABI-decode.
 - **Address-literal reuse across chains (NOT CREATE2 vanity).** Several literals name *different contracts* on different chains (e.g. `0x88DCDC47…` = Polygon Bridge AND Avalanche PeggedTokenBridge; `0x5427…1820` = Ethereum Bridge AND Avalanche OriginalTokenVault v1, while the Avalanche Bridge is the different literal `0xef3c714c…e5d4`). **Always key on `(chainId, address)`.**
 - **Governance:** `Bridge.owner()` on ETH and Base = `0xf380166f8490f24af32bf47d1aa217fba62b6575`; `MessageBus` upgraded by a per-chain `ProxyAdmin` (see core.md §11).
-- **Counterparty chains beyond the 7.** Celer also runs cBridge/MessageBus on Linea (MessageBus `0x6F2bD3De…`), Polygon zkEVM (`0x9Bb46D51…`), zkSync Era (`0x9a98a376…`), and many more, plus non-EVM peg routes (Aptos, Sui, etc.). A `Send`/`Burn` with a `dstChainId`/`toChainId` outside {1, 56, 137, 43114, 42161, 10, 8453} is a valid out-of-scope route, not an anomaly.
+- **Robinhood Chain (4663): no Celer deployment.** Not in the official cBridge or Celer IM lists; `eth_getCode` returns `0x` at every Celer literal of both files and at the pool-Bridge literals Celer reuses on other chains (checked 2026-09-29).
+- **Base carries a pegged contract.** The official cBridge list names the Base PeggedTokenBridgeV2 `0x5471ea8f739dd37E9B81Be9c5c77754D8AA953E4`; an earlier revision of these files said Base had no pegged contract.
+- **Counterparty chains beyond the 8.** Celer also runs cBridge/MessageBus on Linea (MessageBus `0x6F2bD3Dec1A8c4459c2acC318881F63A048c7c28`), Polygon zkEVM (`0x9Bb46D5100d2Db4608112026951c9C965b233f4D`), zkSync Era (`0x9a98a376D30f2c9A0A7332715c15D940dE3da0e2`), and many more (addresses from the official Celer IM contract list), plus non-EVM peg routes (Aptos, Sui, etc.). A `Send`/`Burn` with a `dstChainId`/`toChainId` outside {1, 56, 137, 43114, 42161, 10, 8453} is a valid out-of-scope route, not an anomaly.

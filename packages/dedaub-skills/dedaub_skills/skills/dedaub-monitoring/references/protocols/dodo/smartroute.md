@@ -191,7 +191,7 @@ This variant adds an `expReturnAmount` param to each swap function and emits `Po
 
 | Selector | Signature |
 |----------|-----------|
-| `0x2fa11647` | `externalSwap(address, address, address, address, uint256, uint256 expReturnAmount, bytes, bytes, uint256)` |
+| `0x2fa11647` | `externalSwap(address, address, address, address, uint256, uint256 expReturnAmount, uint256 minReturnAmount, bytes, bytes, uint256)` |
 | `0xff84aafa` | `mixSwap(address, address, uint256, uint256 expReturnAmount, uint256, address[], address[], address[], uint256, bytes[], bytes, uint256)` |
 | `0x79b6f086` | `dodoMutliSwap(uint256, uint256 expReturnAmount, uint256, uint256[], address[], address[], bytes[], bytes, uint256)` |
 

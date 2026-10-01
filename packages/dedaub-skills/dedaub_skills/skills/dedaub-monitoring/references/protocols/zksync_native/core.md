@@ -1,13 +1,13 @@
 # zkSync Era Native Bridge (Elastic Chain) — Topics, Selectors, Addresses (Ethereum L1 ↔ zkSync Era L2)
 
-**Status:** verified against live RPC on Ethereum (1), zkSync Era L2 (324) and all six other requested chains, and against the canonical `matter-labs/era-contracts` repo + official ZKsync docs, on 2026-06-09.
+**Status:** verified against live RPC on Ethereum (1), zkSync Era L2 (324) and all six other requested chains, and against the canonical `matter-labs/era-contracts` repo + official ZKsync docs, on 2026-06-09. Extended on 2026-09-29: the diamonds of six more ZK chains on the same Bridgehub (§3.4), the legacy `EthWithdrawalFinalized` topic (§1.1), two corrected request selectors (§2.1, §2.2), and the Robinhood Chain (4663) check (§6).
 **Scope:** the native (canonical) ZKsync bridge — the Elastic-Chain ecosystem stack: the **BridgeHub** entry point, the **ZKsync Era DiamondProxy** (EIP-2535: Mailbox / Executor / Getters / Admin facets), the **L1AssetRouter** (the contract formerly named `L1SharedBridge`), the **L1Nullifier** (the renamed legacy SharedBridge), the **L1NativeTokenVault**, the legacy **L1ERC20Bridge**, the **ChainTypeManager** (formerly `StateTransitionManager`), **MessageRoot**, **ValidatorTimelock**, **Governance** and the proxy admins. Event topics and function selectors are **chain-agnostic**; addresses are **network-specific**. The user requested presence on Ethereum, Base, BNB, Avalanche, Arbitrum One, Optimism, Polygon. **The entire native bridge is anchored on Ethereum L1 (chain 1) of the seven.** Base, BNB, Avalanche, Arbitrum, Optimism and Polygon carry **none** of these contracts (`eth_getCode` = `0x` for every L1 address — §6). The L2 counterparty is **zkSync Era (chain 324), which is outside the seven** — its L2 system contracts are documented in §5 as a recorded finding.
 
 > The tracker slug had a typo ("zkync_native"); this is **zkSync Era** (ZK Stack / Elastic Network).
 
-ZKsync's L1 contracts are a mix of **two proxy patterns**: the Era chain itself is an **EIP-2535 Diamond** (`DiamondProxy`, dispatch by `facets()`), while the ecosystem contracts (BridgeHub, AssetRouter, Nullifier, NativeTokenVault, ChainTypeManager, L1ERC20Bridge) are **OpenZeppelin `TransparentUpgradeableProxy`** instances all sharing one `ProxyAdmin` (`0xc2a3…2cf1`). There is **no CREATE2 vanity / no per-token instances** — one fixed singleton per role. The Era DiamondProxy carries a famous vanity tail: `0x32400084…a000324` (the `…000324` suffix = chain id 324). Base-token for Era is **ETH** (`baseToken(324) = address(1)`), so most flows are ETH bridging.
+ZKsync's L1 contracts are a mix of **two proxy patterns**: the Era chain itself is an **EIP-2535 Diamond** (`DiamondProxy`, dispatch by `facets()`), while the ecosystem contracts (BridgeHub, AssetRouter, Nullifier, NativeTokenVault, ChainTypeManager, L1ERC20Bridge) are **OpenZeppelin `TransparentUpgradeableProxy`** instances all sharing one `ProxyAdmin` (`0xC2a36181fB524a6bEfE639aFEd37A67e77d62cf1`). There is **no CREATE2 vanity / no per-token instances** — one fixed singleton per role. The Era DiamondProxy carries a famous vanity tail: `0x32400084C286CF3E17e7B677ea9583e60a000324` (the `…000324` suffix = chain id 324). Base-token for Era is **ETH** (`baseToken(324) = address(1)`), so most flows are ETH bridging.
 
-The architecture turned over in the **Gateway / v26 upgrade**: the old `L1SharedBridge` was split into **L1AssetRouter** (active routing, asset-id based) + **L1Nullifier** (replay/finalization ledger, the contract that kept the old `0xD7f9…` address), and a **L1NativeTokenVault** now escrows token balances. The legacy `L1ERC20Bridge` (`0x5789…`) is **still deployed but dormant** — new ERC-20 deposits route through the AssetRouter; it had **0 logs** in a 5k-block window. Internalize that before indexing: the live deposit/withdraw events fire on the **AssetRouter / NativeTokenVault / DiamondProxy**, not the legacy bridge.
+The architecture turned over in the **Gateway / v26 upgrade**: the old `L1SharedBridge` was split into **L1AssetRouter** (active routing, asset-id based) + **L1Nullifier** (replay/finalization ledger, the contract that kept the old `0xD7f9f54194C633F36CCD5F3da84ad4a1c38cB2cB` address), and a **L1NativeTokenVault** now escrows token balances. The legacy `L1ERC20Bridge` (`0x57891966931eb4bb6fb81430e6ce0a03aabde063`) is **still deployed but dormant** — new ERC-20 deposits route through the AssetRouter; it had **0 logs** in a 5k-block window. Internalize that before indexing: the live deposit/withdraw events fire on the **AssetRouter / NativeTokenVault / DiamondProxy**, not the legacy bridge.
 
 ---
 
@@ -20,7 +20,9 @@ The architecture turned over in the **Gateway / v26 upgrade**: the old `L1Shared
 | **Asset bridging** | L1AssetRouter (ex-L1SharedBridge), L1Nullifier (ex-SharedBridge ledger), L1NativeTokenVault, L1ERC20Bridge (legacy) | ETH + ERC-20 deposits/withdrawals, token escrow, withdrawal finalization/replay-protection | Transparent proxies |
 | **Operations / governance** | ValidatorTimelock, ChainAdmin, Governance, ProxyAdmin | Batch-execution delay, per-chain admin, protocol upgrades, proxy upgrade auth | Mixed (timelock, multisig-owned, custom Governance) |
 
-One continuously-upgraded generation. The live Era **protocol version is `0x1d00000004`** (= packed major.minor.patch `0.29.4`) read live from `getProtocolVersion()`. Hence one `core.md`.
+One continuously-upgraded generation. The live Era **protocol version is `0x1d00000004`** (= packed major.minor.patch `0.29.4`) read live from `getProtocolVersion()`. Hence one `core.md`. *(Update 2026-09-29: `getProtocolVersion()` now returns `0x1e00000001` = `0.30.1` on Era and on the six ZK chains of §3.4; the facet addresses of §3.1 still answer `facetAddress` for the Mailbox and Getters selectors.)*
+
+**Every ZK chain has its own DiamondProxy, but all of them share the ecosystem contracts.** Abstract, GRVT, Lens, Sophon and more (§3.4) settle through the same BridgeHub, L1AssetRouter, L1NativeTokenVault and L1Nullifier as Era. Their deposits emit `NewPriorityRequest` on their own diamond and `BridgehubDeposit*`/`BridgeBurn` on the shared contracts, with the chain id in the indexed `chainId` topic.
 
 ---
 
@@ -28,17 +30,20 @@ One continuously-upgraded generation. The live Era **protocol version is `0x1d00
 
 All values recomputed locally with keccak on 2026-06-09; each marked *(live)* was additionally confirmed against real `eth_getLogs` on the cited emitter on Ethereum.
 
-### 1.1 MailboxFacet (L1→L2 deposits / priority queue) — emitter = DiamondProxy `0x3240…0324`
+### 1.1 MailboxFacet (L1→L2 deposits / priority queue) — emitter = DiamondProxy `0x32400084C286CF3E17e7B677ea9583e60a000324`
 
 | topic0 | Event |
 |--------|-------|
 | `0x4531cd5795773d7101c17bdeb9f5ab7f47d7056017506f937083be5d6e77a382` | `NewPriorityRequest(uint256 txId, bytes32 txHash, uint64 expirationTimestamp, (uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256[4],bytes,bytes,uint256[],bytes,bytes) transaction, bytes[] factoryDeps)` *(live, 7 logs / 800 blk)* — **the canonical L1→L2 deposit / priority-tx event.** The tuple is the `L2CanonicalTransaction` struct (txType, from, to, gasLimit, gasPerPubdataByteLimit, maxFeePerGas, maxPriorityFeePerGas, paymaster, nonce, value, reserved[4], data, signature, factoryDeps[], paymasterInput, reservedDynamic). |
 | `0x779f441679936c5441b671969f37400b8c3ed0071cb47444431bf985754560df` | `NewPriorityRequestId(uint256 indexed txId, bytes32 indexed txHash)` *(live, 7 logs)* — fully-indexed companion to `NewPriorityRequest` (cheap to filter on `txHash`). |
 | `0x0137d2eaa6ec5b7e4f233f6d6f441410014535d0f3985367994c94bf15a2a564` | `NewRelayedPriorityTransaction(uint256 txId, bytes32 txHash, uint64 expirationTimestamp)` — relayed (Gateway settlement-layer) priority tx; not seen for direct ETH-settled Era. |
+| `0x26464d64ddb13f6d187de632d165bd1065382ec0b66c25c648957116e7bc25c8` | `EthWithdrawalFinalized(address indexed to, uint256 amount)` — **legacy (pre-shared-bridge) Era Mailbox payout event**, declared in the 2023 `IMailbox.sol`; the current facets do not declare it (ETH withdrawals now finalize through the L1Nullifier / AssetRouter, §1.5–§1.7). 0 logs at the Era diamond in the pinned 12-hour window of 2026-09-28; the last emission was not measured. Use it only for historical back-fill. |
 
-> `NewPriorityRequest` carries a **nested dynamic tuple with a fixed-size `uint256[4]` array** — its full canonical signature is the 17-field form above. The naive "ABI-named" form **will not hash to `0x4531cd57…`**; use the exact type string. `txHash` is the L2 canonical tx hash — the cross-chain attribution key, not `tx.from`.
+**The emitter is each chain's own diamond.** Besides Era, the same `NewPriorityRequest`/`NewPriorityRequestId` pair fires on the diamonds of §3.4 (pinned window 2026-09-28, Ethereum: Era 29, chain 1942323 12, chain 88629869 12, Abstract 5, GRVT 1, Lens 0, Sophon 0). It also fired 12 times each on three diamonds whose chain ids (5790, 61703, 51703, read with `getChainId()`) are **not** registered on this BridgeHub (`getZKChain` returns `0x0`): those belong to another ZK Stack ecosystem and are not listed here. Filter on the diamond addresses that `getZKChain(chainId)` returns.
 
-### 1.2 ExecutorFacet (L2→L1 batch lifecycle) — emitter = DiamondProxy `0x3240…0324`
+> `NewPriorityRequest` carries a **nested dynamic tuple with a fixed-size `uint256[4]` array** — its full canonical signature is the 17-field form above. The naive "ABI-named" form **will not hash to `0x4531cd5795773d7101c17bdeb9f5ab7f47d7056017506f937083be5d6e77a382`**; use the exact type string. `txHash` is the L2 canonical tx hash — the cross-chain attribution key, not `tx.from`.
+
+### 1.2 ExecutorFacet (L2→L1 batch lifecycle) — emitter = DiamondProxy `0x32400084C286CF3E17e7B677ea9583e60a000324`
 
 | topic0 | Event |
 |--------|-------|
@@ -50,7 +55,7 @@ All values recomputed locally with keccak on 2026-06-09; each marked *(live)* wa
 
 > Event names say **"Block"** but the params are **batchNumber** — ZKsync's nomenclature predates the block/batch rename; do not assume these are per-L2-block.
 
-### 1.3 AdminFacet (per-chain admin / freeze / upgrade) — emitter = DiamondProxy `0x3240…0324`
+### 1.3 AdminFacet (per-chain admin / freeze / upgrade) — emitter = DiamondProxy `0x32400084C286CF3E17e7B677ea9583e60a000324`
 
 | topic0 | Event |
 |--------|-------|
@@ -60,7 +65,7 @@ All values recomputed locally with keccak on 2026-06-09; each marked *(live)* wa
 | `0xca4f2f25d0898edd99413412fb94012f9e54ec8142f9b093e7720646a95b16a9` | `NewPendingAdmin(address oldPendingAdmin, address newPendingAdmin)` |
 | `0xf9ffabca9c8276e99321725bcb43fb076a6c66a54b7f21c4e8146d8519b417dc` | `NewAdmin(address oldAdmin, address newAdmin)` |
 
-### 1.4 BridgeHub (ecosystem registry / L1→L2 router) — emitter `0x303a…5213`
+### 1.4 BridgeHub (ecosystem registry / L1→L2 router) — emitter `0x303a465B659cBB0ab36eE643eA362c509EEb5213`
 
 | topic0 | Event |
 |--------|-------|
@@ -71,7 +76,7 @@ All values recomputed locally with keccak on 2026-06-09; each marked *(live)* wa
 
 > The BridgeHub does **not** re-emit `NewPriorityRequest`; that fires on the target chain's DiamondProxy. The BridgeHub routes the call (`requestL2TransactionDirect` / `requestL2TransactionTwoBridges`) into the chain.
 
-### 1.5 L1AssetRouter (ex-L1SharedBridge; active ERC-20/base-token routing) — emitter `0x8829…ce56`
+### 1.5 L1AssetRouter (ex-L1SharedBridge; active ERC-20/base-token routing) — emitter `0x8829AD80E425C646DAB305381ff105169FeEcE56`
 
 | topic0 | Event |
 |--------|-------|
@@ -84,15 +89,15 @@ All values recomputed locally with keccak on 2026-06-09; each marked *(live)* wa
 | `0x14c1bae9bcc3777747463b66a36584aa75e4ded1aa38089f447beecb125a2175` | `AssetDeploymentTrackerSet(bytes32 indexed assetId, address indexed assetDeploymentTracker, bytes32 indexed additionalData)` |
 | `0x31a15cb4f69820f57afabeaff74feae31dc25875c07c952ba742a3acf8690f91` | `BridgehubMintData(bytes bridgeMintData)` |
 
-### 1.6 L1Nullifier (ex-SharedBridge ledger; finalization / replay protection) — emitter `0xd7f9…b2cb`
+### 1.6 L1Nullifier (ex-SharedBridge ledger; finalization / replay protection) — emitter `0xD7f9f54194C633F36CCD5F3da84ad4a1c38cB2cB`
 
 | topic0 | Event |
 |--------|-------|
 | `0xe4def01b981193a97a9e81230d7b9f31812ceaf23f864a828a82c687911cb2df` | `BridgehubDepositFinalized(uint256 indexed chainId, bytes32 indexed txDataHash, bytes32 indexed l2DepositTxHash)` *(live, 5 logs)* — **same topic0 as the AssetRouter event in §1.5; disambiguate by emitter address.** |
 
-> The Nullifier holds the historical SharedBridge address `0xD7f9…b2cb` (the ZKsync docs still label this "Shared Bridge"). Functionally it is now the **withdrawal-finalization / nullifier ledger**; it is **not** the active router.
+> The Nullifier holds the historical SharedBridge address `0xD7f9f54194C633F36CCD5F3da84ad4a1c38cB2cBb2cb` (the ZKsync docs still label this "Shared Bridge"). Functionally it is now the **withdrawal-finalization / nullifier ledger**; it is **not** the active router.
 
-### 1.7 L1NativeTokenVault (token escrow) — emitter `0xbed1…11f6`
+### 1.7 L1NativeTokenVault (token escrow) — emitter `0xbeD1EB542f9a5aA6419Ff3deb921A372681111f6`
 
 | topic0 | Event |
 |--------|-------|
@@ -102,7 +107,7 @@ All values recomputed locally with keccak on 2026-06-09; each marked *(live)* wa
 
 † `TokenBeaconUpdated` topic0 recomputed from the interface signature; not observed in the sampled window (low-frequency admin event).
 
-### 1.8 L1ERC20Bridge (legacy, dormant) — emitter `0x5789…e063`
+### 1.8 L1ERC20Bridge (legacy, dormant) — emitter `0x57891966931eb4bb6fb81430e6ce0a03aabde063`
 
 | topic0 | Event |
 |--------|-------|
@@ -133,37 +138,39 @@ All values recomputed locally with keccak on 2026-06-09; each marked *(live)* wa
 
 All selectors below verified **present** in the live facet/proxy bytecode on 2026-06-09 (facet membership confirmed via the Diamond's `facets()` output).
 
-### 2.1 BridgeHub (`0x303a…5213`) — L1→L2 entry + registry
+### 2.1 BridgeHub (`0x303a465B659cBB0ab36eE643eA362c509EEb5213`) — L1→L2 entry + registry
 
 | Selector | Signature | Notes |
 |----------|-----------|-------|
-| `0xd52471c1` | `requestL2TransactionDirect((uint256,uint256,address,uint256,bytes,uint256,uint256,bytes[],address))` | Single-bridge L1→L2 request (ETH-base flows). |
-| `0x7827d314` | `requestL2TransactionTwoBridges((uint256,uint256,uint256,address,uint256,address,uint256,bytes))` | Two-bridge L1→L2 (token + base) request. |
+| `0xd52471c1` | `requestL2TransactionDirect((uint256 chainId, uint256 mintValue, address l2Contract, uint256 l2Value, bytes l2Calldata, uint256 l2GasLimit, uint256 l2GasPerPubdataByteLimit, bytes[] factoryDeps, address refundRecipient) request)` | Single-bridge L1→L2 request (ETH-base flows). Present in the live BridgeHub impl (PUSH4 scan, 2026-09-29). |
+| `0x24fd57fb` | `requestL2TransactionTwoBridges((uint256 chainId, uint256 mintValue, uint256 l2Value, uint256 l2GasLimit, uint256 l2GasPerPubdataByteLimit, address refundRecipient, address secondBridgeAddress, uint256 secondBridgeValue, bytes secondBridgeCalldata) request)` | Two-bridge L1→L2 (token + base) request; the struct is `L2TransactionRequestTwoBridgesOuter` of `IBridgehub.sol`. Present in the live BridgeHub impl; seen as the call of the Abstract deposit sample (§10). **Corrected on 2026-09-29:** an earlier row gave `0x7827d314` for an 8-field tuple; that selector is not in the live BridgeHub impl. |
 | `0x71623274` | `l2TransactionBaseCost(uint256,uint256,uint256,uint256)` → `uint256` | Base cost incl. chainId. |
-| `0xe680c4c1` | `getZKChain(uint256 chainId)` → `address` | **Era 324 → `0x3240…0324`** (verified). |
+| `0xe680c4c1` | `getZKChain(uint256 chainId)` → `address` | **Era 324 → `0x32400084C286CF3E17e7B677ea9583e60a000324`** (verified). |
 | `0xdead6f7f` | `getHyperchain(uint256 chainId)` → `address` | Legacy alias of `getZKChain`. |
 | `0x59ec65a2` | `baseToken(uint256 chainId)` → `address` | **Era → `address(1)` = ETH** (verified). |
-| `0xbc0aac10` | `assetRouter()` → `address` | → L1AssetRouter `0x8829…ce56`. |
-| `0x38720778` | `sharedBridge()` → `address` | back-compat getter, also returns `0x8829…ce56`. |
-| `0xd4b9f4fa` | `messageRoot()` → `address` | → `0x5ce9…b4ad`. |
-| `0x9d5bd3da` | `chainTypeManager(uint256 chainId)` → `address` | **Era → `0xc2ee…5f5c`** (verified). |
-| `0xcbe83612` | `l1CtmDeployer()` → `address` | → `0x6078…9860`. |
-| `0x8da5cb5b` | `owner()` → `address` | → Governance `0xe30d…5ab3`. |
-| `0xf851a440` | `admin()` → `address` | → ChainAdmin-style admin `0x2cf3…5063`. |
+| `0xbc0aac10` | `assetRouter()` → `address` | → L1AssetRouter `0x8829AD80E425C646DAB305381ff105169FeEcE56`. |
+| `0x38720778` | `sharedBridge()` → `address` | back-compat getter, also returns `0x8829AD80E425C646DAB305381ff105169FeEcE56`. |
+| `0xd4b9f4fa` | `messageRoot()` → `address` | → `0x5Ce9257755391D1509cD4eC1899d3F88A57BB4aD`. |
+| `0x9d5bd3da` | `chainTypeManager(uint256 chainId)` → `address` | **Era → `0xc2eE6b6af7d616f6e27ce7F4A451Aedc2b0F5f5C`** (verified). |
+| `0xcbe83612` | `l1CtmDeployer()` → `address` | → `0x6078F6B379f103de1Aa912dc46bb8Df0c8809860`. |
+| `0x8da5cb5b` | `owner()` → `address` | → Governance `0xE30Dca3047B37dc7d88849dE4A4Dc07937ad5Ab3`. |
+| `0xf851a440` | `admin()` → `address` | → ChainAdmin-style admin `0x2cf3bD6a9056b39999F3883955E183F655345063`. |
 
-### 2.2 MailboxFacet (Diamond `0x3240…0324`)
+### 2.2 MailboxFacet (Diamond `0x32400084C286CF3E17e7B677ea9583e60a000324`)
 
 | Selector | Signature | Notes |
 |----------|-----------|-------|
-| `0xd52471c1` | `requestL2TransactionDirect((uint256,uint256,address,uint256,bytes,uint256,uint256,bytes[],address))` | Emits `NewPriorityRequest`. |
-| `0x7827d314` | `requestL2TransactionTwoBridges((uint256,uint256,uint256,address,uint256,address,uint256,bytes))` | |
+| `0x12f43dab` | `bridgehubRequestL2Transaction((address sender, address contractL2, uint256 mintValue, uint256 l2Value, bytes l2Calldata, uint256 l2GasLimit, uint256 l2GasPerPubdataByteLimit, bytes[] factoryDeps, address refundRecipient) request)` | BridgeHub-only entry into the chain. Emits `NewPriorityRequest`. `facetAddress` = MailboxFacet (read 2026-09-29). |
+| `0xeb672419` | `requestL2Transaction(address _contractL2, uint256 _l2Value, bytes _calldata, uint256 _l2GasLimit, uint256 _l2GasPerPubdataByteLimit, bytes[] _factoryDeps, address _refundRecipient)` | Legacy direct Era entry (Mailbox). Emits `NewPriorityRequest`. `facetAddress` = MailboxFacet. |
 | `0x6c0960f9` | `finalizeEthWithdrawal(uint256,uint256,uint16,bytes,bytes32[])` | Claim an ETH withdrawal on L1. |
 | `0xb473318e` | `l2TransactionBaseCost(uint256,uint256,uint256)` → `uint256` | Per-chain base cost (3-arg, on the Diamond). |
 | `0xe4948f43` | `proveL2MessageInclusion(uint256,uint256,(uint16,address,bytes),bytes32[])` → `bool` | Merkle-prove an L2→L1 message. |
 | `0x263b7f8e` | `proveL2LogInclusion(uint256,uint256,(uint8,bool,uint16,address,bytes32,bytes32),bytes32[])` → `bool` | |
 | `0x042901c7` | `proveL1ToL2TransactionStatus(bytes32,uint256,uint256,uint16,bytes32[],uint8)` → `bool` | Used by `claimFailedDeposit`. |
 
-### 2.3 ExecutorFacet (Diamond `0x3240…0324`) — validator entrypoints (called via ValidatorTimelock)
+> **Correction (2026-09-29):** earlier versions of this table listed `requestL2TransactionDirect` (`0xd52471c1`) and `requestL2TransactionTwoBridges` on the Diamond. `facetAddress(bytes4)` on the Era Diamond returns `0x0` for both (and for `0x24fd57fb`/`0x7827d314`): they are BridgeHub functions (§2.1). The Diamond's request entries are `bridgehubRequestL2Transaction` and the legacy `requestL2Transaction` above.
+
+### 2.3 ExecutorFacet (Diamond `0x32400084C286CF3E17e7B677ea9583e60a000324`) — validator entrypoints (called via ValidatorTimelock)
 
 | Selector | Signature | Notes |
 |----------|-----------|-------|
@@ -175,14 +182,14 @@ All selectors below verified **present** in the live facet/proxy bytecode on 202
 
 > These are the **only 5 selectors** on the Executor facet (`0x0597caa8…`). The argument list is the **post-Gateway `…SharedBridge(address,…)` form** — the older `commitBatches(...)`/`commitBatchesSharedBridge(uint256,...)` variants hash differently and are absent here.
 
-### 2.4 GettersFacet (Diamond `0x3240…0324`) — read state
+### 2.4 GettersFacet (Diamond `0x32400084C286CF3E17e7B677ea9583e60a000324`) — read state
 
 | Selector | Signature | Returns |
 |----------|-----------|---------|
 | `0x7a0ed627` | `facets()` | `Facet[]` — the EIP-2535 facet map. **4 facets on Era.** |
-| `0x6e9960c3` | `getAdmin()` | `address` — ChainAdmin `0x2cf3…5063`. |
+| `0x6e9960c3` | `getAdmin()` | `address` — ChainAdmin `0x2cf3bD6a9056b39999F3883955E183F655345063`. |
 | `0x46657fe9` | `getVerifier()` | `address` — `0xcd27…7a45`. |
-| `0x3591c1a0` | `getBridgehub()` | `address` — `0x303a…5213`. |
+| `0x3591c1a0` | `getBridgehub()` | `address` — `0x303a465B659cBB0ab36eE643eA362c509EEb5213`. |
 | `0x98acd7a6` | `getBaseToken()` | `address` — `0x…01` (ETH). |
 | `0x33ce93fe` | `getProtocolVersion()` | `uint256` — live `0x1d00000004`. |
 | `0xdb1f0bf9` | `getTotalBatchesCommitted()` | `uint256` |
@@ -191,8 +198,10 @@ All selectors below verified **present** in the live facet/proxy bytecode on 202
 | `0xa1954fc5` | `getTotalPriorityTxs()` | `uint256` |
 | `0x631f4bac` | `getPriorityQueueSize()` | `uint256` |
 | `0x79823c9a` | `getFirstUnprocessedPriorityTx()` | `uint256` |
+| `0x3408e470` | `getChainId()` | `uint256` — the chain id of the diamond (324 on Era; used in §3.4 to identify each diamond). |
+| `0xcdffacc6` | `facetAddress(bytes4 selector)` | `address` — the facet that serves a selector (`0x0` = not served). |
 
-### 2.5 AdminFacet (Diamond `0x3240…0324`)
+### 2.5 AdminFacet (Diamond `0x32400084C286CF3E17e7B677ea9583e60a000324`)
 
 | Selector | Signature | Notes |
 |----------|-----------|-------|
@@ -204,10 +213,10 @@ All selectors below verified **present** in the live facet/proxy bytecode on 202
 
 | Selector | Signature | Contract |
 |----------|-----------|----------|
-| `0xe60ccaba` | `L1_NULLIFIER()` → `address` | AssetRouter → `0xd7f9…b2cb`. |
-| `0x64e130cf` | `nativeTokenVault()` → `address` | AssetRouter → `0xbed1…11f6`. |
-| `0x6e9d7899` | `legacyBridge()` → `address` | AssetRouter/Nullifier → `0x5789…e063`. |
-| `0x5d4edca7` | `BRIDGE_HUB()` → `address` | AssetRouter → `0x303a…5213`. |
+| `0xe60ccaba` | `L1_NULLIFIER()` → `address` | AssetRouter → `0xD7f9f54194C633F36CCD5F3da84ad4a1c38cB2cB`. |
+| `0x64e130cf` | `nativeTokenVault()` → `address` | AssetRouter → `0xbeD1EB542f9a5aA6419Ff3deb921A372681111f6`. |
+| `0x6e9d7899` | `legacyBridge()` → `address` | AssetRouter/Nullifier → `0x57891966931eb4bb6fb81430e6ce0a03aabde063`. |
+| `0x5d4edca7` | `BRIDGE_HUB()` → `address` | AssetRouter → `0x303a465B659cBB0ab36eE643eA362c509EEb5213`. |
 | `0x11a2ccc1` | `finalizeWithdrawal(uint256,uint256,uint16,bytes,bytes32[])` | L1ERC20Bridge (legacy). Distinct from Mailbox `finalizeEthWithdrawal` `0x6c0960f9`. |
 | `0xe8b99b1b` | `deposit(address,address,uint256,uint256,uint256,address)` → `bytes32` | L1ERC20Bridge (legacy) — multi-arg deposit; not used by the active flow. |
 
@@ -237,22 +246,37 @@ All verified via `eth_getCode` returning non-empty bytecode on `https://ethereum
 | **L1Nullifier** (ex-SharedBridge ledger, proxy) | `0xD7f9f54194C633F36CCD5F3da84ad4a1c38cB2cB` | Withdrawal finalization / replay protection; the docs still call this "Shared Bridge". |
 | **L1NativeTokenVault** (proxy) | `0xbeD1EB542f9a5aA6419Ff3deb921A372681111f6` | Token escrow; emits `BridgeMint`/`BridgeBurn` (§1.7). |
 | **L1ERC20Bridge** (legacy, proxy) | `0x57891966931eb4bb6fb81430e6ce0a03aabde063` | Old ERC-20 bridge — **deployed but dormant** (0 logs / 5k blk). |
-| **ChainTypeManager** (ex-StateTransitionManager, proxy) | `0xc2eE6b6af7d616f6e27ce7F4A451aedc2b0F5f5C` | Deploys/manages ZK chains; `chainTypeManager(324)`. |
-| **MessageRoot** (proxy) | `0x5cE9257755391d1509cD4ec1899D3F88a57bb4ad` | Cross-chain message aggregation root. |
-| L1CtmDeployer | `0x6078f6B379F103de1aA912dC46bb8df0c8809860` | Deterministic CTM/asset deployer. |
+| **ChainTypeManager** (ex-StateTransitionManager, proxy) | `0xc2eE6b6af7d616f6e27ce7F4A451Aedc2b0F5f5C` | Deploys/manages ZK chains; `chainTypeManager(324)`. |
+| **MessageRoot** (proxy) | `0x5Ce9257755391D1509cD4eC1899d3F88A57BB4aD` | Cross-chain message aggregation root. |
+| L1CtmDeployer | `0x6078F6B379f103de1Aa912dc46bb8Df0c8809860` | Deterministic CTM/asset deployer. |
 
 ### 3.3 Operations & governance
 
 | Role | Address | One-liner |
 |------|---------|-----------|
-| **ValidatorTimelock** | `0xdc26b08f0335b68721f64001c38B05d0bC9B539D` | Wraps `commit/prove/execute`; enforces an execution delay. The tx-`to` for batch ops. `owner()` = `0x4e49…7828`. |
-| **ChainAdmin (Era)** | `0x2cF3bD6a9056b39999f3883955E183f655345063` | Era's `getAdmin()`; `owner()` = `0x4e49…7828`. |
-| **Governance** | `0xe30dca3047b37dc7D88849De4A4Dc07937ad5ab3` | Protocol-upgrade governor; owner of BridgeHub & ProxyAdmin. |
-| **ProxyAdmin** | `0xc2a36181fb524a6BEFE639aFEd37A67e77d62Cf1` | OZ `ProxyAdmin` for **all** ecosystem transparent proxies; `owner()` = Governance `0xe30d…5ab3`. |
+| **ValidatorTimelock** | `0xdC26B08F0335b68721F64001C38b05D0BC9B539d` | Wraps `commit/prove/execute`; enforces an execution delay. The tx-`to` for batch ops. `owner()` = `0x4e4943346848c4867F81dFb37c4cA9C5715A7828`. |
+| **ChainAdmin (Era)** | `0x2cf3bD6a9056b39999F3883955E183F655345063` | Era's `getAdmin()`; `owner()` = `0x4e4943346848c4867F81dFb37c4cA9C5715A7828`. |
+| **Governance** | `0xE30Dca3047B37dc7d88849dE4A4Dc07937ad5Ab3` | Protocol-upgrade governor; owner of BridgeHub & ProxyAdmin. |
+| **ProxyAdmin** | `0xC2a36181fB524a6bEfE639aFEd37A67e77d62cf1` | OZ `ProxyAdmin` for **all** ecosystem transparent proxies; `owner()` = Governance `0xE30Dca3047B37dc7d88849dE4A4Dc07937ad5Ab3`. |
 | ML admin multisig | `0x4e4943346848c4867F81dFb37c4cA9C5715A7828` | Owns ValidatorTimelock + ChainAdmin. |
-| Era validator (operator EOA) | `0xc75CdcBEEf3aE3365abf0217815748586f9047f1` | Submits batches through the ValidatorTimelock. |
+| Era validator (operator EOA) | `0xc75cDcBEef3aE3365ABF0217815748586F9047F1` | Submits batches through the ValidatorTimelock. |
 
 > **Base token of Era = ETH** (`baseToken(324) = 0x…01`). ETH deposits/withdrawals dominate; ERC-20s route via AssetRouter + NativeTokenVault.
+
+### 3.4 Other ZK chains on the same BridgeHub — their DiamondProxies (Ethereum)
+
+Each address was read from `BridgeHub.getZKChain(chainId)` and confirmed by the diamond's own `getChainId()` on 2026-09-29. All are 632-byte `DiamondProxy` contracts (EIP-2535) with the same facet interface as Era; they emit the §1.1–§1.3 events for their own chain. Names are from the official ZKsync chain list ("Elastic Network Chains"); the two chains that the list does not contain are marked unnamed. `getBaseToken()` = `0x0000000000000000000000000000000000000001` means ETH.
+
+| Chain (name) | Chain ID | DiamondProxy | Base token (`getBaseToken()`) | Chain admin (`getAdmin()`) |
+|---|---|---|---|---|
+| Abstract Mainnet | 2741 | `0x2EDc71E9991A962c7FE172212d1aA9E50480fBb9` | ETH | `0xA1f75f491f630037C4Ccaa2bFA22363CEC05a661` |
+| GRVT Mainnet | 325 | `0xe3e310cd8EE0C808794810AB50FE4BcCC5c7D89E` | `0xAB3B124052F0389D1cbED221d912026Ac995bb95` | `0x6308ee1Ebdb8D5E60bB88D3EA3b56CE326193e7D` |
+| Lens Chain | 232 | `0xc29d04A93F893700015138E3E334eB828dAC3cef` | `0x1ff1dC3cB9eeDbC6Eb2d99C03b30A05cA625fB5a` | `0x6bd8d33551077Ed281Cb047835a2aE4033eEc433` |
+| Sophon Mainnet | 50104 | `0x05eDE6aD1f39B7A16C949d5C33a0658c9C7241e3` | `0x6B7774CB12ed7573a7586E7D0e62a2A563dDd3f0` | `0xE1eeA4D6443b19D373Fe99De838b930Ef0ac2Ad3` |
+| unnamed (not in the official list) | 1942323 | `0x7fC09405616699d4D6a36833a8192F36DD4A9e6D` | ETH | `0x38687A2ac36B68261f122e1F90BC5a82B8ab698E` |
+| unnamed (not in the official list) | 88629869 | `0x3E14850Bc5E34be2e02898c9dD9A53Bf4dC20d72` | ETH | `0x6EA4B2695c714D2D83c4b850cf0b4a7d93CD66Aa` |
+
+`BridgeHub.getAllZKChainChainIDs()` returned 22 chain ids on 2026-09-29: 324, 388, 50104, 543210, 2741, 325, 61166, 1345, 9637, 320, 232, 1217, 2904, 375, 51888, 9075, 30715, 5010405, 2787, 30716, 88629869, 1942323. The table covers six of them; resolve any other chain the same way (`getZKChain(chainId)`).
 
 ---
 
@@ -268,6 +292,7 @@ All verified via `eth_getCode` returning non-empty bytecode on `https://ethereum
 | Arbitrum One | 42161 | arbitrum-one-rpc.publicnode.com | all `0x` |
 | Optimism | 10 | optimism-rpc.publicnode.com | all `0x` |
 | Polygon PoS | 137 | polygon-bor-rpc.publicnode.com | all `0x` |
+| Robinhood Chain | 4663 | rpc.mainnet.chain.robinhood.com | all `0x` (checked 2026-09-29, also BridgeHub, ChainTypeManager, MessageRoot, ValidatorTimelock) |
 
 The native bridge is **Ethereum-L1-anchored**: ZKsync settles to Ethereum, not to any of these L2s. (The Elastic Network can settle ZK chains to a **Gateway** settlement layer, but that is a ZK chain, not any of the seven.)
 
@@ -293,16 +318,19 @@ zkSync Era (324) is the L2 counterparty. Recorded here as a finding (it is not o
 
 | Chain | ID | DiamondProxy (Era) | BridgeHub | L1AssetRouter | L1Nullifier | L1NTV | L1ERC20Bridge |
 |---|---|---|---|---|---|---|---|
-| **Ethereum** | 1 | ✅ `0x3240…0324` | ✅ `0x303a…5213` | ✅ `0x8829…ce56` | ✅ `0xd7f9…b2cb` | ✅ `0xbed1…11f6` | ✅ `0x5789…e063` (dormant) |
+| **Ethereum** | 1 | ✅ `0x32400084C286CF3E17e7B677ea9583e60a000324` (+ six more ZK chain diamonds, §3.4) | ✅ `0x303a465B659cBB0ab36eE643eA362c509EEb5213` | ✅ `0x8829AD80E425C646DAB305381ff105169FeEcE56` | ✅ `0xD7f9f54194C633F36CCD5F3da84ad4a1c38cB2cB` | ✅ `0xbeD1EB542f9a5aA6419Ff3deb921A372681111f6` | ✅ `0x57891966931eb4bb6fb81430e6ce0a03aabde063` (dormant) |
 | Base | 8453 | — | — | — | — | — | — |
 | BNB | 56 | — | — | — | — | — | — |
 | Avalanche | 43114 | — | — | — | — | — | — |
 | Arbitrum One | 42161 | — | — | — | — | — | — |
 | Optimism | 10 | — | — | — | — | — | — |
 | Polygon PoS | 137 | — | — | — | — | — | — |
+| **Robinhood Chain** | 4663 | — | — | — | — | — | — |
 | *zkSync Era* | *324* | *(L2 system contracts §5 — outside the seven)* | | | | | |
 
 **Vanity tell:** the Era DiamondProxy ends in `…a000324` (chain id 324). No other contract uses a vanity address. Everything is Ethereum-L1-only of the seven; the only non-Ethereum counterparty is zkSync Era (324), outside the set.
+
+**Robinhood Chain (4663):** `eth_getCode` returned `0x` (nonce 0) on 2026-09-29 at the Era DiamondProxy, the six diamonds of §3.4, BridgeHub, L1AssetRouter, L1Nullifier, L1NativeTokenVault, L1ERC20Bridge, ChainTypeManager, MessageRoot and ValidatorTimelock. Chain id 4663 is not among the 22 chains registered on the BridgeHub (§3.4), and the measured events had 0 logs on Robinhood Chain in the pinned 12-hour window of 2026-09-28. Robinhood Chain is not a ZK Stack chain.
 
 ---
 
@@ -312,37 +340,43 @@ EIP-1967 implementation slot `0x360894a13ba1a3210667c828492db98dca3e2076cc3735a9
 
 | Contract | Pattern | Live impl | Detection / admin |
 |----------|---------|-----------|-------------------|
-| **DiamondProxy (Era)** | **EIP-2535 Diamond** | n/a (4 facets, §3.1) | `facets()` returns 4 facets; EIP-1967 impl slot is **empty**; dispatch by selector. Upgrade auth = ChainAdmin `0x2cf3…5063` + ChainTypeManager. Watch `ExecuteUpgrade` (`0xce6f42f7…`). |
-| **BridgeHub** | OZ TransparentUpgradeableProxy | `0xc89423b4909080fb8f8a43df5e1c27001e55c24b` | impl slot set; admin slot = ProxyAdmin `0xc2a3…2cf1`. |
-| **L1AssetRouter** | OZ Transparent proxy | `0x2386bc2e26f39b72f0d4fde0c07d68e4eeffc725` | admin = `0xc2a3…2cf1`. |
-| **L1Nullifier** | OZ Transparent proxy | `0x71759c4ea628293f5a99aab1585df1c8da4718e0` | admin = `0xc2a3…2cf1`. |
-| **L1NativeTokenVault** | OZ Transparent proxy | `0x8e1c5a8c5d8c33ed0ec756d6f4006f2d875ba083` | admin = `0xc2a3…2cf1`. |
-| **L1ERC20Bridge** | OZ Transparent proxy | `0x6ed98623e0b51be68748ab5091aa891adb883e13` | admin = `0xc2a3…2cf1`. |
-| **ChainTypeManager** | OZ Transparent proxy | `0x4ab7204e4205c96c32e23ada9191720976dc084f` | admin = `0xc2a3…2cf1`; `owner()` = Governance `0xe30d…5ab3`. |
-| **ValidatorTimelock** | OZ Transparent proxy | `0xc954b4d51031870624f3e779ead14c57249c111d` | 2,840 B proxy; impl slot set; admin = a **dedicated** ProxyAdmin `0x0d8d1be440f997bdb9ca44c0140fd12551f99bbb` (separate from the ecosystem `0xc2a3…2cf1`), itself `owner()` = ML multisig `0x4e49…7828`; the proxy's `owner()` (via impl) = `0x4e49…7828`. |
+| **DiamondProxy (Era)** | **EIP-2535 Diamond** | n/a (4 facets, §3.1) | `facets()` returns 4 facets; EIP-1967 impl slot is **empty**; dispatch by selector. Upgrade auth = ChainAdmin `0x2cf3bD6a9056b39999F3883955E183F655345063` + ChainTypeManager. Watch `ExecuteUpgrade` (`0xce6f42f7ce46cd12c695bbee4503fdd959206cdbb95fb3c37ebfe262cfffac2b`). |
+| **BridgeHub** | OZ TransparentUpgradeableProxy | `0xc89423b4909080fb8f8a43df5e1c27001e55c24b` | impl slot set; admin slot = ProxyAdmin `0xC2a36181fB524a6bEfE639aFEd37A67e77d62cf1`. |
+| **L1AssetRouter** | OZ Transparent proxy | `0x2386bc2e26f39b72f0d4fde0c07d68e4eeffc725` | admin = `0xC2a36181fB524a6bEfE639aFEd37A67e77d62cf1`. |
+| **L1Nullifier** | OZ Transparent proxy | `0x71759c4ea628293f5a99aab1585df1c8da4718e0` | admin = `0xC2a36181fB524a6bEfE639aFEd37A67e77d62cf1`. |
+| **L1NativeTokenVault** | OZ Transparent proxy | `0x8e1c5a8c5d8c33ed0ec756d6f4006f2d875ba083` | admin = `0xC2a36181fB524a6bEfE639aFEd37A67e77d62cf1`. |
+| **L1ERC20Bridge** | OZ Transparent proxy | `0x6ed98623e0b51be68748ab5091aa891adb883e13` | admin = `0xC2a36181fB524a6bEfE639aFEd37A67e77d62cf1`. |
+| **ChainTypeManager** | OZ Transparent proxy | `0x4ab7204e4205c96c32e23ada9191720976dc084f` | admin = `0xC2a36181fB524a6bEfE639aFEd37A67e77d62cf1`; `owner()` = Governance `0xE30Dca3047B37dc7d88849dE4A4Dc07937ad5Ab3`. |
+| **ValidatorTimelock** | OZ Transparent proxy | `0xc954b4d51031870624f3e779ead14c57249c111d` | 2,840 B proxy; impl slot set; admin = a **dedicated** ProxyAdmin `0x0d8d1be440f997bdb9ca44c0140fd12551f99bbb` (separate from the ecosystem `0xC2a36181fB524a6bEfE639aFEd37A67e77d62cf1`), itself `owner()` = ML multisig `0x4e4943346848c4867F81dFb37c4cA9C5715A7828`; the proxy's `owner()` (via impl) = `0x4e4943346848c4867F81dFb37c4cA9C5715A7828`. |
 | **Governance** | OZ Transparent proxy | `0x36625bd3ddb469377c6e9893712158ca3c0cc14b` | 1,129 B proxy; impl slot set; admin slot = `0x1e4c534e7ce1ff5621ea506d99b367d7d8efbe3e`. |
 | **ChainAdmin / ProxyAdmin** | **immutable** (no proxy) | — | plain contracts; impl slot empty. |
+| **Other ZK chain diamonds (§3.4)** | **EIP-2535 Diamond** (632-byte `DiamondProxy`) | n/a (facets) | Same pattern as Era; each chain has its own `getAdmin()` (§3.4). Upgrades come as `ExecuteUpgrade` facet cuts on each diamond. On 2026-09-29 all six and Era returned `getProtocolVersion()` = `0x1e00000001`. |
 
-> The single `ProxyAdmin` `0xc2a3…2cf1` is the upgrade authority for **all six** ecosystem transparent proxies (verified: every one returned the same admin-slot value). Its `owner()` = Governance `0xe30d…5ab3`. Watch `Upgraded(address)` topic `0xbc7cd75a…` on each proxy and `AdminChanged` `0x7e644d79…` for admin rotations. **Always read the live EIP-1967 slot — never hard-code an impl.**
+> The single `ProxyAdmin` `0xC2a36181fB524a6bEfE639aFEd37A67e77d62cf1` is the upgrade authority for **all six** ecosystem transparent proxies (verified: every one returned the same admin-slot value). Its `owner()` = Governance `0xE30Dca3047B37dc7d88849dE4A4Dc07937ad5Ab3`. Watch `Upgraded(address)` topic `0xbc7cd75a20ee27fd9adebab32041f755214dbc6bffa90cc0225b39da2e5c2d3b` on each proxy and `AdminChanged` `0x7e644d79422f17c01e4894b5f4f588d331ebfa28653d42ae832dc59e38c9798f` for admin rotations. **Always read the live EIP-1967 slot — never hard-code an impl.**
 
 ---
 
 ## 8. Detection invariants & gotchas
 
 1. **All native-bridge contracts are Ethereum-L1-only of the seven.** Base/BNB/Avalanche/Arbitrum/Optimism/Polygon return `0x` for every address (§4). The L2 counterparty is **zkSync Era 324**, outside the set (§5).
-2. **Deposits = `NewPriorityRequest` (`0x4531cd57…`) on the Era DiamondProxy `0x3240…0324`** — the canonical L1→L2 event. Its signature has a **nested 17-field tuple with a `uint256[4]`**; the naive form does not hash. Pair with `NewPriorityRequestId` (`0x779f4416…`) for a cheap indexed `txHash` filter.
+2. **Deposits = `NewPriorityRequest` (`0x4531cd5795773d7101c17bdeb9f5ab7f47d7056017506f937083be5d6e77a382`) on the Era DiamondProxy `0x32400084C286CF3E17e7B677ea9583e60a000324`** — the canonical L1→L2 event. Its signature has a **nested 17-field tuple with a `uint256[4]`**; the naive form does not hash. Pair with `NewPriorityRequestId` (`0x779f441679936c5441b671969f37400b8c3ed0071cb47444431bf985754560df`) for a cheap indexed `txHash` filter.
 3. **The cross-chain key is `txHash` (L2 canonical tx hash) / batchNumber, never `tx.from`.** Deposits are often relayed; the real user is in the event payload (`from` field of the tuple), not the sender.
-4. **`L1AssetRouter` (`0x8829…ce56`) is the active bridge; `L1Nullifier` (`0xd7f9…b2cb`) is the renamed legacy SharedBridge ledger; `L1ERC20Bridge` (`0x5789…e063`) is dormant.** Index the AssetRouter + NativeTokenVault for live token flow. The ZKsync docs still label `0xd7f9…` "Shared Bridge" — it is the Nullifier (finalization/replay ledger), confirmed via `BridgeHub.l1Nullifier()`.
-5. **`BridgehubDepositFinalized` topic0 `0xe4def01b…` is emitted by BOTH the AssetRouter and the L1Nullifier** — disambiguate by emitter address (§1.5 vs §1.6).
-6. **Highest-volume deposit event is `BridgehubDepositBaseTokenInitiated` (`0x0f87e1ea…`, 113 logs / 5k blk)** because Era's base token is ETH and most deposits are ETH. Non-base-token deposits fire the rarer `BridgehubDepositInitiated` (`0xe21913bc…`).
-7. **Withdrawal-finalize fires `BridgeMint` (`0xbc0f4055…`) on the NativeTokenVault + `DepositFinalizedAssetRouter` (`0x44eb9a84…`) on the AssetRouter**; deposit escrow fires `BridgeBurn` (`0x1cd02155…`). Both topic0s are NTV-specific.
-8. **The Era chain is an EIP-2535 Diamond, not an EIP-1967 proxy** — its impl slot is empty. To enumerate logic, call `facets()` (4 facets) or `facetAddress(bytes4)`; the impl can only "change" via a facet cut (`ExecuteUpgrade` `0xce6f42f7…`). Watching the EIP-1967 slot will mislead you.
+4. **`L1AssetRouter` (`0x8829AD80E425C646DAB305381ff105169FeEcE56`) is the active bridge; `L1Nullifier` (`0xD7f9f54194C633F36CCD5F3da84ad4a1c38cB2cB`) is the renamed legacy SharedBridge ledger; `L1ERC20Bridge` (`0x57891966931eb4bb6fb81430e6ce0a03aabde063`) is dormant.** Index the AssetRouter + NativeTokenVault for live token flow. The ZKsync docs still label `0xD7f9f54194C633F36CCD5F3da84ad4a1c38cB2cB` "Shared Bridge" — it is the Nullifier (finalization/replay ledger), confirmed via `BridgeHub.l1Nullifier()`.
+5. **`BridgehubDepositFinalized` topic0 `0xe4def01b981193a97a9e81230d7b9f31812ceaf23f864a828a82c687911cb2df` is emitted by BOTH the AssetRouter and the L1Nullifier** — disambiguate by emitter address (§1.5 vs §1.6).
+6. **Highest-volume deposit event is `BridgehubDepositBaseTokenInitiated` (`0x0f87e1ea5eb1f034a6071ef630c174063e3d48756f853efaaf4292b929298240`, 113 logs / 5k blk)** because Era's base token is ETH and most deposits are ETH. Non-base-token deposits fire the rarer `BridgehubDepositInitiated` (`0xe21913bc89c1320d9709a5d236ffe06b54cf88aecfc9509ebd68f1adba45781e`).
+7. **Withdrawal-finalize fires `BridgeMint` (`0xbc0f4055a7869d8ecad34b33382a0bc181c5811565fec42f335505be5fd661d2`) on the NativeTokenVault + `DepositFinalizedAssetRouter` (`0x44eb9a840094a49b3cd0a5205042598a1c08c4e87bafb5760bc2d8efa170c541`) on the AssetRouter**; deposit escrow fires `BridgeBurn` (`0x1cd02155ad1064c60598a8bd0e4e795d7e7d0a0f3c38aad04d261f1297fb2545`). Both topic0s are NTV-specific.
+8. **The Era chain is an EIP-2535 Diamond, not an EIP-1967 proxy** — its impl slot is empty. To enumerate logic, call `facets()` (4 facets) or `facetAddress(bytes4)`; the impl can only "change" via a facet cut (`ExecuteUpgrade` `0xce6f42f7ce46cd12c695bbee4503fdd959206cdbb95fb3c37ebfe262cfffac2b`). Watching the EIP-1967 slot will mislead you.
 9. **Batch ops are routed through the ValidatorTimelock (`0xdc26…539d`), so `tx.to` for `BlockCommit`/`BlockExecution` is the timelock, not the Diamond.** The validator EOA is `0xc75c…47f1`. Executor selectors are the `…SharedBridge(address,uint256,uint256,bytes)` form (`commit 0x0db9eb87`, `prove 0x9271e450`, `execute 0xa085344d`).
 10. **Event names say "Block" but params are batchNumber** (`BlockCommit`/`BlockExecution`). Pre-rename nomenclature; not per-L2-block.
 11. **`BlocksRevert` (`0x8bd4b15e…`) and `Freeze()` (`0x615acbae…`) are emergency/risk signals.** A revert rolls back committed batches; a freeze halts the chain.
-12. **One ProxyAdmin (`0xc2a3…2cf1`) governs all six ecosystem proxies.** A single `Upgraded`/`AdminChanged` on it, or any impl-slot change, is a protocol-wide upgrade signal. The Diamond is upgraded separately (facet cut + ChainAdmin/CTM).
-13. **`getZKChain(chainId)` on the BridgeHub is the authoritative way to find any ZK chain's DiamondProxy** (`getZKChain(324) = 0x3240…0324`). New chains register via `NewChain` (`0x1e9125bc…`).
-14. **Protocol version is packed** (`getProtocolVersion()` = `0x1d00000004` ⇒ minor 29, patch 4). A version bump usually accompanies a Diamond facet cut.
+12. **One ProxyAdmin (`0xC2a36181fB524a6bEfE639aFEd37A67e77d62cf1`) governs all six ecosystem proxies.** A single `Upgraded`/`AdminChanged` on it, or any impl-slot change, is a protocol-wide upgrade signal. The Diamond is upgraded separately (facet cut + ChainAdmin/CTM).
+13. **`getZKChain(chainId)` on the BridgeHub is the authoritative way to find any ZK chain's DiamondProxy** (`getZKChain(324) = 0x32400084C286CF3E17e7B677ea9583e60a000324`). New chains register via `NewChain` (`0x1e9125bc72db22c58abff6821d7333551967e26454b419ffa958e4cb8ef47600`).
+14. **Protocol version is packed** (`getProtocolVersion()` = `0x1d00000004` ⇒ minor 29, patch 4). A version bump usually accompanies a Diamond facet cut. (On 2026-09-29 the value was `0x1e00000001` ⇒ minor 30, patch 1, on Era and the six chains of §3.4.)
+15. **Many ZK chains, one set of bridge contracts.** The L1AssetRouter, L1NativeTokenVault and L1Nullifier serve every chain of the BridgeHub; their events carry the chain in the indexed `chainId` (Abstract = 2741 = `0xab5`). Measured sample (Abstract): `0xa99269befdfe2fd3c4a3aec2ead984227d4d45a84662493787a18f989effa0b1` — a `requestL2TransactionTwoBridges` (`0x24fd57fb`) call to the BridgeHub with ETH for L2 gas in `msg.value`, the user's ERC-20 `Transfer` user → NativeTokenVault, two `BridgeBurn` (base token and ERC-20), `BridgehubDepositBaseTokenInitiated` and `BridgehubDepositInitiated` (chainId 2741) on the AssetRouter, `NewPriorityRequest` + `NewPriorityRequestId` on the Abstract diamond, and `BridgehubDepositFinalized` on the L1Nullifier. Attribute a deposit to a chain by `chainId`, not by the shared emitter.
+16. **`NewPriorityRequest` is not unique to this BridgeHub.** In the pinned window three diamonds of another ZK Stack ecosystem (chain ids 5790, 61703, 51703; `getZKChain` on this BridgeHub returns `0x0` for them) emitted it 12 times each. Keep a list of the diamonds that `getZKChain` returns and filter on it.
+17. **`EthWithdrawalFinalized(address,uint256)` (`0x26464d64ddb13f6d187de632d165bd1065382ec0b66c25c648957116e7bc25c8`) is legacy and generic.** The current Era facets do not declare it (ETH withdrawals finalize through the L1Nullifier / AssetRouter and emit `DepositFinalizedAssetRouter` + `BridgeMint`). In the pinned window one unrelated contract on Ethereum emitted it once and one on Base 3 times; the Era diamond emitted it 0 times.
+18. **Two request selectors were corrected on 2026-09-29.** `requestL2TransactionTwoBridges` is `0x24fd57fb` (nine-field `L2TransactionRequestTwoBridgesOuter`), not `0x7827d314`; and the Diamond serves `bridgehubRequestL2Transaction` (`0x12f43dab`) and `requestL2Transaction` (`0xeb672419`), not the BridgeHub's `requestL2TransactionDirect`/`TwoBridges`. A monitor keyed on the old values sees no calls.
+19. **Robinhood Chain (4663) is not a ZK Stack chain and has no zkSync contract** (§6).
 
 ---
 
@@ -354,6 +388,7 @@ EIP-1967 implementation slot `0x360894a13ba1a3210667c828492db98dca3e2076cc3735a9
 TOPIC_NEW_PRIORITY_REQUEST        = '\x4531cd5795773d7101c17bdeb9f5ab7f47d7056017506f937083be5d6e77a382'
 TOPIC_NEW_PRIORITY_REQUEST_ID     = '\x779f441679936c5441b671969f37400b8c3ed0071cb47444431bf985754560df'
 TOPIC_NEW_RELAYED_PRIORITY_TX     = '\x0137d2eaa6ec5b7e4f233f6d6f441410014535d0f3985367994c94bf15a2a564'
+TOPIC_ETH_WITHDRAWAL_FINAL_LEGACY = '\x26464d64ddb13f6d187de632d165bd1065382ec0b66c25c648957116e7bc25c8'  -- pre-shared-bridge Mailbox; generic signature
 -- ExecutorFacet (Diamond) — batch lifecycle
 TOPIC_BLOCK_COMMIT                = '\x8f2916b2f2d78cc5890ead36c06c0f6d5d112c7e103589947e8e2f0d6eddb763'
 TOPIC_BLOCKS_VERIFICATION         = '\x22c9005dd88c18b552a1cd7e8b3b937fcde9ca69213c1f658f54d572e4877a81'
@@ -398,7 +433,7 @@ TOPIC_ADMIN_CHANGED               = '\x7e644d79422f17c01e4894b5f4f588d331ebfa286
 -- ===== Selectors =====
 -- BridgeHub
 SEL_REQUEST_L2_TX_DIRECT          = '\xd52471c1'
-SEL_REQUEST_L2_TX_TWO_BRIDGES     = '\x7827d314'
+SEL_REQUEST_L2_TX_TWO_BRIDGES     = '\x24fd57fb'   -- corrected 2026-09-29 (was 0x7827d314, not in the live BridgeHub impl)
 SEL_BH_L2_TX_BASE_COST            = '\x71623274'
 SEL_GET_ZK_CHAIN                  = '\xe680c4c1'
 SEL_BASE_TOKEN                    = '\x59ec65a2'
@@ -408,6 +443,10 @@ SEL_MESSAGE_ROOT                  = '\xd4b9f4fa'
 SEL_CHAIN_TYPE_MANAGER            = '\x9d5bd3da'
 -- Mailbox (Diamond)
 SEL_FINALIZE_ETH_WITHDRAWAL       = '\x6c0960f9'
+SEL_BRIDGEHUB_REQUEST_L2_TX       = '\x12f43dab'   -- Mailbox, BridgeHub-only entry
+SEL_MAILBOX_REQUEST_L2_TX_LEGACY  = '\xeb672419'   -- Mailbox, legacy direct Era entry
+SEL_GET_CHAIN_ID                  = '\x3408e470'
+SEL_FACET_ADDRESS                 = '\xcdffacc6'
 SEL_L2_TX_BASE_COST               = '\xb473318e'
 SEL_PROVE_L2_MESSAGE_INCLUSION    = '\xe4948f43'
 SEL_PROVE_L2_LOG_INCLUSION        = '\x263b7f8e'
@@ -456,6 +495,14 @@ ETH_ERA_CHAIN_ADMIN               = '\x2cf3bd6a9056b39999f3883955e183f655345063'
 ETH_GOVERNANCE                    = '\xe30dca3047b37dc7d88849de4a4dc07937ad5ab3'
 ETH_PROXY_ADMIN                   = '\xc2a36181fb524a6befe639afed37a67e77d62cf1'
 ETH_ML_ADMIN_MULTISIG             = '\x4e4943346848c4867f81dfb37c4ca9c5715a7828'
+-- Other ZK chains on the same BridgeHub (§3.4) — their DiamondProxies emit §1.1–§1.3 for their chain
+ETH_ABSTRACT_DIAMOND_2741         = '\x2edc71e9991a962c7fe172212d1aa9e50480fbb9'
+ETH_GRVT_DIAMOND_325              = '\xe3e310cd8ee0c808794810ab50fe4bccc5c7d89e'
+ETH_LENS_DIAMOND_232              = '\xc29d04a93f893700015138e3e334eb828dac3cef'
+ETH_SOPHON_DIAMOND_50104          = '\x05ede6ad1f39b7a16c949d5c33a0658c9c7241e3'
+ETH_ZKCHAIN_1942323_DIAMOND       = '\x7fc09405616699d4d6a36833a8192f36dd4a9e6d'
+ETH_ZKCHAIN_88629869_DIAMOND      = '\x3e14850bc5e34be2e02898c9dd9a53bf4dc20d72'
+-- Robinhood Chain (4663): no zkSync / ZK Stack contract; every address above returns 0x there
 
 -- ===== Addresses — zkSync Era L2 (chain 324, OUTSIDE the seven) =====
 L2_BRIDGEHUB                      = '\x0000000000000000000000000000000000010002'
@@ -473,14 +520,25 @@ L2_LEGACY_ERC20_BRIDGE            = '\x11f943b2c77b743ab90f4a0ae7d5a4e7fca3e102'
 
 How every constant was verified (2026-06-09):
 
-- **Addresses (discovery):** the ecosystem set was read **directly on-chain** from the live BridgeHub `0x303a…5213` — `assetRouter()=0x8829…ce56`, `messageRoot()=0x5ce9…b4ad`, `chainTypeManager(324)=0xc2ee…5f5c`, `getZKChain(324)=0x3240…0324`, `l1CtmDeployer()=0x6078…9860`, `owner()=0xe30d…5ab3`, `admin()=0x2cf3…5063` — then from the L1AssetRouter (`L1_NULLIFIER()=0xd7f9…b2cb`, `nativeTokenVault()=0xbed1…11f6`, `legacyBridge()=0x5789…e063`). Cross-checked against the official ZKsync L1-contracts / ZK-chain-addresses docs (which independently list DiamondProxy, BridgeHub, L1AssetRouter, L1NativeTokenVault, and the "Shared Bridge" `0xD7f9…`).
+- **Addresses (discovery):** the ecosystem set was read **directly on-chain** from the live BridgeHub `0x303a465B659cBB0ab36eE643eA362c509EEb5213` — `assetRouter()=0x8829AD80E425C646DAB305381ff105169FeEcE56`, `messageRoot()=0x5Ce9257755391D1509cD4eC1899d3F88A57BB4aD`, `chainTypeManager(324)=0xc2eE6b6af7d616f6e27ce7F4A451Aedc2b0F5f5C`, `getZKChain(324)=0x32400084C286CF3E17e7B677ea9583e60a000324`, `l1CtmDeployer()=0x6078F6B379f103de1Aa912dc46bb8Df0c8809860`, `owner()=0xE30Dca3047B37dc7d88849dE4A4Dc07937ad5Ab3`, `admin()=0x2cf3bD6a9056b39999F3883955E183F655345063` — then from the L1AssetRouter (`L1_NULLIFIER()=0xD7f9f54194C633F36CCD5F3da84ad4a1c38cB2cB`, `nativeTokenVault()=0xbeD1EB542f9a5aA6419Ff3deb921A372681111f6`, `legacyBridge()=0x57891966931eb4bb6fb81430e6ce0a03aabde063`). Cross-checked against the official ZKsync L1-contracts / ZK-chain-addresses docs (which independently list DiamondProxy, BridgeHub, L1AssetRouter, L1NativeTokenVault, and the "Shared Bridge" `0xD7f9f54194C633F36CCD5F3da84ad4a1c38cB2cB`).
 - **Existence:** `eth_getCode` returned non-empty bytecode for every Ethereum address; `0x` (empty) for all six other target chains (§4) and live multi-KB bytecode for the L2 (324) system contracts (§5).
 - **Diamond facets:** `facets()` on the DiamondProxy returned **4 facets**; each facet's selector list was classified against the canonical `matter-labs/era-contracts` interface signatures, mapping `0x1e34…` → Mailbox, `0x1666…` → Getters, `0x0597…` → Executor, `0x037c…` → Admin. `getProtocolVersion()` = `0x1d00000004`.
-- **Topic0 / selectors:** recomputed locally as `keccak256(canonical signature)` / `[0:4]` from the era-contracts `IExecutor`/`IMailboxImpl`/`IL1AssetRouter`/`IL1ERC20Bridge`/`IL1NativeTokenVault` sources and the `L2CanonicalTransaction`/`BridgehubL2TransactionRequest` structs in `common/Messaging.sol`. **Live-confirmed via `eth_getLogs`:** on the Era Diamond — `NewPriorityRequest` `0x4531cd57…`, `NewPriorityRequestId` `0x779f4416…`, `BlockCommit` `0x8f2916b2…`, `BlocksVerification` `0x22c9005d…`, `BlockExecution` `0x24023073…`; on the AssetRouter — `0x0f87e1ea…`, `0xe21913bc…`, `0x44eb9a84…`; on the L1Nullifier — `0xe4def01b…`; on the NativeTokenVault — `BridgeMint` `0xbc0f4055…`, `BridgeBurn` `0x1cd02155…`. The `commitBatchesSharedBridge` selector `0x0db9eb87` was confirmed as the actual selector in a live batch-commit tx routed through the ValidatorTimelock.
-- **Proxies:** EIP-1967 impl/admin slots read live (§7) — every ecosystem contract is an OZ TransparentUpgradeableProxy under the single ProxyAdmin `0xc2a3…2cf1` (admin slot identical across all six); the Era chain is an EIP-2535 Diamond (empty impl slot, non-empty `facets()`); the **ValidatorTimelock** and **Governance** are themselves OZ Transparent proxies (non-empty impl slots — VT impl `0xc954…111d` behind its own dedicated ProxyAdmin `0x0d8d…9bbb`; Governance impl `0x3662…c14b`), while **ChainAdmin** and **ProxyAdmin** are non-proxy contracts (empty impl slot).
+- **Topic0 / selectors:** recomputed locally as `keccak256(canonical signature)` / `[0:4]` from the era-contracts `IExecutor`/`IMailboxImpl`/`IL1AssetRouter`/`IL1ERC20Bridge`/`IL1NativeTokenVault` sources and the `L2CanonicalTransaction`/`BridgehubL2TransactionRequest` structs in `common/Messaging.sol`. **Live-confirmed via `eth_getLogs`:** on the Era Diamond — `NewPriorityRequest` `0x4531cd5795773d7101c17bdeb9f5ab7f47d7056017506f937083be5d6e77a382`, `NewPriorityRequestId` `0x779f441679936c5441b671969f37400b8c3ed0071cb47444431bf985754560df`, `BlockCommit` `0x8f2916b2f2d78cc5890ead36c06c0f6d5d112c7e103589947e8e2f0d6eddb763`, `BlocksVerification` `0x22c9005dd88c18b552a1cd7e8b3b937fcde9ca69213c1f658f54d572e4877a81`, `BlockExecution` `0x2402307311a4d6604e4e7b4c8a15a7e1213edb39c16a31efa70afb06030d3165`; on the AssetRouter — `0x0f87e1ea5eb1f034a6071ef630c174063e3d48756f853efaaf4292b929298240`, `0xe21913bc89c1320d9709a5d236ffe06b54cf88aecfc9509ebd68f1adba45781e`, `0x44eb9a840094a49b3cd0a5205042598a1c08c4e87bafb5760bc2d8efa170c541`; on the L1Nullifier — `0xe4def01b981193a97a9e81230d7b9f31812ceaf23f864a828a82c687911cb2df`; on the NativeTokenVault — `BridgeMint` `0xbc0f4055a7869d8ecad34b33382a0bc181c5811565fec42f335505be5fd661d2`, `BridgeBurn` `0x1cd02155ad1064c60598a8bd0e4e795d7e7d0a0f3c38aad04d261f1297fb2545`. The `commitBatchesSharedBridge` selector `0x0db9eb87` was confirmed as the actual selector in a live batch-commit tx routed through the ValidatorTimelock.
+- **Proxies:** EIP-1967 impl/admin slots read live (§7) — every ecosystem contract is an OZ TransparentUpgradeableProxy under the single ProxyAdmin `0xC2a36181fB524a6bEfE639aFEd37A67e77d62cf1` (admin slot identical across all six); the Era chain is an EIP-2535 Diamond (empty impl slot, non-empty `facets()`); the **ValidatorTimelock** and **Governance** are themselves OZ Transparent proxies (non-empty impl slots — VT impl `0xc954b4d51031870624f3e779ead14c57249c111d` behind its own dedicated ProxyAdmin `0x0d8d1be440f997bdb9ca44c0140fd12551f99bbb`; Governance impl `0x36625bd3ddb469377c6e9893712158ca3c0cc14b`), while **ChainAdmin** and **ProxyAdmin** are non-proxy contracts (empty impl slot).
+
+Additions of 2026-09-29:
+
+- **ZK chain diamonds (§3.4):** `BridgeHub.getZKChain(chainId)` for 2741, 325, 232, 50104, 1942323 and 88629869, and `getAllZKChainChainIDs()` (22 ids); on each diamond `getChainId()`, `getBaseToken()`, `getProtocolVersion()` and `getAdmin()`; `eth_getCode` (632 B each). Names from the official ZKsync "Elastic Network Chains" page; 1942323 and 88629869 are in neither that page nor the `chainid.network` registry.
+- **Selector corrections:** a PUSH4 scan of the live BridgeHub impl `0xc89423b4909080fb8f8a43df5e1c27001e55c24b` found `0x24fd57fb` and `0xd52471c1` and not `0x7827d314`; the struct `L2TransactionRequestTwoBridgesOuter` read from `l1-contracts/contracts/bridgehub/IBridgehub.sol`. `facetAddress(bytes4)` on the Era Diamond returned `0x0` for `0xd52471c1`, `0x7827d314` and `0x24fd57fb`, and the MailboxFacet for `0x12f43dab`, `0xeb672419`, `0x6c0960f9` and `0xb473318e`.
+- **`EthWithdrawalFinalized`:** the declaration `event EthWithdrawalFinalized(address indexed to, uint256 amount);` is in the 2023 era-contracts `IMailbox.sol` (the Code4rena 2023-10 zkSync audit snapshot); a search of the current `matter-labs/era-contracts` finds only the getter `isEthWithdrawalFinalized`. Topic0 recomputed with `keccak256`.
+- **Measured activity** (pinned 12-hour window 2026-09-28 00:00–12:00 UTC, Ethereum; 0 logs of every topic below on the other seven chains, except the generic `EthWithdrawalFinalized`, 3 logs on Base from an unrelated contract): `NewPriorityRequest` — Era 29, chain 1942323 12, chain 88629869 12, Abstract 5, GRVT 1, Lens 0, Sophon 0; L1AssetRouter `BridgehubDepositBaseTokenInitiated` 59, `BridgehubDepositInitiated` 6, `DepositFinalizedAssetRouter` 122; L1NativeTokenVault `BridgeBurn` 65, `BridgeMint` 122; L1Nullifier `BridgehubDepositFinalized` 6; L1ERC20Bridge 0; Era `EthWithdrawalFinalized` 0. Two other contracts (`0x3f232a251af6ea5902bdf03c04ff8df39492af03`, `0x3e1615c74ae4ee23c5c6ea7dd0830fd809ebf412`) emitted `BridgehubDepositBaseTokenInitiated` and `BridgeBurn` 36 times each; they are not part of this BridgeHub's set and were not identified.
+- **Sample** (read with `eth_getTransactionReceipt`): Abstract deposit `0xa99269befdfe2fd3c4a3aec2ead984227d4d45a84662493787a18f989effa0b1` (§8, item 15).
+- **Robinhood Chain:** §6 lists the check (all `0x`, nonce 0; 4663 not registered on the BridgeHub).
+- **Checksum fix:** eight addresses of §3.2–§3.3 (ChainTypeManager, MessageRoot, L1CtmDeployer, ValidatorTimelock, ChainAdmin, Governance, ProxyAdmin, the validator EOA) had an invalid EIP-55 case in earlier versions; the hex is unchanged.
 
 Authoritative sources:
 - Canonical repo: [matter-labs/era-contracts](https://github.com/matter-labs/era-contracts) (`l1-contracts/contracts/`: `bridgehub/`, `bridge/asset-router/`, `bridge/ntv/`, `state-transition/chain-interfaces/IExecutor.sol` + `IMailboxImpl.sol`, `common/Messaging.sol`).
 - Official docs: [ZKsync L1 ecosystem contracts](https://docs.zksync.io/zksync-protocol/contracts/l1-contracts/l1-ecosystem-contracts) · [ZK-chain addresses](https://docs.zksync.io/zksync-protocol/contracts/l1-contracts/zk-chain-addresses) · [L1 contracts overview](https://docs.zksync.io/zksync-protocol/contracts/l1-contracts).
 - Explorers: [Etherscan DiamondProxy](https://etherscan.io/address/0x32400084C286CF3E17e7B677ea9583e60a000324) · [Etherscan BridgeHub](https://etherscan.io/address/0x303a465B659cBB0ab36eE643eA362c509EEb5213) · [Etherscan L1AssetRouter](https://etherscan.io/address/0x8829AD80E425C646DAB305381ff105169FeEcE56) · [zkSync Era explorer](https://explorer.zksync.io/).
 - [L2BEAT — ZKsync Era](https://l2beat.com/scaling/projects/zksync-era) (architecture / permissions cross-check).
+- Added 2026-09-29: [Elastic Network Chains (official chain list)](https://docs.zksync.io/zksync-network/environment) · [`IBridgehub.sol`](https://github.com/matter-labs/era-contracts/blob/main/l1-contracts/contracts/bridgehub/IBridgehub.sol) · [2023 `IMailbox.sol` (audit snapshot)](https://github.com/code-423n4/2023-10-zksync/blob/main/code/contracts/ethereum/contracts/zksync/interfaces/IMailbox.sol) · [chainid.network registry](https://chainid.network/chains_mini.json).

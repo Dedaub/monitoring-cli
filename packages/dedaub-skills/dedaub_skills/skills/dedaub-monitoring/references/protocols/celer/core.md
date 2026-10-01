@@ -1,7 +1,7 @@
 # Celer cBridge & MessageBus — Topics, Selectors, Addresses (Ethereum, BNB, Avalanche, Arbitrum, Optimism, Polygon, Base)
 
-**Status:** verified against live RPC on every listed chain and the canonical `celer-network/sgn-v2-contracts` repo on 2026-06-09.
-**Scope:** the **liquidity-pool cBridge** (`Bridge`/`Pool`) and the **Celer IM `MessageBus`** (cross-chain arbitrary-message layer). The **pegged-token mint/burn bridge** (`PeggedTokenBridge[V2]` + `OriginalTokenVault[V2]`) is a separate product line — see [pegged.md](./pegged.md). Topics/selectors are **chain-agnostic** (`topic0 = keccak256(event sig)`, selector = `keccak256(sig)[0:4]`); addresses are **network-specific**.
+**Status:** verified against live RPC on every listed chain and the canonical `celer-network/sgn-v2-contracts` repo on 2026-06-09. Re-checked on 2026-09-29 with `eth_getCode` on all eight target chains (Robinhood Chain, 4663, included: no Celer contract) against the official cBridge and Celer IM contract lists; the MessageBus implementations had not changed.
+**Scope:** the **liquidity-pool cBridge** (`Bridge`/`Pool`) and the **Celer IM `MessageBus`** (cross-chain arbitrary-message layer). The **pegged-token mint/burn bridge** (`PeggedTokenBridge[V2]` + `OriginalTokenVault[V2]` + `TransferAgent`) is a separate product line — see [pegged.md](./pegged.md). Topics/selectors are **chain-agnostic** (`topic0 = keccak256(event sig)`, selector = `keccak256(sig)[0:4]`); addresses are **network-specific**.
 
 Celer cBridge is the liquidity-network successor to cBridge 1.0. The **`Bridge`** contract is a **non-upgradeable immutable singleton** — its EIP-1967 implementation *and* admin slots are both empty (`0x`), and it is deployed directly (not behind a proxy) on every chain. Cross-chain settlement is **off-chain attested**: a user calls `send()` on the source chain (emits `Send`), the off-chain State Guardian Network (SGN) signs a relay request, and a relayer calls `relay()` on the destination chain (emits `Relay`) which pays out from the destination pool's liquidity. **There is no on-chain link between a source `Send` and a destination `Relay`** — they live on different chains and are correlated only by the deterministic `transferId` (see §Detection invariants). Liquidity providers call `addLiquidity()`/`withdraw()`.
 
@@ -197,26 +197,31 @@ Verified via `eth_getCode` on `https://base-rpc.publicnode.com`.
 
 | Role | Address |
 |------|---------|
-| **Bridge** | `0x7d43AABC515C356145049227CeE54B608342c0ad` (immutable singleton, 20,954 B; explorer label "Celer Network: cBridge"). `owner()` = `0xf380166f…6575`. |
+| **Bridge** | `0x7d43AABC515C356145049227CeE54B608342c0ad` (immutable singleton, 20,954 B; explorer label "Celer Network: cBridge"). `owner()` = `0xf380166f8490f24af32bf47d1aa217fba62b6575`. |
 | **MessageBus** | **NOT DEPLOYED.** No Celer IM `MessageBus` on Base. |
 
-> **Base has the pool Bridge ONLY.** Bytecode scan of the Base `0x7d43…` contract confirms `send`/`relay`/`addLiquidity`/`transfers`/`withdraws` are **present** but `sendMessage`/`sendMessageWithTransfer`/`calcFee`/`executeMessage` (MessageBus) and `mint`/`deposit` (pegged) are **all absent**. Some third-party docs/search results conflate the Base cBridge address with a "Base MessageBus" — that is wrong: there is no MessageBus, no pegged bridge, and no vault on Base.
+> **Base has the pool Bridge and one pegged contract, but no MessageBus.** Bytecode scan of the Base `0x7d43AABC515C356145049227CeE54B608342c0ad` contract confirms `send`/`relay`/`addLiquidity`/`transfers`/`withdraws` are **present** but `sendMessage`/`sendMessageWithTransfer`/`calcFee`/`executeMessage` (MessageBus) and `mint`/`deposit` (pegged) are **all absent** from it. Some third-party docs/search results conflate the Base cBridge address with a "Base MessageBus" — that is wrong: there is no MessageBus and no vault on Base. The pegged mint/burn side on Base is a separate contract, **PeggedTokenBridgeV2 `0x5471ea8f739dd37E9B81Be9c5c77754D8AA953E4`** (official cBridge list; `sigsVerifier()` = this Bridge) — see [pegged.md](./pegged.md) §9. An earlier revision of this file said Base had no pegged bridge; that is corrected here.
+
+### 9.1 Robinhood Chain (chain ID 4663) — no Celer deployment
+
+Robinhood Chain is in neither the official cBridge contract list nor the Celer IM "Contract Addresses & RPC Info" list. On 2026-09-29 `eth_getCode` returned `0x` (nonce 0) on Robinhood Chain at the seven pool-Bridge literals of §3–§9, at the six MessageBus literals, at the pool-Bridge literals that Celer reuses on other chains (`0x9B36f165baB9ebe611d491180418d8De4b8f3a1f`, `0x841ce48F9446C8E281D3F1444cB859b4A6D0738C`, `0xf5C6825015280CdfD0b56903F9F8B5A2233476F5`, `0x9Bb46D5100d2Db4608112026951c9C965b233f4D`, `0xf39e2D6f40EEeFbec021BaDC6ef5a4F201F5dC4a`) and at every pegged literal of [pegged.md](./pegged.md). `Send` and `Relay` returned 0 logs from any emitter on Robinhood Chain in the pinned 12-hour window 2026-09-28 00:00–12:00 UTC.
 
 ---
 
 ## 10. Cross-chain summary
 
-| Chain | ID | Bridge (cBridge pool) | MessageBus (IM) |
-|---|---|---|---|
-| **Ethereum** | 1 | `0x5427FEFA…1820` | `0x4066d196…200c` (proxy) |
-| **BNB** | 56 | `0xdd90E5E8…a1aF` | `0x95714818…ea6b` (proxy) |
-| **Avalanche** | 43114 | `0xef3c714c…e5d4` | `0x5a926eee…ad57` (proxy) |
-| **Arbitrum** | 42161 | `0x1619DE6B…feca` | `0x3ad9d064…257f` (proxy) |
-| **Optimism** | 10 | `0x9D39Fc62…3401` | `0x0D71D181…E69d` (proxy) |
-| **Polygon** | 137 | `0x88DCDC47…8a78` | `0xaFDb9C40…3fe6` (proxy) |
-| **Base** | 8453 | `0x7d43AABC…c0ad` | — **none** |
+| Chain | ID | Bridge (cBridge pool) | MessageBus (IM) | Pegged contracts ([pegged.md](./pegged.md)) |
+|---|---|---|---|---|
+| **Ethereum** | 1 | `0x5427FEFA711Eff984124bFBB1AB6fbf5E3DA1820` | `0x4066d196a423b2b3b8b054f4f40efb47a74e200c` (proxy) | OTV v1/V2, PegBridge v1/V2, TransferAgent |
+| **BNB** | 56 | `0xdd90E5E87A2081Dcf0391920868eBc2FFB81a1aF` | `0x95714818fdd7a5454f73da9c777b3ee6ebaeea6b` (proxy) | OTV v1/V2, PegBridge v1/V2, TransferAgent |
+| **Avalanche** | 43114 | `0xef3c714c9425a8F3697A9C969Dc1af30ba82e5d4` | `0x5a926eeeafc4d217add17e9641e8ce23cd01ad57` (proxy) | OTV v1/V2, PegBridge v1/V2 |
+| **Arbitrum** | 42161 | `0x1619DE6B6B20eD217a58d00f37B9d47C7663feca` | `0x3ad9d0648cdaa2426331e894e980d0a5ed16257f` (proxy) | OTV v1/V2, PegBridge v1/V2 |
+| **Optimism** | 10 | `0x9D39Fc627A6d9d9F8C831c16995b209548cc3401` | `0x0D71D18126E03646eb09FEc929e2ae87b7CAE69d` (proxy) | OTV v1/V2, PegBridge v1/V2 |
+| **Polygon** | 137 | `0x88DCDC47D2f83a99CF0000FDF667A468bB958a78` | `0xaFDb9C40C7144022811F034EE07Ce2E110093fe6` (proxy) | OTV v1/V2, PegBridge v1/V2 |
+| **Base** | 8453 | `0x7d43AABC515C356145049227CeE54B608342c0ad` | — **none** | PegBridge V2 `0x5471ea8f739dd37E9B81Be9c5c77754D8AA953E4` only |
+| **Robinhood Chain** | 4663 | — **none** (`0x`) | — **none** | — **none** |
 
-**Vanity / collision tells:** No shared CREATE2 vanity address — every chain's Bridge is a different literal. But several **literals are reused across chains for *different* contracts**: Polygon `Bridge` = Avalanche `PeggedTokenBridge` (`0x88DCDC47…`); Avalanche `MessageBus` impl = BNB `PeggedTokenBridgeV2` (`0x26c76f7f…`); the Ethereum `Bridge` literal `0x5427…1820` is reused on Avalanche as the `OriginalTokenVault` v1 (the Avalanche `Bridge` itself is the different literal `0xef3c714c…e5d4`). Always key on `(chainId, address)`.
+**Vanity / collision tells:** No shared CREATE2 vanity address — every chain's Bridge is a different literal. But several **literals are reused across chains for *different* contracts**: Polygon `Bridge` = Avalanche `PeggedTokenBridge` (`0x88DCDC47D2f83a99CF0000FDF667A468bB958a78`); Avalanche `MessageBus` impl = BNB `PeggedTokenBridgeV2` (`0x26c76F7FeF00e02a5DD4B5Cc8a0f717eB61e1E4b`); the Ethereum `Bridge` literal `0x5427FEFA711Eff984124bFBB1AB6fbf5E3DA1820` is reused on Avalanche as the `OriginalTokenVault` v1 (the Avalanche `Bridge` itself is the different literal `0xef3c714c9425a8F3697A9C969Dc1af30ba82e5d4`). The Base Bridge literal `0x7d43AABC515C356145049227CeE54B608342c0ad` also has code on Ethereum, Optimism and Avalanche (EIP-1967 proxies of 1,554–2,304 B with impl `0xf5c6825015280cdfd0b56903f9f8b5a2233476f5`), Arbitrum (11,620 B) and Polygon (2,758 B); the official lists name none of those five, so do not treat them as a cBridge pool. Always key on `(chainId, address)`.
 
 The pool `Bridge` bytecode is **byte-identical (20,574 B) on all six non-Base chains** and slightly larger on Base (20,954 B) — a tell that all non-Base deployments were cut from one build.
 
@@ -258,10 +263,12 @@ EIP-1967 implementation slot `0x360894a13ba1a3210667c828492db98dca3e2076cc3735a9
 8. **`Bridge.withdraw` and `OriginalTokenVault.withdraw` share selector `0xa21a9280`.** Same 4-arg `(bytes,bytes[],address[],uint256[])` shape; disambiguate by the called contract.
 9. **Safeguard-mixin events (`Paused`, `SignersUpdated`, `DelayedTransfer*`, `EpochVolumeUpdated`, `OwnershipTransferred`) are emitted by BOTH `Bridge` and the pegged contracts** (they share the mixins). Always attribute by emitter address.
 10. **`MessageBus.Executed` carries `srcChainId` and `srcTxHash`** — that is how an off-chain indexer co-verifies the source send happened. `status` (uint8): `1=Success, 2=Fail, 3=Fallback`. A `NeedRetry` (not `Executed`) means the app returned `Retry` and the message can be re-executed (the executedMessages map was reset to `Null`).
-11. **Base has the pool Bridge only** — no `MessageBus`, no pegged bridge, no vault (bytecode-confirmed). Do not index those contracts on Base.
+11. **Base has the pool Bridge and a PeggedTokenBridgeV2, nothing else** — no `MessageBus` and no vault. Index `Send`/`Relay` on `0x7d43AABC515C356145049227CeE54B608342c0ad` and `Mint`/`Burn` on `0x5471ea8f739dd37E9B81Be9c5c77754D8AA953E4` ([pegged.md](./pegged.md) §9).
 12. **Fee-on-transfer / rebasing tokens are unsupported** by `send`/`addLiquidity` (the contract NatSpec says so and accounting assumes 1:1 `transferFrom`). Such tokens, if listed, will mis-account.
 13. **`dstChainId`/`srcChainId` use `uint64(block.chainid)`** internally — they are Celer's own uint64 chain IDs which match EVM chain IDs for these seven chains, but for non-EVM counterparties (Aptos, Sui, etc.) Celer assigns its own IDs. Don't assume `dstChainId` is an EVM chainId for non-EVM routes.
 14. **Counterparty chains extend well beyond these seven.** cBridge/MessageBus also live on Linea (MessageBus `0x6F2bD3De…`), Polygon zkEVM (`0x9Bb46D51…`), zkSync Era (`0x9a98a376…`), and many others — a `Send` with `dstChainId` outside {1,56,137,43114,42161,10,8453} is a valid bridge to an out-of-scope chain, not an error.
+15. **Robinhood Chain (4663) has no Celer contract** (§9a) — not in the official lists and `0x` at every known Celer literal. A `Send`/`Relay`/`Message` topic0 on chain 4663 comes from an unrelated emitter, and no Celer route has `dstChainId` 4663.
+16. **Value legs of the pool bridge.** `Send`: ERC-20 `Transfer` from the user (or router) to the Bridge in the same tx (sample: Ethereum tx `0x6930ce2c673d71c6a4f767ebf3644563759555db06652c1f9b7350fa84cd0cbc`, USDT user → `0x5427FEFA711Eff984124bFBB1AB6fbf5E3DA1820`). `Relay`: `Transfer` from the Bridge to `Relay.receiver`, sent by an SGN relayer (sample: Ethereum tx `0x720f57b293db2d005c0afae334dc81bc9dd00358e01556d05a516f9f95eac4f0`, USDC Bridge → receiver). A refund of a failed `Send` comes back through `withdraw` (`WithdrawDone`), not through `Relay`.
 
 ---
 
@@ -342,7 +349,10 @@ OP_MESSAGEBUS                 = '\x0d71d18126e03646eb09fec929e2ae87b7cae69d'
 POLY_MESSAGEBUS               = '\xafdb9c40c7144022811f034ee07ce2e110093fe6'
 
 -- ===== Governance =====
-BRIDGE_OWNER_ETH_BASE         = '\xf380166f8490f24af32bf47d1aa217fba62b6575'
+BRIDGE_OWNER_ETH_BASE         = '\xf380166f8490f24af32bf47d1aa217fba62b6575'   -- also owner of the Base PegBridge V2, the OP OTV V2 and the ETH TransferAgent
+-- ===== Base pegged side (details in pegged.md) =====
+BASE_PEGBRIDGE_V2             = '\x5471ea8f739dd37e9b81be9c5c77754d8aa953e4'
+-- ===== Robinhood Chain (chain ID 4663): no Celer contract; every literal above returns 0x =====
 ```
 
 ---
@@ -356,10 +366,13 @@ How constants were verified (2026-06-09):
 - **Addresses:** taken from the official cBridge contract-addresses doc and the cBridge config API (`getTransferConfigsForAll` `contract_addr` matches the pool Bridge per chain), then existence-checked via `eth_getCode` on each chain's publicnode RPC. The pool `Bridge` is 20,574 B on all six non-Base chains and 20,954 B on Base. `MessageBus` impl/admin read live from the EIP-1967 slots. **Base has no MessageBus** — confirmed by scanning the Base `0x7d43…` runtime: `send`/`relay`/`addLiquidity`/`transfers`/`withdraws` present, `sendMessage`/`calcFee`/`executeMessage`/`mint`/`deposit` absent.
 - **Wiring:** `MessageBus` (ETH) `liquidityBridge()/pegBridge()/pegVault()/pegBridgeV2()/pegVaultV2()` read live and resolve to the Bridge + the four pegged contracts in pegged.md.
 - **Proxy classification:** `Bridge` EIP-1967 impl AND admin slots both read `0x0` on Ethereum (immutable, non-proxy); `MessageBus` impl + admin slots populated on all six chains (Transparent proxy).
+- **2026-09-29 re-check:** every Bridge and MessageBus address existence-checked with `eth_getCode` on its chain (all seven Bridges 20,574 B / 20,954 B as before; MessageBus impls unchanged), and every Celer literal checked on Robinhood Chain (`0x`, nonce 0; §9a). Official lists re-read: cBridge "Contract Addresses" (<https://cbridge-docs.celer.network/reference/contract-addresses>) and Celer IM "Contract Addresses & RPC Info" (<https://im-docs.celer.network/developer/contract-addresses-and-rpc-info>); neither lists Robinhood Chain or a Base MessageBus, and the cBridge list names the Base PeggedTokenBridgeV2 (pegged.md §9).
+- **Activity** (`eth_getLogs`, pinned 12-hour window 2026-09-28 00:00–12:00 UTC, all emitters; every log came from the chain's Bridge): `Send` — Ethereum 20, Base 2, Arbitrum 39, Optimism 0, Polygon 76, BNB 120, Avalanche 0, Robinhood 0. `Relay` — Ethereum 1, Base 1, Arbitrum 84, Optimism 0, Polygon 41, BNB 135, Avalanche 0, Robinhood 0. These are 12-hour counts; a 0 does not show that a Bridge is unused.
+- **Sample transactions** (`eth_getTransactionReceipt`): `Send` Ethereum `0x6930ce2c673d71c6a4f767ebf3644563759555db06652c1f9b7350fa84cd0cbc` (USDT `Transfer` user → Bridge, then `Send`, one topic); `Relay` Ethereum `0x720f57b293db2d005c0afae334dc81bc9dd00358e01556d05a516f9f95eac4f0` (`relay` from relayer `0xd10c833f4305e1053a64bc738c550381f48104ca`, USDC `Transfer` Bridge → receiver, then `Relay`).
 
 **Authoritative sources:**
 - Canonical contracts: [`celer-network/sgn-v2-contracts`](https://github.com/celer-network/sgn-v2-contracts) (`contracts/liquidity-bridge/`, `contracts/message/messagebus/`).
 - cBridge addresses: [cBridge docs — Contract Addresses](https://cbridge-docs.celer.network/reference/contract-addresses).
 - Celer IM (MessageBus) addresses: [im-docs — Contract Addresses & RPC Info](https://im-docs.celer.network/developer/contract-addresses-and-rpc-info).
 - Config API: `https://cbridge-prod2.celer.app/v1/getTransferConfigsForAll`.
-- Explorers: [Etherscan Bridge](https://etherscan.io/address/0x5427FEFA711Eff984124bFBB1AB6fbf5E3DA1820) · [BaseScan cBridge](https://basescan.org/address/0x7d43AABC515C356145049227CeE54B608342c0ad).
+- Explorers: [Etherscan Bridge](https://etherscan.io/address/0x5427FEFA711Eff984124bFBB1AB6fbf5E3DA1820) · [BaseScan cBridge](https://basescan.org/address/0x7d43AABC515C356145049227CeE54B608342c0ad) · [Robinhood Chain Blockscout](https://robinhoodchain.blockscout.com).

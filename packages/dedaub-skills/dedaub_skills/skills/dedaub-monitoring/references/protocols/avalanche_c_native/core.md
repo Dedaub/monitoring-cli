@@ -1,6 +1,6 @@
 # Avalanche Bridge (AB) — Topics, Selectors, Addresses (Ethereum L1 ↔ Avalanche C-Chain)
 
-**Status:** verified against Ethereum and Avalanche C-Chain mainnet RPC, the canonical `ava-labs/avalanche-bridge-resources` repo (BridgeToken.sol, Roles.sol, `avalanche_contract_address.json`, `token_list.json`, `cctp/cctp_config.json`), and the Circle CCTP deployment, on 2026-06-09.
+**Status:** verified against Ethereum and Avalanche C-Chain mainnet RPC, the canonical `ava-labs/avalanche-bridge-resources` repo (BridgeToken.sol, Roles.sol, `avalanche_contract_address.json`, `token_list.json`, `cctp/cctp_config.json`), and the Circle CCTP deployment, on 2026-06-09. Robinhood Chain (4663) checked on 2026-09-29: no Avalanche Bridge address or contract.
 **Scope:** the full on-chain footprint of the Avalanche Bridge — the warden-controlled deposit/mint EOAs, the per-token `BridgeToken` mintable wrapped assets on Avalanche, the deprecated AEB (Avalanche–Ethereum Bridge) ChainBridge handler, and the AB CCTP router. Topics/selectors are **chain-agnostic**; addresses are **network-specific**. The bridge connects **exactly two chains — Ethereum (chain 1) and Avalanche C-Chain (chain 43114)**. **Not deployed on Base, BNB, Arbitrum, Optimism, or Polygon** (`eth_getCode` = `0x` for every AB address on all five — see §7).
 
 The Avalanche Bridge is a **trusted, off-chain-relayer ("warden") bridge**, not a smart-contract messaging protocol. Its security lives in an **Intel SGX enclave** whose signing key is secret-shared among **4 wardens (3-of-4 threshold)**; the enclave is the only entity that can sign the bridge's on-chain transactions. Consequently the bridge's on-chain surface is deliberately thin:
@@ -232,6 +232,7 @@ Presence of every AB component on each of the seven requested chains (`eth_getCo
 | Arbitrum One | 42161 | ✗ `0x` | ✗ | ✗ | ✗ | **Not deployed** |
 | Optimism | 10 | ✗ `0x` | ✗ | ✗ | ✗ | **Not deployed** |
 | Polygon PoS | 137 | ✗ `0x` | ✗ | ✗ | ✗ | **Not deployed** |
+| Robinhood Chain | 4663 | ✗ `0x` (both EOAs: nonce 0) | ✗ | ✗ | ✗ | **Not deployed** |
 
 **The Avalanche Bridge is strictly an Ethereum ↔ Avalanche C-Chain bridge.** None of Base/BNB/Arbitrum/Optimism/Polygon carries any AB contract or EOA with code. The CCTP router address `0xD835…5648` is identical on ETH and AVAX (deterministic), but returns `0x` on all five other chains — AB does not run CCTP on the other Circle domains.
 
@@ -352,6 +353,7 @@ How every constant was verified (2026-06-09):
 - **Proxy classification:** EIP-1967 impl slot `0x360894…bbc` and admin slot `0xb53127…6103` read via `eth_getStorageAt` on WETH.e + USDC.e — both `0x0`, confirming the BridgeTokens are **immutable, not proxies**. No `Upgraded` topic exists; the only mutable authority is `bridgeRole` (rotated by `migrateBridgeRole`).
 - **CCTP router identity:** `0xD835…5648` exposes `depositForBurn (0x6fd3504e)` but lacks `localMinter (0xcb75c11c)` and `localMessageTransmitter (0x2c121921)` → an AB wrapper, not Circle's canonical TokenMessenger; identical 7 460-B bytecode on ETH and AVAX.
 - **Metadata (`eth_call`):** WETH.e `name() = "Wrapped Ether"`, `symbol() = "WETH.e"`, `decimals() = 18`; USDC.e `symbol() = "USDC.e"`, `decimals() = 6`; WBTC.e `decimals() = 8`; DAI.e/LINK.e/AAVE.e `decimals() = 18`.
+- **Robinhood Chain (2026-09-29):** on `https://rpc.mainnet.chain.robinhood.com`, the deposit EOA `0x8eb8a3b98659cce290402893d0123abb75e3ab28` and the warden EOA `0xeb1bb70123b2f43419d070d7fde5618971cc2f8f` have no code and nonce 0 (never used there), and the AEB handler `0xdac7bb7ce4ff441a235f08408e632fa1d799a147`, the CCTP router `0xd835dbd135ad8a27214ecdee79e7a41337865648` and WETH.e `0x49d5c2bdffac6ce2bfdb6640f4f80f226bc10bab` return `0x`. The bridge connects only Ethereum and Avalanche.
 - **Architecture (warden / 3-of-4 SGX enclave, lock-and-mint, AEB deprecation):** primary sources below.
 
 Authoritative sources:

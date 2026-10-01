@@ -1,6 +1,6 @@
 # Ronin Bridge — Topics, Selectors, Addresses (Ethereum L1 only; counterparty = Ronin chain 2020)
 
-**Status:** verified against live RPC on all seven listed chains and the canonical `axieinfinity/ronin-bridge-contracts` (+ legacy `axieinfinity/ronin-smart-contracts`) repos on 2026-06-09.
+**Status:** verified against live RPC on all seven listed chains and the canonical `axieinfinity/ronin-bridge-contracts` (+ legacy `axieinfinity/ronin-smart-contracts`) repos on 2026-06-09. Robinhood Chain (4663) checked on 2026-09-29: no Ronin Bridge contract.
 **Scope:** the Ethereum-mainnet leg of the Ronin Bridge — the **MainchainGatewayV3** lock/mint gateway (proxy), its governance (**MainchainBridgeManager** / **MainchainGovernanceAdmin**), the **PauseEnforcer**, the **RoninTrustedOrganization** registry, and the deprecated **V1 MainchainGateway** (pre-2022-hack). Topics/selectors are **chain-agnostic**; addresses are network-specific. **Every Ronin Bridge contract lives only on Ethereum (chain 1)** of the seven requested chains — `eth_getCode` = `0x` for every address on Base / BNB / Avalanche / Arbitrum / Optimism / Polygon. The bridge's *other* leg (RoninGatewayV3, RoninBridgeManager, BridgeReward/Slash/Tracking) lives on the **Ronin chain (chainId 2020), which is outside the seven** — recorded as a finding in §6, not indexed here.
 
 The Ronin Bridge is a **lock-and-mint validator bridge**, not a generic messaging layer. A user **deposits** on Ethereum (`requestDepositFor`) → the gateway escrows the token and emits **`DepositRequested`** → off-chain bridge operators relay it and mint the wrapped asset on Ronin. To come back, a user burns on Ronin → operators sign a `Receipt` → anyone calls **`submitWithdrawal`** on Ethereum with the operator multisig signatures → the gateway releases funds and emits **`Withdrew`**. Withdrawals above a per-token daily quota are **locked** (`WithdrawalLocked`) until a `WITHDRAWAL_UNLOCKER_ROLE` holder calls `unlockWithdrawal` (`WithdrawalUnlocked`) — this rate-limit was added after the **March 2022 $625M validator-key compromise** that drained the V1 gateway.
@@ -39,9 +39,9 @@ Recomputed locally with keccak256 on 2026-06-09. `DepositRequested` and `Withdre
 | topic0 | Event | Notes |
 |--------|-------|-------|
 | `0xd7b25068d9dc8d00765254cfb7f5070f98d263c8d68931d937c7362fa738048b` | `DepositRequested(bytes32 receiptHash, (uint256,uint8,(address,address,uint256),(address,address,uint256),(uint8,uint256,uint256)) receipt)` | **User deposit → Ronin.** *(verified live, ntopics=1, 384-B data)* |
-| `0x21e88e956aa3e086f6388e899965cef814688f99ad8bb29b08d396571016372d` | `Withdrew(bytes32 receiptHash, (...) receipt)` | **Withdrawal released from Ronin.** *(verified live, ntopics=1, 384-B data)* |
-| `0x89e52969465b1f1866fc5d46fd62de953962e9cb33552443cd999eba05bd20dc` | `WithdrawalLocked(bytes32 receiptHash, (...) receipt)` | Withdrawal exceeded daily quota → locked. |
-| `0xd639511b37b3b002cca6cfe6bca0d833945a5af5a045578a0627fc43b79b2630` | `WithdrawalUnlocked(bytes32 receiptHash, (...) receipt)` | Unlocker released a locked withdrawal. |
+| `0x21e88e956aa3e086f6388e899965cef814688f99ad8bb29b08d396571016372d` | `Withdrew(bytes32 receiptHash, (uint256,uint8,(address,address,uint256),(address,address,uint256),(uint8,uint256,uint256)) receipt)` | **Withdrawal released from Ronin.** *(verified live, ntopics=1, 384-B data)* |
+| `0x89e52969465b1f1866fc5d46fd62de953962e9cb33552443cd999eba05bd20dc` | `WithdrawalLocked(bytes32 receiptHash, (uint256,uint8,(address,address,uint256),(address,address,uint256),(uint8,uint256,uint256)) receipt)` | Withdrawal exceeded daily quota → locked. |
+| `0xd639511b37b3b002cca6cfe6bca0d833945a5af5a045578a0627fc43b79b2630` | `WithdrawalUnlocked(bytes32 receiptHash, (uint256,uint8,(address,address,uint256),(address,address,uint256),(uint8,uint256,uint256)) receipt)` | Unlocker released a locked withdrawal. |
 | `0xa4f03cc9c0e0aeb5b71b4ec800702753f65748c2cf3064695ba8e8b46be70444` | `TokenMapped(address[] mainchainTokens, address[] roninTokens, uint8[] standards)` | Token map updated (admin). |
 | `0x9d2334c23be647e994f27a72c5eee42a43d5bdcfe15bb88e939103c2b114cbaf` | `WrappedNativeTokenContractUpdated(address weth)` | WETH wrapper address changed. |
 | `0x62e78cea01bee320cd4e420270b5ea74000d11b0c9f74754ebdbfc544b05a258` | `Paused(address account)` | Gateway paused (Pausable). |
@@ -158,7 +158,7 @@ Gateway admin slot read live = `0x2cf3cfb17774ce0cfa34bb3f3761904e7fc3fadb` (the
 
 ## 4. Addresses — all other requested chains (Base 8453, BNB 56, Avalanche 43114, Arbitrum 42161, Optimism 10, Polygon 137)
 
-**No Ronin Bridge contract is deployed on any of these six chains.** Every address in §3 returns `0x` from `eth_getCode` on each chain's publicnode RPC (verified 2026-06-09). The Ronin Bridge is a **two-leg bridge between Ethereum L1 and the Ronin chain (chainId 2020) only** — it does not bridge to or from Base / BNB / Avalanche / Arbitrum / Optimism / Polygon. There is nothing to index on those six chains.
+**No Ronin Bridge contract is deployed on any of these six chains, nor on Robinhood Chain (4663).** Every address in §3 returns `0x` from `eth_getCode` on each chain's publicnode RPC (verified 2026-06-09). The Ronin Bridge is a **two-leg bridge between Ethereum L1 and the Ronin chain (chainId 2020) only** — it does not bridge to or from Base / BNB / Avalanche / Arbitrum / Optimism / Polygon. There is nothing to index on those six chains.
 
 ---
 
@@ -173,6 +173,7 @@ Gateway admin slot read live = `0x2cf3cfb17774ce0cfa34bb3f3761904e7fc3fadb` (the
 | Arbitrum One | 42161 | — | — | — | — | — |
 | Optimism | 10 | — | — | — | — | — |
 | Polygon PoS | 137 | — | — | — | — | — |
+| Robinhood Chain | 4663 | — | — | — | — | — |
 | **Ronin chain** | **2020** | *(counterparty leg — RoninGatewayV3 etc., OUTSIDE the seven; see §6)* | | | | |
 
 No CREATE2 / deterministic vanity addresses — all are one-off Ethereum singletons. Key everything on `(chainId=1, address)`.
@@ -313,7 +314,7 @@ How every constant was verified (2026-06-09):
 - **Selectors present in live impl:** PUSH4-scanned the live gateway impl `0x5019…4e69` bytecode — all §2.1/§2.2 selectors present except `receiveEther` (absent). Live `eth_call`: `depositCount()` = 111354, `paused()` = false, `wrappedNativeToken()` = WETH `0xc02a…56cc2`, `getRoninToken(WETH)` = `(0, 0xc99a6a985ed2cac1ef41640596c5a5f9f4e19ef5)`.
 - **Addresses:** parsed from the `axieinfinity/ronin-bridge-contracts` `deployments/ethereum/*.json` records (`MainchainGatewayV3Proxy`, `MainchainBridgeManager`, `MainchainGovernanceAdmin`, `MainchainGatewayPauseEnforcer`, `MainchainRoninTrustedOrganizationProxy`, `RoninTrustedOrganizationLogic`, `MainchainGatewayV2Logic`/`V3Logic`) and the official docs, then existence-checked via `eth_getCode` on `https://ethereum-rpc.publicnode.com` (all non-empty) and on the other six chains' publicnode RPCs (**all `0x`**).
 - **Proxies:** EIP-1967 impl/admin slots read live via `eth_getStorageAt`. Gateway `0x6419…`: impl = `0x5019…4e69`, admin = `0x2cf3…fadb` (a `TransparentProxyV2` whose impl is `0x0ac2…22fd` MainchainBridgeManager). The repo's recorded gateway impl (`0x2dba…af73`) differs from the live impl → **impl rotated**. Direct contracts (`0xa714…`, `0xB255…`, `0xe514…`) have empty impl slots (confirmed not proxies). V1 `0x1a2a…` has empty EIP-1967 slots — a custom proxy with impl at storage slot 0x1 (`0x8407…2F21E`) and admin at slot 0x0.
-- **Chain coverage:** `eth_getCode` for all seven gateway/manager/admin/pause/trusted-org/V1 addresses on all six non-Ethereum publicnode RPCs returned `0x` — confirming Ethereum-only L1 footprint. Counterparty leg on Ronin (chainId 2020) noted from the repo's `ronin`-side contract set; chain 2020 is outside the seven targets.
+- **Chain coverage:** `eth_getCode` for all seven gateway/manager/admin/pause/trusted-org/V1 addresses on all six non-Ethereum publicnode RPCs returned `0x` — confirming Ethereum-only L1 footprint. Robinhood Chain (2026-09-29): the same seven addresses return `0x` with nonce 0 on `https://rpc.mainnet.chain.robinhood.com`. The four gateway topics (`DepositRequested`, `WithdrawalLocked`, `WithdrawalUnlocked`, `Withdrew`) had 0 logs on Robinhood Chain in the pinned window 2026-09-28 00:00–12:00 UTC (Ethereum: `Withdrew` 24, the other three 0). Counterparty leg on Ronin (chainId 2020) noted from the repo's `ronin`-side contract set; chain 2020 is outside the seven targets.
 
 Authoritative sources:
 - Canonical repos: [`axieinfinity/ronin-bridge-contracts`](https://github.com/axieinfinity/ronin-bridge-contracts) (branch `mainnet`, `deployments/ethereum/`, `src/mainchain/MainchainGatewayV3.sol`, `src/libraries/{Transfer,Token,Proposal,GlobalProposal}.sol`) · legacy [`axieinfinity/ronin-smart-contracts`](https://github.com/axieinfinity/ronin-smart-contracts) (V1)
