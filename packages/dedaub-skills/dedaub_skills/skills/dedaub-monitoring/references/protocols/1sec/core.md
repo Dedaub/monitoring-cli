@@ -125,7 +125,7 @@ The Tokens and the USDC and cbBTC Lockers use the **same addresses as on Ethereu
 | Tokens ICP, BOB, ckBTC, GLDT, CHAT | Same addresses; owner = 1sec wallet; 8 decimals | Same addresses; owner = 1sec wallet; 8 decimals |
 | 1sec wallet (EOA) | `0x70ae25592209b57f62b3a3e832ab356228a2192c` (nonce 2,095) | `0x70ae25592209b57f62b3a3e832ab356228a2192c` (nonce 330) |
 
-## Optimism, Polygon, BNB, Avalanche, Robinhood — NO 1sec deployment
+### 4.1 Optimism, Polygon, BNB, Avalanche, Robinhood — NO 1sec deployment
 
 `eth_getCode` returns `0x` at all three Lockers and all five Tokens on Optimism (10), Polygon PoS (137), BNB Smart Chain (56), Avalanche C-Chain (43114) and Robinhood Chain (4663), and the 1sec wallet and the deployer have nonce 0 there. The DefiLlama adapters list only Ethereum, Arbitrum and Base.
 

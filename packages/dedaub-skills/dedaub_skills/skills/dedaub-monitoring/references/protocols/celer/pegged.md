@@ -190,7 +190,7 @@ Base carries **one pegged contract**, listed in the official cBridge contract li
 
 **Not on Base:** `OriginalTokenVault` (v1 and V2), `PeggedTokenBridge` v1, TransferAgent, MessageBus. An earlier revision of this file said that Base had no pegged contract; this section corrects it. Activity: 0 `Mint` and 0 `Burn` in the pinned 12-hour window 2026-09-28 00:00–12:00 UTC; the Blockscout log list shows `Mint` at block 51,777,202 (tx `0xad781811fc9459810be08de48c703bbff39e8b0cef573cbde4f7c55db7557911`, a `Transfer` from `0x0` of the pegged token to the recipient) and a v2 `Burn` at block 49,663,651 (tx `0x42bafec39237a99bae3ecd351425931ff3ef3188033d79d18176af6d1911bedc`).
 
-## 9a. Robinhood Chain (chain ID 4663) — no Celer deployment
+### 9.1 Robinhood Chain (chain ID 4663) — no Celer deployment
 
 Robinhood Chain is in neither the official cBridge contract list nor the Celer IM contract list. `eth_getCode` returned `0x` (nonce 0) on 2026-09-29 at all 24 distinct pegged-contract literals of §3–§9, at both TransferAgent literals, at the four pool-Bridge literals reused across Celer chains (`0x9B36f165baB9ebe611d491180418d8De4b8f3a1f`, `0x841ce48F9446C8E281D3F1444cB859b4A6D0738C`, `0xf5C6825015280CdfD0b56903F9F8B5A2233476F5`, `0x9Bb46D5100d2Db4608112026951c9C965b233f4D`), and at the TransferAgent literals. The pegged `Mint`/`Burn`/`Deposited`/`Withdrawn` topic0s returned 0 logs on Robinhood Chain in the pinned window.
 

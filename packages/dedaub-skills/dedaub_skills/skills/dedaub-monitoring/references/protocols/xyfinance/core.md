@@ -171,7 +171,7 @@ The xSyncAggregator `0xcf446713ddf0e83f7527a260047f8ae89efae3e5` has code on all
 
 **Same address, other roles.** XY reuses literal addresses for different contracts across chains: `0x73ce60416035b8d7019f6399778c14ccf5c9c7a1` is the YBridge on Base but the Supervisor on Arbitrum and the Gas Price Consumer on Optimism; `0x8e921191a9dc6832c1c360c7c7b019efb7c29b2d` is the USDT vault on Ethereum but xyETH on Base and xyUSDT on BNB; `0xd195070107d853e55dad9a2e6e7e970c400e67b8` is the ETH vault on Base and the USDT vault on BNB. `0x4315f344a905dc21a08189a117efd6e1fca37d57` has other code on Optimism and BNB. Always key on `(chain, address)`.
 
-## Robinhood Chain (4663) — NO XY deployment
+### 3.1 Robinhood Chain (4663) — NO XY deployment
 
 `eth_getCode` returns `0x` at the YBridge addresses of Ethereum and Base, the Supervisor `0x1b0789910027c3cc58af2391de7228d973c5c46e`, the xSyncAggregator and XY Refuel `0x6829bb7edd1360255b7fc6aecbbac029f47feeb3` on Robinhood Chain, and the XY docs do not list the chain.
 

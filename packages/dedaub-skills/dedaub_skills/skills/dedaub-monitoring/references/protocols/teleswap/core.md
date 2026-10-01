@@ -250,7 +250,7 @@ One official connector address on all three chains (`connectors.base`, `connecto
 
 Same-address traps on BNB: `0xFA1B28052Bd8087B1CF64eE9429FEB324e95B0ff` is a 23,549 B contract with BurnRouter topics (an old BurnRouter implementation, not a connector), and `0xec4A7D93750BbcE2A07fd1bc748507ea645e9d52` is a 6,438 B contract with no TeleSwap topic. Neither is in the official list.
 
-## Avalanche C-Chain (43114) and Robinhood Chain (4663) — NO TeleSwap deployment
+### 6.1 Avalanche C-Chain (43114) and Robinhood Chain (4663) — NO TeleSwap deployment
 
 `eth_getCode` returns `0x` at `0xFA1B28052Bd8087B1CF64eE9429FEB324e95B0ff`, `0xec4A7D93750BbcE2A07fd1bc748507ea645e9d52`, `0xE0166434A2ad67536B5FdAFCc9a6C1B41CC5e085` and `0x9b95Dc17acFD8E028F192971165aE7Be76e6a954` on both chains, and the official list names neither chain.
 

@@ -255,7 +255,7 @@ LayerZero eids 30109 (Polygon) and 30106 (Avalanche). **No live Aori contract.**
 |------|---------|-----------|
 | Aori 0.4.0 proxy (staged) | `0xa041a8f5d796de4ae21da10e90908549c17d1107` | The only Aori contract on Polygon and on Avalanche. The Ethereum 0.4.0 proxy has these chains as supported peers. 0 logs in the window. |
 
-## Robinhood Chain (chain ID 4663) — NO Aori deployment
+### 8.1 Robinhood Chain (chain ID 4663) — NO Aori deployment
 
 LayerZero lists Robinhood Chain as eid 30416 (EndpointV2 `0x6f475642a6e85809b1c36fa62763669b1b48dd5b`). `eth_getCode` returns `0x` at every Aori address of this doc on Robinhood Chain. No Aori contract has a peer for 30416, and the official list and the API do not name the chain.
 
