@@ -66,9 +66,9 @@ constants; always open the named `<slug>/<file>.md` for the actual topics/select
    a wrong constant.
 
    **(b) Network** — pop-up only if not already named; `multiSelect`. Slugs: `ethereum, base, arbitrum,
-   optimism, polygon, bnb, avalanche, robinhood`. Surface the 4 most relevant (the protocol's chains, else
+   optimism, polygon, bnb, avalanche, robinhood, arc`. Surface the 4 most relevant (the protocol's chains, else
    `ethereum/base/arbitrum/polygon`); the rest reach the user via "Other". Multiple picks → **one
-   `UNION ALL` query** (Step 4), deployed under the primary slot.
+   `UNION ALL` query** (Step 4), deployed under the primary slot. **Arc (5042)**, Circle's USDC-gas L1, is listed ahead of indexing: today the API rejects `network='arc'`. Run `get-schema --network arc` first; if it returns nothing, tell the user Arc is not indexed yet and stop — never fake an `arc.` query.
 
    **(c) Frequency** — pop-up, before notifications. Map label → `--frequency` seconds; **only these
    values**: `30, 60, 120, 300, 600` (10m), `3600` (1h), `14400` (4h), `86400` (24h), `259200` (3d).
@@ -104,8 +104,8 @@ _If no schema appears above, none is available in this environment — ask the u
 ## Step 1 — Read patterns, classify
 
 **Read first:** `common_query_patterns.md` — the hub (rulebook + index: §1 schema/indexes, §2 block-times,
-§3 perf rules, §5 P1–P16 index, §7 question→pattern, §8 edge cases, §9 anti-patterns, §10 checklist); skim
-`macros.md`. When writing SQL, open the two siblings it indexes: **`query_patterns.md`** (full P1–P16
+§3 perf rules, §5 P1–P17 index, §7 question→pattern, §8 edge cases, §9 anti-patterns, §10 checklist); skim
+`macros.md`. When writing SQL, open the two siblings it indexes: **`query_patterns.md`** (full P1–P17
 templates) and **`decode_primitives.md`** (decode/enrich cheat-sheet — topics, USD, `eth_call`, …).
 
 One macro dialect: `outer_transaction` (1/top-level tx: `tx_hash`,`callvalue`,`status`),
@@ -117,14 +117,15 @@ Classify:
 
 | Axis | Options |
 |------|---------|
-| **Data source** | `logs` (events) / `outer_transaction` (tx) / `transaction_detail` (call frames + `caller_vm_step_stack` depth, `is_ancestor`) / `token_ledger`,`token_transfers` (value) / `token_balance` (holder balances) / `eth_call` (live state) / `protocol_contract` (attribute to a protocol) / `dex_pool` (token-pair → pool / V4 PoolId resolution — §4) |
+| **Data source** | `logs` (events) / `outer_transaction` (tx) / `transaction_detail` (call frames + `caller_vm_step_stack` depth, `is_ancestor`) / `token_ledger`,`token_transfers` (value) / `token_balance` (holder balances) / `token_allowance` (current approvals — P17) / `eth_call` (live state) / `protocol_contract` (attribute to a protocol) / `dex_pool` (token-pair → pool / V4 PoolId resolution — §4) |
 | **Primitive** | topic0 / 4-byte selector / token+decimals / address |
 | **Mode** | presence (P1/P2/…) vs **absence** (didn't happen in N — P13) |
 | **Scope** | specific deployment vs all-forks (Step 3 collision guard) |
-| **Pattern** | P1–P16 (§7 map) |
+| **Pattern** | P1–P17 (§7 map) |
 
 Pattern menu: P1–P12 = event/call/value/aggregate; **P13** absence/staleness, **P14** drain (net USD
-out/tx), **P15** reentrancy (`is_ancestor`), **P16** anomaly (window drop/spike). §4 primitives: holders
+out/tx), **P15** reentrancy (`is_ancestor`), **P16** anomaly (window drop/spike), **P17** allowance exposure
+(`token_allowance`). §4 primitives: holders
 (`token_balance`), live state (`eth_call`), USD (`to_usd_value`), price drift.
 
 Needs protocol constants → Step 2. Protocol-agnostic → Step 4.
@@ -286,7 +287,7 @@ Write PG SQL from the §5 skeleton + grepped constants + scope guard + Step 4 st
   all 8 chains — avoids a JOIN *and* keeps the large `outer_transaction` out of the cold set), falling back to
   a `{{outer_transaction}}` JOIN on `(block_number,tx_index)` (1:1) only if that function is ever absent.
 - **Always project literal `chain_id`** (UI default chain): eth 1, base 8453, arb 42161, op 10,
-  polygon 137, bnb 56, avax 43114, robinhood 4663. Per-branch literal in a UNION.
+  polygon 137, bnb 56, avax 43114, robinhood 4663, arc 5042. Per-branch literal in a UNION.
 - No `SELECT *` (TOAST: `calldata`/`data`/`returndata`). **No trailing `;`** (UI rejects it).
 - **`LIMIT 200` / `ORDER BY` are mode-scoped.** Query mode + gate/test runs: final `SELECT` ends with
   `LIMIT 200` (cap 500; + `ORDER BY` for display; never on inner CTEs). **Deployed alerts and materialized
@@ -294,7 +295,9 @@ Write PG SQL from the §5 skeleton + grepped constants + scope guard + Step 4 st
   and the sort is wasted work; dedup is the unique-key's job, bounding is the frequency window's job.
   Strip both before deploy. Exception: top-N-by-design (leaderboard reader) keeps `ORDER BY … LIMIT N` —
   there it IS the semantics.
-- Value math via `token_ledger.value_delta` (signed), not decoding `logs.data`.
+- Value math via `token_ledger.value_delta` (signed), not decoding `logs.data`. **`value_delta > 0` = `address`
+  SENT; `< 0` = `address` RECEIVED** — not a balance change (hub §1). Sender row → `> 0`; net inflow →
+  `-SUM(value_delta)`; at a pool the most-negative net token is `token_in`.
 - **Metadata:** `latest_token_info` (PK, 1:1) → `symbol`/`token_name`/`decimals`. **USD price — LEFT JOIN
   `network_token_info`:** `LEFT JOIN <chain>.network_token_info nti ON nti.token_address = token`, read
   `nti.last_price` (double, **kept up to date — the canonical price source**):
@@ -490,7 +493,7 @@ final SQL + the query's folder path & id + its UI link `https://app.dedaub.com/t
 |------|------|
 | `…/protocols/INDEX.md` | **Step 0 (startup) + Step 2a** — category & chain → protocol(slug) lookup map; resolve a category/chain ask to the right `<slug>/` |
 | `…/sample_queries/common_query_patterns.md` | always (Step 1) — hub: schema, indexes, perf rules, pattern index, anti-patterns, checklist |
-| `…/database/query_patterns.md` | Step 5 — full P1–P16 SQL templates (indexed by the hub §5) |
+| `…/database/query_patterns.md` | Step 5 — full P1–P17 SQL templates (indexed by the hub §5) |
 | `…/database/decode_primitives.md` | Step 5 — decode/enrich cheat-sheet (hub §4) |
 | `…/decode-verification.md` | **Step 5 — decode gate** (after the tuning loop, both modes): the numbered checks, the probe SQL, the fix recipes |
 | `…/database/macros.md` | Step 1/5 — macros, VIEW/`ref`/INCREMENTAL, CLI notes |

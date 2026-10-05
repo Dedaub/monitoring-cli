@@ -9,7 +9,7 @@ post-run decode verification (§11). Two heavy sections live in siblings and are
 actually write SQL:
 
 - **`../decode_primitives.md`** (§4) — the decode/enrich cheat-sheet (topics, `hex_to_numeric`, USD, `eth_call`, …).
-- **`../query_patterns.md`** (§5) — the full P1–P16 SQL templates.
+- **`../query_patterns.md`** (§5) — the full P1–P17 SQL templates.
 
 > **How to use.** The protocol doc supplies *constants* (addresses, selectors, topic0 hashes, assets).
 > Pick the pattern via §7 (or the §5 index), open `query_patterns.md` for the template, substitute
@@ -26,18 +26,19 @@ actually write SQL:
 
 ## 1. Schema cheat-sheet
 
-Per-chain schema (`base.`, `ethereum.`, `arbitrum.`, `optimism.`, `polygon.`, `binance.`, `avalanche.`, `robinhood.`). All tables below exist on every chain unless noted. **Robinhood (4663)** carries all the core tables (`block`/`logs`/`outer_transaction`/`transaction_detail`/`token_ledger`/`token_transfers`/`latest_token_info`/`network_token_info`/`contracts`/`dex_pool`/`dex_pool_activity`) but **not** the legacy non-`_v2` rollups (`address_transfer_stats_daily`/`_weekly`, `address_token_pair_stats_daily`/`_weekly`, `address_cadence_stats_hourly`/`_weekly`, `token_transfer_stats_hourly`/`_weekly`), nor `money_flow_by_day`/`_hour` or `dex_pool_status` — use the `_v2` variants there.
+Per-chain schema (`base.`, `ethereum.`, `arbitrum.`, `optimism.`, `polygon.`, `binance.`, `avalanche.`, `robinhood.`; `arc.` once indexed). All tables below exist on every chain unless noted. **Arc (5042)**, Circle's USDC-gas L1, is listed ahead of indexing: today the API rejects `network='arc'`. Run `get-schema --network arc` first; if it returns nothing, tell the user Arc is not indexed yet and stop — never fake an `arc.` query. **Robinhood (4663)** carries all the core tables (`block`/`logs`/`outer_transaction`/`transaction_detail`/`token_ledger`/`token_transfers`/`latest_token_info`/`network_token_info`/`contracts`/`dex_pool`/`dex_pool_activity`) but **not** the legacy non-`_v2` rollups (`address_transfer_stats_daily`/`_weekly`, `address_token_pair_stats_daily`/`_weekly`, `address_cadence_stats_hourly`/`_weekly`, `token_transfer_stats_hourly`/`_weekly`), nor `money_flow_by_day`/`_hour` or `dex_pool_status` — use the `_v2` variants there.
 
 | Table | PK | Purpose |
 |-------|----|---------|
 | `<chain>.outer_transaction` | `(block_number, tx_index)` | One row per **top-level tx**. `tx_hash`, `from_a`/`to_a`, `callvalue` (wei → ETH value), `status` (`false` = reverted), `input`. Entry-call / ETH-value detection. |
 | `<chain>.transaction_detail` | `(block_number, tx_index, vm_step_start)` | One row per executed call frame. `from_a` = caller, `to_a` = callee, `calldata` = input bytes. Also: `callvalue`, `error`, `call_opcode` (`'CALL'`/`'DELEGATECALL'`/`'STATICCALL'`/… — default-filter `'CALL'` for call monitoring, §8.10), and **`caller_vm_step_stack` (int[])** — the call-frame stack, so `coalesce(array_length(caller_vm_step_stack,1),0)` = **call depth** (0 = top-level/EOA-initiated, >0 = nested via router/bundler/contract). |
 | `<chain>.logs` | `(block_number, tx_index, vm_step)` | One row per emitted `LOG*`. `address` = emitter, `topic0..3`, `data`. |
-| `<chain>.token_ledger` | `(address, block_number, tx_index, vm_step_start, vm_step)` | Parsed token balance deltas. One row per side of each transfer; `value_delta` is signed. |
+| `<chain>.token_ledger` | `(address, block_number, tx_index, vm_step_start, vm_step)` | Parsed token movements. Two rows per transfer, one per side, linked by `counterparty_address`. **Sign rule: `value_delta > 0` = `address` SENT the tokens; `value_delta < 0` = `address` RECEIVED them.** It is the amount sent, **not** a balance change (measured against `Transfer` logs on all 8 chains: every non-zero row agrees except self-transfers, where `address` is both sides; a mint is a `> 0` row on the zero address). Sender row → `value_delta > 0`; net inflow to `address` → `-SUM(value_delta)`. |
 | `<chain>.token_transfers` | `(block_number, tx_index, vm_step_start, vm_step)` | One row per token transfer: `token_address`, `from_a`, `to_a`, `value` (unsigned). Lighter than `token_ledger` when you don't need signed deltas / counterparty. |
 | `<chain>.contracts` | `(address)` | One row per deployed contract. `deployer`, `eoa_deployer` (both nullable — §8.11), `block_number`, `md5_bytecode` (→ code-similarity via §4 embeddings). |
 | `<chain>.block` | `(block_number)` | Block headers; source of truth for tip and timestamps. |
 | `<chain>.token_balance` | `(token_address, owner_address)` | **Current** ERC-20 balance per holder: `value` (numeric, raw units), `block_number` (last update). Indexed on `owner_address` and `token_address`-leading PK → both "holders of token X" and "balances of address Y" are index-fast. Holder/concentration/whale analytics — no log replay needed. Referenced raw (no macro). |
+| `<chain>.token_allowance` | `(token_address, spender_address, owner_address)` | **Current** ERC-20 allowance per `(token, spender, owner)`: `value` (numeric, raw units; `>= 2^255` ≈ unlimited), `block_number` (last change). State, not history — `value = 0` rows remain after a revoke or full spend (filter `value > 0`); for approval events/history use `Approval` logs (P2). Referenced raw (no macro). Exposure / "who can pull from whom" → P17. |
 | `<chain>.protocol_contract` | `(protocol_id, address)` | Maps a contract `address` → `protocol_id` for **Watchdog-supported** protocols. JOIN `token_ledger`/`logs`/`transaction_detail` `USING (address)` to attribute activity to a protocol without hardcoding its address set. Pair with `<chain>.protocol (protocol_id, protocol_name)` for the readable name. Referenced raw. |
 | `<chain>.dex_pool` | `(block_number, tx_index, vm_step)` (pool-creation event) | **Token pair → pool** for Uniswap V2/V3/V4 families + all forks (2-token only; **not** Curve/Balancer/multi-token). `pool_tokens` (`ethaddress[2]`), `pool_address`, `factory_address` (= the specific DEX — `project_name` is **only** the V2/V3/V4 standard), `fee`, `metadata` (V4 `id`=PoolId, `hook`). **Index-backed only on `pool_tokens[1]`/`pool_tokens[2]`/`pool_address`** → pivot token(s)→pool; any other lead is a multi-M-row seq scan. `pool_address` **NOT unique**; **V4 pools all share `pool_address`=PoolManager → key on `metadata->>'id'`**. Raw, no macro (BNB = `binance.dex_pool`). Resolution recipe → §4. |
 | `<chain>.dex_pool_activity` | `(pool_address)` | `last_active_block` per pool — liveness filter among the millions of dead pools. Coarse for V4 (one row per PoolManager). Raw. |
@@ -54,6 +55,7 @@ Per-chain schema (`base.`, `ethereum.`, `arbitrum.`, `optimism.`, `polygon.`, `b
 | `token_ledger` | `(address)`, `(address, block_number, tx_index, vm_step_start, vm_step)`, `(block_number)`, `(block_number, tx_index, vm_step_start, vm_step)` |
 | `contracts` | `(address)` [pkey], `(deployer)`, `(block_number)` |
 | `token_balance` | `(token_address, owner_address)` [pkey], `(owner_address)`, `(block_number)` — lead with `token_address` for holders-of-a-token, `owner_address` for balances-of-an-address |
+| `token_allowance` | `(token_address, spender_address, owner_address)` [pkey], `(spender_address)`, `(owner_address)`, `(block_number)` — lead with `spender_address` for who-a-spender-can-pull-from, `owner_address` for whom-an-owner-approved |
 | `dex_pool` | `(pool_address)` [pool→pair], `(pool_tokens[1])`, `(pool_tokens[2])` [token/pair→pool — pivot lead] — **no GIN on the whole array** → use `[1]`/`[2]` **equality**, never `@>` containment. Pair lookup = `BitmapAnd` of `[1]`+`[2]`; test both orderings (not sorted). `dex_pool_activity`: `(pool_address)` |
 
 ### 1.2 Helper functions (PG18+)
@@ -90,6 +92,7 @@ Addresses in literals must be **lowercased** (no checksum casing) and prefixed `
 | BNB (56) | 3 s | 20 | 1,200 | 28,800 | 201,600 |
 | Avalanche C (43114) | ~2 s | 30 | 1,800 | 43,200 | 302,400 |
 | Robinhood (4663) | ~0.1 s | 600 | 36,000 | 864,000 | 6,048,000 |
+| Arc (5042) | ~0.5 s | 120 | 7,200 | 172,800 | 1,209,600 |
 
 **Rolling block-window predicate** (always block-indexed, fastest):
 
@@ -136,7 +139,7 @@ ERC20 metadata (`latest_token_info`) · **USD price — JOIN `network_token_info
 
 ---
 
-## 5. Query patterns (P1–P16) → `../query_patterns.md`
+## 5. Query patterns (P1–P17) → `../query_patterns.md`
 
 Full SQL templates in the sibling file. Index (pick via this table or §7, then open `query_patterns.md`):
 
@@ -158,6 +161,7 @@ Full SQL templates in the sibling file. Index (pick via this table or §7, then 
 | P14 | Protocol drain | net USD out of a protocol in one tx |
 | P15 | Reentrancy (`is_ancestor`) | a call nested inside another call (same callee re-entered) |
 | P16 | Anomaly vs baseline | sudden drop / spike vs recent norm (window `LAG`/rolling `AVG`) |
+| P17 | Allowance exposure (`token_allowance`) | who can spend whose tokens; large / unlimited approvals to a spender |
 
 §4 primitives also stand alone as "patterns" for: holders/concentration (`token_balance`), live state
 (`eth_call`), mint/burn, price drift.
@@ -209,6 +213,8 @@ If the protocol doc lacks a value, **stop and ask** — never guess a selector o
 | "Reentrancy / call nested inside another call" | **P15** (`is_ancestor`) | callee address + the re-entered selector |
 | "Sudden drop / spike vs recent norm" (TVL, withdrawals, volume) | **P16** (window LAG / rolling AVG) | the metric + bucket + threshold |
 | "Holders / concentration / whale balance" | `token_balance` (§4) | token address (+ N) |
+| "Who can spend X's tokens / approvals to spender S / unlimited approvals / exposure if S is compromised" | **P17** (`token_allowance`, current state) | spender or owner or token address |
+| "When / how often were approvals granted, or what was the old allowance?" | P2 on ERC-20 `Approval(address indexed owner, address indexed spender, uint256 value)` (`token_allowance` keeps no history) | token address(es) or spender in `topic2` |
 | "Live contract state (supply, price, config)" | `eth_call` (§4) | contract + view-fn signature |
 | "Mint / burn / supply change" | §4 zero-address `token_ledger` | token address |
 | "Oracle/price drift between two sources" | §4 drift formula + `to_usd_value`/`eth_call` | the two price sources |
@@ -247,6 +253,8 @@ If the protocol doc lacks a value, **stop and ask** — never guess a selector o
 | `SELECT *` from `logs` / `transaction_detail` | `data`/`calldata` are TOAST; bloats network | Project explicit columns |
 | `WHERE tx_hash = '\x…'` | `tx_hash` may not be indexed on every table | Use `(block_number, tx_index)` if known |
 | Decoding `logs.Transfer.data` for amounts | Slow + complicated when `token_ledger` has it parsed | P4 |
+| **Reading `token_ledger.value_delta` as a balance change** (`< 0` = sender, "max +net at a pool = token_in") | Inverted. `value_delta > 0` is the side that **sent**; at a pool, the token with the largest positive net is the one the pool paid **out** (`token_out` for the user). Sender/recipient and in/out labels come out swapped while the amounts look right, so no gate catches it. | §1 sign rule: sender row `> 0`; net inflow `-SUM(value_delta)`; pool `token_in` = most-negative net |
+| Treating `token_allowance` as approval history | It holds only the latest value per `(token, spender, owner)`; `value = 0` rows persist after revokes/spends. | `value > 0` for live exposure (P17); `Approval` logs (P2) for when/how often |
 | Treating `td.from_a` as the end user | Wrong in any relayer/meta-tx protocol | P5 (auth event or `token_ledger` initiator) |
 | `JOIN` without `block_number` predicate on both sides | Joins explode; PG may pick a bad plan | Push `block_number BETWEEN …` into both subqueries (or a shared CTE) |
 | Querying without a block-range filter | Full table scan | Always include `block_number BETWEEN …` |
@@ -270,7 +278,7 @@ If the protocol doc lacks a value, **stop and ask** — never guess a selector o
 2. There is a `block_number BETWEEN …` / `duration=` filter, and it's **≤ 30d** (history beyond 30d → materialized TABLE, not a wide scan).
 3. `committed AND error IS NULL` present (unless you want reverts).
 4. Addresses are lowercase `\x` bytea literals; topics full 32-byte; SELECT output for addresses/hashes is `concat('0x', encode(col,'hex'))`.
-5. Value math: `tl.value_delta < 0` selects sender rows (don't double-count).
+5. Value math: `tl.value_delta > 0` selects sender rows (`address` sent), one row per transfer — don't double-count (§1 sign rule).
 6. Aggregations time-bucket via `<chain>.block_timestamp(block_number)`, not by joining `<chain>.block`.
 7. Cross-chain → `UNION ALL` per chain; never JOIN on `block_number`; row key / `GROUP BY` is **`(address, chain_id)`** (P12).
 8. **No trailing `;`** (§3 rule 9).
