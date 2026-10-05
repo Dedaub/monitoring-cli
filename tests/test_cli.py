@@ -172,6 +172,45 @@ def test_validate_query_bad_exits_one(monkeypatch):
     assert result.exit_code == 1
 
 
+def _run_query_client(monkeypatch):
+    client = MagicMock()
+    client.execute_query.return_value = []
+    _patch_client(monkeypatch, client)
+    return client
+
+
+@pytest.mark.parametrize("flag", ["--end-time", "--start-time"])
+def test_run_query_end_time_anchors_window_end(monkeypatch, flag):
+    # The server's default_start_time is the END of the window ([t - duration, t]);
+    # --start-time survives only as a hidden alias that maps to the same field.
+    client = _run_query_client(monkeypatch)
+    result = runner.invoke(
+        app,
+        ["run-query", "--id", "9", "--entity-id", "7", flag, "2026-10-01T12:00:00Z"]
+        + ["SELECT 1"],
+    )
+    assert result.exit_code == 0, result.output
+    kwargs = client.execute_query.call_args.kwargs
+    assert kwargs["default_start_time"] == "2026-10-01T12:00:00Z"
+
+
+def test_run_query_rejects_both_end_and_start_time(monkeypatch):
+    client = _run_query_client(monkeypatch)
+    result = runner.invoke(
+        app,
+        ["run-query", "--id", "9", "--entity-id", "7", "SELECT 1"]
+        + ["--end-time", "2026-10-01T12:00:00Z", "--start-time", "2026-10-01T11:00Z"],
+    )
+    assert result.exit_code == 2
+    client.execute_query.assert_not_called()
+
+
+def test_run_query_help_documents_end_time_not_start_time():
+    result = runner.invoke(app, ["run-query", "--help"])
+    assert "--end-time" in result.output
+    assert "--start-time" not in result.output
+
+
 def test_generate_query_failed_exits_clean(monkeypatch):
     # A "failed" job must surface its own message and exit 1 — NOT get re-wrapped
     # by the generic except-Exception handler (typer.Exit subclasses Exception).
