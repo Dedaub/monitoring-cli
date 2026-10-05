@@ -1,14 +1,14 @@
-# deBridge DMP (deBridgeGate) — Topics, Selectors, Addresses (Ethereum + Base + Arbitrum + Optimism + Polygon + BNB + Avalanche + Robinhood Chain)
+# deBridge DMP (deBridgeGate) — Topics, Selectors, Addresses (Ethereum + Base + Arbitrum + Optimism + Polygon + BNB + Avalanche + Robinhood Chain + Arc)
 
-**Status:** verified on 2026-09-29 against live RPC on all eight target chains, the deBridge DMP "Deployed Contracts" page, the verified implementation sources on Blockscout, and the `debridge-finance/debridge-contracts-v1` repository. Topics and selectors recomputed as `keccak256(signature)`; addresses existence-checked with `eth_getCode`; EIP-1967 slots read live.
-**Scope:** the deBridge Messaging Protocol (DMP): `DeBridgeGate` (lock, burn, mint, release and message transport), `CallProxy` (executes the calls of a message), `SignatureVerifier` (validator signatures), `DeBridgeTokenDeployer` and the deAsset tokens (dePort), and `WethGate`. DMP is deployed on all eight target chains: Ethereum (1), Base (8453), Arbitrum One (42161), Optimism (10), Polygon PoS (137), BNB Smart Chain (56), Avalanche C-Chain (43114) and Robinhood Chain (4663). The DLN order contracts that use DMP for settlement are in [dln.md](dln.md). Topics and selectors are chain-agnostic; addresses are per chain.
+**Status:** verified on 2026-09-29 against live RPC on the eight original target chains (Arc added on 2026-10-05 with the same checks), the deBridge DMP "Deployed Contracts" page, the verified implementation sources on Blockscout, and the `debridge-finance/debridge-contracts-v1` repository. Topics and selectors recomputed as `keccak256(signature)`; addresses existence-checked with `eth_getCode`; EIP-1967 slots read live.
+**Scope:** the deBridge Messaging Protocol (DMP): `DeBridgeGate` (lock, burn, mint, release and message transport), `CallProxy` (executes the calls of a message), `SignatureVerifier` (validator signatures), `DeBridgeTokenDeployer` and the deAsset tokens (dePort), and `WethGate`. DMP is deployed on all nine target chains: Ethereum (1), Base (8453), Arbitrum One (42161), Optimism (10), Polygon PoS (137), BNB Smart Chain (56), Avalanche C-Chain (43114), Robinhood Chain (4663) and Arc (5042). The DLN order contracts that use DMP for settlement are in [dln.md](dln.md). Topics and selectors are chain-agnostic; addresses are per chain.
 
 deBridgeGate is a validator-signed lock-and-mint bridge and message layer. On the source chain, `send` locks a token that is native to the chain (or burns a deAsset) and emits `Sent`; `sendMessage` emits `Sent` with amount 0 and a call payload. On the destination chain, anyone submits the validator signatures to `claim`; the Gate releases the locked token or mints the deAsset to the receiver, or hands the tokens and the call data to `CallProxy`, and emits `Claimed`. There is no refund on the source chain: an unclaimed submission stays pending, and a failed call goes to the fallback address of the message.
 
 Three facts to know before indexing:
 
 1. **Most Gate traffic is DLN settlement, not user transfers.** In the pinned window, 65 of the 67 Ethereum `Sent` logs had `nativeSender` = `DlnDestination` and amount 0 (unlock and cancel messages). Classify each `Sent` and `Claimed` before counting it as a transfer (§6).
-2. **The Gate address differs on Base.** The Gate is `0x43dE2d77BF8027e25dBD179B491e8d64f38398aA` on seven chains, but `0xc1656B63D9EEBa6d114f6bE19565177893e5bCBF` on Base. On Base, `0x43dE2d77BF8027e25dBD179B491e8d64f38398aA` is the ProxyAdmin, and on the other chains `0xc1656B63D9EEBa6d114f6bE19565177893e5bCBF` is a DeBridgeToken implementation.
+2. **The Gate address differs on Base.** The Gate is `0x43dE2d77BF8027e25dBD179B491e8d64f38398aA` on eight chains, but `0xc1656B63D9EEBa6d114f6bE19565177893e5bCBF` on Base. On Base, `0x43dE2d77BF8027e25dBD179B491e8d64f38398aA` is the ProxyAdmin, and on the other chains `0xc1656B63D9EEBa6d114f6bE19565177893e5bCBF` is a DeBridgeToken implementation.
 3. **The link key is `submissionId`**: the first data word of `Sent` (source) and of `Claimed` (destination). It is on chain on both sides and it is also in `MonitoringSendEvent`, `MonitoringClaimEvent`, `AutoRequestExecuted`, `SignatureVerifier.Confirmed` and `SubmissionApproved`.
 
 ---
@@ -17,10 +17,10 @@ Three facts to know before indexing:
 
 | Contract | Chains | Role | Proxy |
 |----------|--------|------|-------|
-| **DeBridgeGate** | all 8 (Base at its own address) | Entry point: `send`, `sendMessage`, `claim`; holds the locked assets. | EIP-1967 transparent |
-| **CallProxy** | all 8 | Executes the call data of a claimed message (`DlnSource.claimUnlock` for DLN). Only the Gate may call it (`DEBRIDGE_GATE_ROLE`). | EIP-1967 transparent |
-| **SignatureVerifier** | all 8 | Checks the validator signatures of a submission; emits `Confirmed` per validator. | EIP-1967 transparent |
-| **DeBridgeTokenDeployer** | all 8 | Deploys the deAsset proxies and serves their implementation (`tokenImplementation()`). | EIP-1967 transparent |
+| **DeBridgeGate** | all 9 (Base at its own address) | Entry point: `send`, `sendMessage`, `claim`; holds the locked assets. | EIP-1967 transparent |
+| **CallProxy** | all 9 | Executes the call data of a claimed message (`DlnSource.claimUnlock` for DLN). Only the Gate may call it (`DEBRIDGE_GATE_ROLE`). | EIP-1967 transparent |
+| **SignatureVerifier** | all 9 | Checks the validator signatures of a submission; emits `Confirmed` per validator. | EIP-1967 transparent |
+| **DeBridgeTokenDeployer** | all 9 | Deploys the deAsset proxies and serves their implementation (`tokenImplementation()`). | EIP-1967 transparent |
 | **DeBridgeToken** (deAsset) | per asset | ERC-20 that the Gate mints on claim and burns on send (dePort wrapped assets). | EIP-1967 beacon proxy per asset; the beacon is DeBridgeTokenDeployer |
 | **WethGate** | Ethereum, Polygon, BNB, Avalanche | Receives WETH from the Gate and forwards native ETH (`Withdrawal`). | not a proxy (682 bytes) |
 
@@ -158,7 +158,7 @@ All verified with `eth_getCode` on 2026-09-29. The DMP deployed-contracts page l
 | **WethGate** | `0xFCf83648b8cDeF62e5d03319a6f1FCE16e4D6A59` | 682 bytes, not a proxy. |
 | ProxyAdmin (all DMP proxies) | `0xe4427af3555cd9303d728c491364fadfdd7494fe` | Owner Safe `0x6bec1faf33183e1bc316984202ecc09d46ac92d5` (threshold 5). The same literal is the Gate implementation on Base. |
 
-## 4. Addresses — the other seven chains
+## 4. Addresses — the other eight chains
 
 ### 4.1 Base (chain ID 8453) — the Gate has its own address
 
@@ -212,6 +212,20 @@ Listed in the DMP deployed-contracts table. The Gate is live here: 44 `Sent` and
 | ProxyAdmins (one per proxy) | Gate `0x150f6ce7301022d50285d0445c8941f60783a0e0`; deployer `0x8dfa7acc3d77aa9f6e1ecdc0956932feef80d508`; verifier `0x3264517c487170a0b3a3a5a5e529e9a5e87ff457`; CallProxy `0x127f50775935cc6519c7fe2fce14aaace2434fc0` | All four owned by EOA `0xd6f0dabbbccd143f7d526a82ca176b5395ccc844` (nonce 28), the deployer of the Base ProxyAdmin. |
 | WethGate | none | No code at `0xFCf83648b8cDeF62e5d03319a6f1FCE16e4D6A59`. |
 
+### 4.6 Arc (chain ID 5042)
+
+Verified with `eth_getCode` on `https://rpc.mainnet.arc.io` on 2026-10-05. `getChainId()` on the Gate returns 5042 and `callProxy()` returns `0x8a0C79F5532f3b2a16AD1E4282A5DAF81928a824`. Same layout as Robinhood Chain (OpenZeppelin v5 proxies, same per-proxy ProxyAdmin addresses, same owner EOA). The Gate emitted `Sent` 1 and `MonitoringSendEvent` 1 in ~40,000 Arc blocks (≈ 5.7 h) to 2026-10-05.
+
+| Role | Address | One-liner |
+|------|---------|-----------|
+| **DeBridgeGate** (proxy) | `0x43dE2d77BF8027e25dBD179B491e8d64f38398aA` | OpenZeppelin v5 proxy (1,159 bytes); implementation `0xc511da5246a506b0f4a63d1ec1b1f53f02f2417f` (22,277 bytes). |
+| CallProxy (proxy) | `0x8a0C79F5532f3b2a16AD1E4282A5DAF81928a824` | Implementation `0x4e446b6cf4d127827c83ca0c848db0b43841c391`. |
+| SignatureVerifier (proxy) | `0x949b3B3c098348b879C9e4F15cecc8046d9C8A8c` | Implementation `0x2a3e72ed893b5958690e16c3bbe1bd92137b6250`; `minConfirmations` 8. |
+| DeBridgeTokenDeployer (proxy) | `0x8244d6Ffe0695B30b2bAD424683Ee3bc534Ea464` | Implementation `0x4c7ca8fcffe77281a8b81d4580cff8257d785491`. |
+| `0xc1656B63D9EEBa6d114f6bE19565177893e5bCBF` | — | 7,660 bytes (same size as the Robinhood deAsset logic); not read as `tokenImplementation()` here. |
+| ProxyAdmins (one per proxy) | Gate `0x150f6ce7301022d50285d0445c8941f60783a0e0`; deployer `0x8dfa7acc3d77aa9f6e1ecdc0956932feef80d508`; verifier `0x3264517c487170a0b3a3a5a5e529e9a5e87ff457`; CallProxy `0x127f50775935cc6519c7fe2fce14aaace2434fc0` | All four owned by EOA `0xd6f0dabbbccd143f7d526a82ca176b5395ccc844`. |
+| WethGate | `0xFCf83648b8cDeF62e5d03319a6f1FCE16e4D6A59` | 1,107 bytes (Ethereum: 682); not a proxy. |
+
 ---
 
 ## 5. Cross-chain summary
@@ -226,8 +240,9 @@ Listed in the DMP deployed-contracts table. The Gate is live here: 44 `Sent` and
 | BNB Smart Chain | 56 | ✓ `0x43dE2d77BF8027e25dBD179B491e8d64f38398aA` | ✓ | `0xcacebe8c354b70fa6e3107f3f6f699e4fbb3a98b` | ✓ | Safe (5) |
 | Avalanche C-Chain | 43114 | ✓ `0x43dE2d77BF8027e25dBD179B491e8d64f38398aA` | ✓ | `0xcacebe8c354b70fa6e3107f3f6f699e4fbb3a98b` | ✓ | Safe (5) |
 | Robinhood Chain | 4663 | ✓ `0x43dE2d77BF8027e25dBD179B491e8d64f38398aA` | ✓ | `0xc1656B63D9EEBa6d114f6bE19565177893e5bCBF` | — | **EOA** |
+| Arc | 5042 | ✓ `0x43dE2d77BF8027e25dBD179B491e8d64f38398aA` | ✓ | not read | ✓ (1,107 B) | **EOA** |
 
-WethGate literal: `0xFCf83648b8cDeF62e5d03319a6f1FCE16e4D6A59`. The Gate also runs on Solana (program `DEbrdGj3HsRsAzx6uH4MKyREKxVAfBydijLUF3ygsFfh`), TRON, Linea, Arc, Story, Cronos, HyperEVM, Injective, Monad and MegaETH.
+WethGate literal: `0xFCf83648b8cDeF62e5d03319a6f1FCE16e4D6A59`. The Gate also runs on Solana (program `DEbrdGj3HsRsAzx6uH4MKyREKxVAfBydijLUF3ygsFfh`), TRON, Linea, Story, Cronos, HyperEVM, Injective, Monad and MegaETH.
 
 ---
 
@@ -236,7 +251,7 @@ WethGate literal: `0xFCf83648b8cDeF62e5d03319a6f1FCE16e4D6A59`. The Gate also ru
 | Contract | Pattern | Detection | Upgrade auth |
 |----------|---------|-----------|--------------|
 | DeBridgeGate, CallProxy, SignatureVerifier, DeBridgeTokenDeployer (7 chains) | EIP-1967 transparent, OpenZeppelin v4 (2,141-byte proxy; 2,112 bytes on Base and Optimism) | Implementation slot `0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc` populated; admin slot `0xb53127684a568b3173ae13b9f8a6016e243e63b6e8ee1178d6a717850b5d6103` = `0xe4427af3555cd9303d728c491364fadfdd7494fe` (Base: `0x43dE2d77BF8027e25dBD179B491e8d64f38398aA`) | 5-threshold Safe per chain (§3–§4) |
-| Same four on Robinhood Chain | EIP-1967 transparent, OpenZeppelin v5 (1,159 bytes), one ProxyAdmin per proxy | Admin slot = the ProxyAdmins of §4.5 | EOA `0xd6f0dabbbccd143f7d526a82ca176b5395ccc844` |
+| Same four on Robinhood Chain and Arc | EIP-1967 transparent, OpenZeppelin v5 (1,159 bytes), one ProxyAdmin per proxy | Admin slot = the ProxyAdmins of §4.5 / §4.6 (same addresses) | EOA `0xd6f0dabbbccd143f7d526a82ca176b5395ccc844` |
 | deAssets | EIP-1967 beacon proxies (806 and 833 bytes in the samples) | Beacon slot `0xa3f0ad74e5423aebfd80d3ef4346578335a9a72aeaee59ff6cb3582b35133d50` = DeBridgeTokenDeployer `0x8244d6Ffe0695B30b2bAD424683Ee3bc534Ea464`; its `implementation()` returns the deAsset logic (same value as `tokenImplementation()` on Ethereum) | `setTokenImplementation` on the deployer (deployer admin); one call changes every deAsset |
 | WethGate | not a proxy | 682 bytes, empty implementation slot | none |
 
@@ -250,7 +265,7 @@ WethGate literal: `0xFCf83648b8cDeF62e5d03319a6f1FCE16e4D6A59`. The Gate also ru
 4. **Link key = `submissionId`** (data word 0 of `Sent` and `Claimed`). `chainIdTo` (topic2 of `Sent`) and `chainIdFrom` (topic3 of `Claimed`) are deBridge chain ids (Solana = 7565164 = `0x736f6c`). `debridgeId` (topic1) identifies the asset route and is the same on both sides.
 5. **No refund event.** A submission that is never claimed leaves the tokens locked or burned; a failed call sends the tokens to the fallback address inside `CallProxy` (`AutoRequestExecuted.success` = false). Admins can `blockSubmission`.
 6. **Validator security signals.** `AddOracle`, `UpdateOracle`, `setMinConfirmations`, `setSignatureVerifier`, `CallProxyUpdated` and `Blocked` change who can release funds. `Confirmed` fires once per validator signature on every claim; it is noise for value monitors.
-7. **Address collisions.** `0x43dE2d77BF8027e25dBD179B491e8d64f38398aA` = Gate on seven chains and ProxyAdmin on Base. `0xc1656B63D9EEBa6d114f6bE19565177893e5bCBF` = Gate on Base, deAsset logic on Optimism and Robinhood Chain, and a DeBridgeToken contract that is not the live deAsset logic on Ethereum, Arbitrum, Polygon, BNB and Avalanche. `0xe4427af3555cd9303d728c491364fadfdd7494fe` = ProxyAdmin on seven chains and Gate implementation on Base. Key every address on `(chain, address)`.
+7. **Address collisions.** `0x43dE2d77BF8027e25dBD179B491e8d64f38398aA` = Gate on eight chains (Robinhood Chain and Arc included) and ProxyAdmin on Base. `0xc1656B63D9EEBa6d114f6bE19565177893e5bCBF` = Gate on Base, deAsset logic on Optimism and Robinhood Chain, and a DeBridgeToken contract that is not the live deAsset logic on Ethereum, Arbitrum, Polygon, BNB and Avalanche. `0xe4427af3555cd9303d728c491364fadfdd7494fe` = ProxyAdmin on seven chains and Gate implementation on Base. Key every address on `(chain, address)`.
 8. **`MonitoringSendEvent` and `MonitoringClaimEvent` are status rows**: they repeat the `submissionId` and give the running locked balance and supply of the asset. Do not count them as transfers.
 9. **deAsset logic pointer differs from the docs table** on Ethereum, Arbitrum, Polygon, BNB and Avalanche (live `tokenImplementation()` = `0xcacebe8c354b70fa6e3107f3f6f699e4fbb3a98b`). Read the deployer before trusting a listed DeBridgeToken address.
 10. **Monitor triggers.** Large transfers: `Sent.amount` and `Claimed.amount` per `debridgeId`, excluding DLN messages. Drains: `Claimed` without a matching `Sent`, a sudden drop of `lockedOrMintedAmount`. Admin: `Upgraded`, `AdminChanged`, `Paused`, `CallProxyUpdated`, `AddOracle`, `UpdateOracle`, `Blocked`, `ChainSupportUpdated`, calls to `setSignatureVerifier`, `setTokenImplementation`, `updateAsset`.
@@ -307,6 +322,7 @@ POLY_DBR_GATE                      = '\x43de2d77bf8027e25dbd179b491e8d64f38398aa
 BNB_DBR_GATE                       = '\x43de2d77bf8027e25dbd179b491e8d64f38398aa'
 AVAX_DBR_GATE                      = '\x43de2d77bf8027e25dbd179b491e8d64f38398aa'
 RH_DBR_GATE                        = '\x43de2d77bf8027e25dbd179b491e8d64f38398aa'
+ARC_DBR_GATE                       = '\x43de2d77bf8027e25dbd179b491e8d64f38398aa'
 ETH_DBR_CALL_PROXY                 = '\x8a0c79f5532f3b2a16ad1e4282a5daf81928a824'
 BASE_DBR_CALL_PROXY                = '\x8a0c79f5532f3b2a16ad1e4282a5daf81928a824'
 ARB_DBR_CALL_PROXY                 = '\x8a0c79f5532f3b2a16ad1e4282a5daf81928a824'
@@ -342,7 +358,7 @@ RH_DBR_DEASSET_LOGIC               = '\xc1656b63d9eeba6d114f6be19565177893e5bcbf
 ETH_DBR_GATE_PROXY_ADMIN           = '\xe4427af3555cd9303d728c491364fadfdd7494fe'
 BASE_DBR_GATE_PROXY_ADMIN          = '\x43de2d77bf8027e25dbd179b491e8d64f38398aa'
 RH_DBR_GATE_PROXY_ADMIN            = '\x150f6ce7301022d50285d0445c8941f60783a0e0'
-RH_DBR_UPGRADE_OWNER_EOA           = '\xd6f0dabbbccd143f7d526a82ca176b5395ccc844'
+RH_DBR_UPGRADE_OWNER_EOA           = '\xd6f0dabbbccd143f7d526a82ca176b5395ccc844'   -- also Arc (same ProxyAdmins)
 ```
 
 ---

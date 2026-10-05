@@ -1,7 +1,7 @@
-# Socket v3 / OpenRouter — Topics, Selectors, Addresses (Ethereum + Base + Arbitrum + Optimism + Polygon + BNB + Avalanche + Robinhood Chain)
+# Socket v3 / OpenRouter — Topics, Selectors, Addresses (Ethereum + Base + Arbitrum + Optimism + Polygon + BNB + Avalanche + Robinhood Chain + Arc)
 
-**Status:** verified on 2026-09-29 against live RPC on all eight chains, the Socket docs (`docs.socket.tech/integrate/contract-addresses`, `/about/chain-support`, `/openrouter-swap-v3-user-reference`, `/integrate/integration-guides/additional-guides/destination-payload`) and the explorer-verified sources of `OpenRouter`, `RFQVaultExecutor`, `BungeeReceiver` and `AllowanceHolder`. Topics and selectors recomputed as `keccak256(signature)` from the verified ABIs; every address existence-checked with `eth_getCode`; sample transactions read on Ethereum and Base.
-**Scope:** the current Socket (Bungee) contract set for API routes (`userOps=tx`): the AllowanceHolder entry point, the OpenRouter, the RFQ vault of the Bungee solver route (RFQVaultExecutor), the destination-payload executor (BungeeReceiver) and the reference CalldataExecutor. All of them have the same address on all eight chains, Robinhood Chain included. Topics and selectors are chain-agnostic; addresses are network-specific.
+**Status:** verified on 2026-09-29 against live RPC on all eight chains, the Socket docs (`docs.socket.tech/integrate/contract-addresses`, `/about/chain-support`, `/openrouter-swap-v3-user-reference`, `/integrate/integration-guides/additional-guides/destination-payload`) and the explorer-verified sources of `OpenRouter`, `RFQVaultExecutor`, `BungeeReceiver` and `AllowanceHolder`. Topics and selectors recomputed as `keccak256(signature)` from the verified ABIs; every address existence-checked with `eth_getCode`; sample transactions read on Ethereum and Base. Extended on 2026-10-05 with Arc (5042).
+**Scope:** the current Socket (Bungee) contract set for API routes (`userOps=tx`): the AllowanceHolder entry point, the OpenRouter, the RFQ vault of the Bungee solver route (RFQVaultExecutor), the destination-payload executor (BungeeReceiver) and the reference CalldataExecutor. All of them have the same address on all eight chains, Robinhood Chain included, and on Arc (5042). Topics and selectors are chain-agnostic; addresses are network-specific.
 
 A Socket v3 route is one transaction to the **AllowanceHolder** (`exec`, selector `0x2213bc0b`). The AllowanceHolder grants a one-transaction allowance and calls the **OpenRouter**, which pulls the user's input token, runs an optional swap, pays the integrator fee, and hands the funds to a bridge or to the Bungee RFQ vault. The OpenRouter emits `RequestExecuted(quoteId)`. For the Bungee RFQ route the **RFQVaultExecutor** records the deposit (`ERC20Deposited` / `NativeDeposited`); on the destination chain a solver-signed `fulfil` pays the receiver out of the vault of that chain (`Fulfilled`). A failed route is refunded from the source vault (`Refunded`).
 
@@ -15,7 +15,7 @@ Three facts to know before indexing:
 
 ## 0. Contract families & versions
 
-| Contract | Address (all 8 chains) | Role | Upgradeable? |
+| Contract | Address (all 8 chains + Arc) | Role | Upgradeable? |
 |----------|------------------------|------|--------------|
 | **AllowanceHolder** | `0x50c4E75a512F2A14A7b304787Adf79C4531A5909` | Entry point and spender of token approvals. A copy of 0x's AllowanceHolder (its constructor pins this address). Functions: `exec` and `transferFrom`, dispatched in the fallback; no events. | No (plain contract, no owner). |
 | **OpenRouter** | `0x50cFe7c1938dB66A1a6D2e86D36F39FBef3d5c4a` | Pulls the input, swaps, pays fees, calls the bridge; emits `RequestExecuted`. Called through the AllowanceHolder. | No (no owner function in the ABI). |
@@ -216,6 +216,20 @@ Existence-checked with `eth_getCode` on 2026-09-29 (runtime size in bytes).
 
 RFQVaultExecutor `owner()` = `0xF76e73720EC93df7E823b755E10C38A877C34Bd5`; BungeeReceiver `owner()` = `0xB0BBff6311B7F245761A7846d3Ce7B1b100C1836`.
 
+## 10a. Addresses — Arc (chain ID 5042)
+
+Existence-checked with `eth_getCode` on `https://rpc.mainnet.arc.io` on 2026-10-05 (runtime size in bytes). Socket lists Arc as chain id `5042`.
+
+| Contract | Address | Code |
+|----------|---------|------|
+| AllowanceHolder | `0x50c4E75a512F2A14A7b304787Adf79C4531A5909` | 1,469 |
+| OpenRouter | `0x50cFe7c1938dB66A1a6D2e86D36F39FBef3d5c4a` | 6,140 |
+| RFQVaultExecutor | `0x97caCa78AC2a94c67643d07843F85AFAa44a3ea5` | 5,158 |
+| BungeeReceiver | `0x8A774c1B73998A54ff09341f3cfF8A0010BbA7f1` | 4,226 |
+| CalldataExecutor | `0xC914815120FA5A7e05748398C9fDf1d1b2729008` | 798 |
+
+RFQVaultExecutor `owner()` and `solverSigner()` = `0xF76e73720EC93df7E823b755E10C38A877C34Bd5`; BungeeReceiver `owner()` = `0xB0BBff6311B7F245761A7846d3Ce7B1b100C1836`, `SOLVER_SIGNER()` = `0xF76e73720EC93df7E823b755E10C38A877C34Bd5`. SocketGateway and BungeeInbox have no code on Arc. In the window 2026-10-04 12:07 – 2026-10-05 10:40 UTC (`eth_getLogs`): 141 `RequestExecuted`, 17 `ERC20Deposited`, **99 `NativeDeposited`** (Arc's native coin is USDC, so native deposits are common there), 68 `Fulfilled`, 1 `Refunded`.
+
 ---
 
 ## 11. Cross-chain summary
@@ -230,8 +244,9 @@ RFQVaultExecutor `owner()` = `0xF76e73720EC93df7E823b755E10C38A877C34Bd5`; Bunge
 | BNB Smart Chain | 56 | ✓ | ✓ | ✓ | ✓ | ✓ |
 | Avalanche C-Chain | 43114 | ✓ | ✓ | ✓ | ✓ | ✓ |
 | Robinhood Chain | 4663 | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Arc | 5042 | ✓ | ✓ | ✓ | ✓ | ✓ |
 
-✓ = code at the shared address (checked with `eth_getCode` on 2026-09-29). The official address list names the AllowanceHolder and the OpenRouter on all eight chains (Robinhood Chain is on the chain-support page). The RFQVaultExecutor and BungeeReceiver addresses come from their explorer-verified sources and from the measured events; the docs describe BungeeReceiver as "the same address on all supported chains via CREATE3".
+✓ = code at the shared address (checked with `eth_getCode` on 2026-09-29; Arc on 2026-10-05). The official address list names the AllowanceHolder and the OpenRouter on all eight chains (Robinhood Chain is on the chain-support page). The RFQVaultExecutor and BungeeReceiver addresses come from their explorer-verified sources and from the measured events; the docs describe BungeeReceiver as "the same address on all supported chains via CREATE3".
 
 ---
 
@@ -241,18 +256,18 @@ RFQVaultExecutor `owner()` = `0xF76e73720EC93df7E823b755E10C38A877C34Bd5`; Bunge
 |----------|---------|-----------|--------------|
 | AllowanceHolder, OpenRouter, CalldataExecutor | Immutable | EIP-1967 implementation slot empty; no owner function. | None |
 | RFQVaultExecutor | Immutable, owned | EIP-1967 implementation slot empty. `owner()` = `0xf76e73720ec93df7e823b755e10c38a877c34bd5`, which is also its `solverSigner()`: an EOA (no code; nonce 221 on Ethereum). | The owner EOA: `setSolverSigner`, `rescueFunds`. The signer key authorizes `fulfil`, `refund`, `markForRefund` and `performActions`. Two-step ownership (`nominateOwner` / `claimOwner`). |
-| BungeeReceiver | Immutable, owned, role-based | EIP-1967 implementation slot empty. `owner()` = `0xb0bbff6311b7f245761a7846d3ce7b1b100c1836`, an EOA (no code; nonce 909 on Ethereum). `SOLVER_SIGNER()` = `0xf76e73720ec93df7e823b755e10c38a877c34bd5` on Ethereum and Base, `0xb0bbff6311b7f245761a7846d3ce7b1b100c1836` on Robinhood Chain. | Owner EOA and roles (`grantRole` / `revokeRole`); `setSolverSigner`. |
+| BungeeReceiver | Immutable, owned, role-based | EIP-1967 implementation slot empty. `owner()` = `0xb0bbff6311b7f245761a7846d3ce7b1b100c1836`, an EOA (no code; nonce 909 on Ethereum). `SOLVER_SIGNER()` = `0xf76e73720ec93df7e823b755e10c38a877c34bd5` on Ethereum, Base and Arc, `0xb0bbff6311b7f245761a7846d3ce7b1b100c1836` on Robinhood Chain. | Owner EOA and roles (`grantRole` / `revokeRole`); `setSolverSigner`. |
 
 ---
 
 ## 13. Detection invariants & gotchas
 
 1. **Source leg = `RequestExecuted` at the OpenRouter.** It is emitted once per route, for every bridge and for same-chain swaps too (`swap`). Classify with the called function (`bridge`, `swapAndBridge`, `swap`) or with the next hop of the funds in the same transaction.
-2. **Bungee RFQ route = `ERC20Deposited` / `NativeDeposited` + `RequestExecuted` with the same `quoteId`.** In the pinned window `NativeDeposited` had 0 logs on all eight chains: native input is swapped or wrapped before the vault.
+2. **Bungee RFQ route = `ERC20Deposited` / `NativeDeposited` + `RequestExecuted` with the same `quoteId`.** In the pinned window `NativeDeposited` had 0 logs on all eight chains: native input is swapped or wrapped before the vault. **Arc is the exception**: its native coin is USDC, and `NativeDeposited` is frequent there (§10a).
 3. **`Fulfilled` is the payout; `Refunded` is the refund.** Both are emitted by the vault of the chain where the money leaves; `Fulfilled` happens on the destination chain, `Refunded` on the source chain.
 4. **`tx.to` is the AllowanceHolder and `tx.from` may be a solver.** Destination payouts (`fulfil`) are sent by solver EOAs; source routes by the user or by the user's smart wallet.
 5. **Fees move inside the route.** OpenRouter sends the fee (`fee.receiver`, `fee.amount`) as a separate `Transfer` in the source transaction, before the bridge call.
-6. **Same addresses on all eight chains.** Key on `(chain, address)` anyway: the vault balances and the signer settings are per chain (the BungeeReceiver signer differs on Robinhood Chain).
+6. **Same addresses on all eight chains and Arc.** Key on `(chain, address)` anyway: the vault balances and the signer settings are per chain (the BungeeReceiver signer differs on Robinhood Chain).
 7. **Single-key administration.** The owners of the RFQVaultExecutor and BungeeReceiver are EOAs, and one EOA both owns the vault and signs its payouts. A signed `performActions` can move any vault balance.
 8. **Admin triggers.** `OwnerNominated`, `OwnerClaimed`, `SolverSignerUpdated`, `RoleGranted`, `RoleRevoked` at the vault and at BungeeReceiver; calls of `setSolverSigner` (`0x444eac45`), `rescueFunds` (`0x6ccae054`) and `performActions` (`0x875083e2`) on the vault.
 
@@ -287,7 +302,7 @@ SEL_RFQ_REFUND                      = '\x612406de'
 SEL_RFQ_SET_SOLVER_SIGNER           = '\x444eac45'
 SEL_BUNGEE_EXECUTE_DEST_PAYLOAD     = '\x2b7ead8b'
 
--- ===== Addresses (same on all eight chains) =====
+-- ===== Addresses (same on all eight chains and Arc) =====
 ETH_SOCKET_ALLOWANCE_HOLDER          = '\x50c4e75a512f2a14a7b304787adf79c4531a5909'
 ETH_SOCKET_OPENROUTER                = '\x50cfe7c1938db66a1a6d2e86d36f39fbef3d5c4a'
 ETH_SOCKET_RFQ_VAULT_EXECUTOR        = '\x97caca78ac2a94c67643d07843f85afaa44a3ea5'
@@ -328,6 +343,11 @@ RH_SOCKET_OPENROUTER                 = '\x50cfe7c1938db66a1a6d2e86d36f39fbef3d5c
 RH_SOCKET_RFQ_VAULT_EXECUTOR         = '\x97caca78ac2a94c67643d07843f85afaa44a3ea5'
 RH_SOCKET_BUNGEE_RECEIVER            = '\x8a774c1b73998a54ff09341f3cff8a0010bba7f1'
 RH_SOCKET_CALLDATA_EXECUTOR          = '\xc914815120fa5a7e05748398c9fdf1d1b2729008'
+ARC_SOCKET_ALLOWANCE_HOLDER          = '\x50c4e75a512f2a14a7b304787adf79c4531a5909'
+ARC_SOCKET_OPENROUTER                = '\x50cfe7c1938db66a1a6d2e86d36f39fbef3d5c4a'
+ARC_SOCKET_RFQ_VAULT_EXECUTOR        = '\x97caca78ac2a94c67643d07843f85afaa44a3ea5'
+ARC_SOCKET_BUNGEE_RECEIVER           = '\x8a774c1b73998a54ff09341f3cff8a0010bba7f1'
+ARC_SOCKET_CALLDATA_EXECUTOR         = '\xc914815120fa5a7e05748398c9fdf1d1b2729008'
 ETH_SOCKET_SOLVER_SIGNER_EOA         = '\xf76e73720ec93df7e823b755e10c38a877c34bd5'
 ```
 

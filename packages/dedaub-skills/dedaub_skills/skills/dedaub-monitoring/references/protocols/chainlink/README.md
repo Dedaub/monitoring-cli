@@ -1,6 +1,6 @@
 # Chainlink — Protocol Reference Index
 
-Monitoring-grade references for Chainlink's product suite across **Ethereum (1), Base (8453), BNB Smart Chain (56), Avalanche C-Chain (43114), Arbitrum One (42161), Optimism (10), Polygon PoS (137)**. Verified 2026-05-29.
+Monitoring-grade references for Chainlink's product suite across **Ethereum (1), Base (8453), BNB Smart Chain (56), Avalanche C-Chain (43114), Arbitrum One (42161), Optimism (10), Polygon PoS (137)**. Verified 2026-05-29. CCIP also covers Robinhood Chain (4663) and Arc (5042) — see [ccip.md](ccip.md) §4.7 / §4.7b (Arc added 2026-10-05).
 
 Chainlink is not a single versioned protocol like Uniswap — it's a suite of products, each with its own versions. One file per product (each covers its versions):
 
@@ -35,5 +35,5 @@ Each file follows the same section layout: **Topics** (chain-agnostic `topic0 = 
 ## Coverage caveats (read these)
 
 - **Data Feeds** lists architecture + canonical ETH/USD & BTC/USD anchors per chain, not all ~thousands of per-asset feeds — resolve the rest via the docs feed-address page or the Ethereum `FeedRegistry`.
-- **CCIP** lists Routers (all 7, verified) + chain selectors + Ethereum support contracts; per-chain RMN/FeeQuoter/TokenAdminRegistry/lane-ramps are version-specific — resolve via `Router.getOnRamp`/`getOffRamps` or the (JS-rendered) CCIP Directory.
+- **CCIP** lists Routers (all 7 + Robinhood Chain + Arc, verified) + chain selectors + Ethereum support contracts; per-chain RMN/FeeQuoter/TokenAdminRegistry/lane-ramps are version-specific — resolve via `Router.getOnRamp`/`getOffRamps` or the (JS-rendered) CCIP Directory.
 - **Send-side / OCR3 struct-carrying events** (CCIP `CCIPSendRequested`/`CCIPMessageSent`, VRF v2.5 `ConfigSet`, Data Streams OCR3 `ConfigSet`, Functions `OracleRequest`) have large version-specific tuples; their topic0s are flagged in-doc and should be recomputed against the exact deployed contract before decoding.

@@ -1,6 +1,6 @@
 # Venus Core Pool — Topics, Selectors, Addresses (BNB Smart Chain only)
 
-**Status:** verified against live RPC + canonical `VenusProtocol/venus-protocol` repo on 2026-06-08. Every topic0/selector recomputed locally as `keccak256(canonical signature)`; every address existence-checked via `eth_getCode`; every proxy/diamond/delegator slot read live from storage and getters.
+**Status:** verified against live RPC + canonical `VenusProtocol/venus-protocol` repo on 2026-06-08. Diamond impl, the five facets and the shared VBep20Delegate re-read live on 2026-10-05 (all rotated since; retired addresses kept beside the current ones in §3). Every topic0/selector recomputed locally as `keccak256(canonical signature)`; every address existence-checked via `eth_getCode`; every proxy/diamond/delegator slot read live from storage and getters.
 
 **Scope:** the original Venus lending pool — the Compound V2 fork (`VenusProtocol/venus-protocol`): **Unitroller + Comptroller (a DIAMOND behind the Unitroller)**, the per-market **VBep20Delegator** proxies and shared **VBep20Delegate** logic, the native **vBNB** market, **JumpRateModel / WhitePaperInterestRateModel**, **ComptrollerLens**, **VenusLens / SnapshotLens**, and the Core-Pool **Liquidator**. Topics and selectors are chain-agnostic (`keccak256` of the signature); addresses are network-specific. **THE ONE FACT THAT OVERRIDES EVERYTHING: the Venus Core-Pool legacy codebase is deployed on BNB Smart Chain (56) ONLY.** On Ethereum, Base, Avalanche, Arbitrum, Optimism and Polygon there is NO Core Pool — the pool labelled "Core Pool" in the Venus UI on those chains is an **isolated-pools** deployment (different contracts, different events; covered in `isolated-pools.md`). The Unitroller address returns empty `eth_getCode` (`0x`) on all six non-BSC chains.
 
@@ -189,12 +189,12 @@ Verified against deployed bytecode on BSC. Interface-file `uint` canonicalized t
 
 | Selector | Signature | Facet | Notes |
 |----------|-----------|-------|-------|
-| `0xc2998238` | `enterMarkets(address[] vTokens)` | **Market** | Emits `MarketEntered`. (Routes to MarketFacet `0x7397B6bc…`, not Policy — verified live via `facetAddress`.) |
+| `0xc2998238` | `enterMarkets(address[] vTokens)` | **Market** | Emits `MarketEntered`. (Routes to MarketFacet `0x21f8E147…`, not Policy — verified live via `facetAddress`.) |
 | `0xede4edd0` | `exitMarket(address vToken)` | **Market** | Emits `MarketExited`. (MarketFacet, verified live.) |
-| `0x5ec88c79` | `getAccountLiquidity(address)` | Policy | `(err, liquidity, shortfall)`. Shortfall>0 ⇒ liquidatable. (PolicyFacet `0x1CcDaf39…`, verified live.) |
+| `0x5ec88c79` | `getAccountLiquidity(address)` | Policy | `(err, liquidity, shortfall)`. Shortfall>0 ⇒ liquidatable. (PolicyFacet `0x8930B02c…`, verified live.) |
 | `0x4e79238f` | `getHypotheticalAccountLiquidity(address,address,uint256,uint256)` | Policy | (PolicyFacet, verified live.) |
 | `0xabfceffc` | `getAssetsIn(address)` | Market | |
-| `0xb0772d0b` | `getAllMarkets()` | **MarketFacet** | All listed vTokens. Verified routes to `0x7397B6bc…`. Re-read live; do not hardcode. |
+| `0xb0772d0b` | `getAllMarkets()` | **MarketFacet** | All listed vTokens. Verified routes to `0x21f8E147…`. Re-read live; do not hardcode. |
 | `0x8e8f294b` | `markets(address vToken)` | Market | **Live multi-pool shape (7 fields):** `(bool isListed, uint256 collateralFactorMantissa, bool isVenus, uint256 liquidationThresholdMantissa, uint256 liquidationIncentiveMantissa, uint96 poolId, bool isBorrowAllowed)`. Core Pool markets have `poolId == 0`. The old 3-field Compound shape `(isListed, collateralFactorMantissa, isVenus)` is stale — decoders that stop at 3 fields silently mis-read collateral factor only (still correct) but miss the per-market liquidation threshold/incentive. |
 | `0x7dc0d1d0` | `oracle()` | — | Returns the **ResilientOracle** (not the legacy ChainlinkOracle). |
 | `0xe8755446` | `closeFactorMantissa()` | — | |
@@ -207,9 +207,9 @@ Verified against deployed bytecode on BSC. Interface-file `uint` canonicalized t
 | `0x5cc4fdeb` | `setCollateralFactor(address vToken, uint256 newCollateralFactorMantissa, uint256 newLiquidationThresholdMantissa)` | Setter | **Live deployed form (multi-pool upgrade): 3-arg, no leading underscore.** Operates on Core Pool (`poolId 0`). Emits the 4-arg `NewCollateralFactor`. There is also `setCollateralFactor(uint96,address,uint256,uint256)` = `0x9159b177` for explicit pool selection. The stock-Compound `_setCollateralFactor(address,uint256)` (`0xe4028eee`) is **NOT in the live diamond** (`facetAddress` returns `0x0`). |
 | `0x9bd8f6e8` | `setLiquidationIncentive(address vToken, uint256 newLiquidationIncentiveMantissa)` | Setter | **Live deployed form: per-market** (multi-pool upgrade). Emits the 4-arg `NewLiquidationIncentive`. The stock `_setLiquidationIncentive(uint256)` (`0x4fd42e17`) is absent. |
 | `0x607ef6c1` / `0x51a485e4` | `_setMarketBorrowCaps(address[],uint256[])` / `_setMarketSupplyCaps(address[],uint256[])` | Setter | Emit `NewBorrowCap`/`NewSupplyCap`. |
-| `0x2b5d790c` | `_setActionsPaused(address[] markets, uint8[] actions, bool paused)` | **SetterFacet** | Venus pause path. Verified routes to `0x4a45FBAf…`. Emits `ActionPausedMarket`. |
+| `0x2b5d790c` | `_setActionsPaused(address[] markets, uint8[] actions, bool paused)` | **SetterFacet** | Venus pause path. Verified routes to `0xbc4885e5…`. Emits `ActionPausedMarket`. |
 | `0x55ee1fe1` | `_setPriceOracle(address)` | Setter | Emits `NewPriceOracle`. |
-| `0xadcd5fb9` | `claimVenus(address holder)` | **RewardFacet** | Verified routes to `0xfac00Dc8…`. |
+| `0xadcd5fb9` | `claimVenus(address holder)` | **RewardFacet** | Verified routes to `0x9e0CCD70…` (2026-10-05). |
 | `0x86df31ee` | `claimVenus(address holder, address[] vTokens)` | Reward | |
 | `0x8a7dc165` | `venusAccrued(address)` | Reward | |
 | `0xbb82aa5e` | `comptrollerImplementation()` | Unitroller | **Read this for the live Diamond impl** (storage slot 2). |
@@ -254,13 +254,13 @@ All verified via `eth_getCode` (non-empty) on `https://bsc-rpc.publicnode.com` o
 | Role | Address | One-liner |
 |------|---------|-----------|
 | **UNITROLLER** (Comptroller proxy) | `0xfD36E2c2a6789Db23113685031d7F16329158384` | The risk engine. `comptrollerImplementation()`→ Diamond; `oracle()`→ ResilientOracle; `getAllMarkets()`=48; admin (slot 0)= NormalTimelock `0x939bd8d6…`. **Point all market-policy + reward monitors here.** |
-| **DIAMOND** (Comptroller impl) | `0x82cA18785BBbacBeD1C4f482921E2B2E989D8C08` | The Diamond contract behind the Unitroller (= `Unitroller_Implementation`). Routes selectors to the 5 facets. |
-| MarketFacet | `0x7397B6bcFA9332Cc8791c886F339B4D114651719` | `getAllMarkets`, `getAssetsIn`, `markets`, `_supportMarket`, **`enterMarkets`/`exitMarket`** (these route here, not Policy), `liquidateCalculateSeizeTokens`. |
-| PolicyFacet | `0x1CcDaf39085bae4e27c3Ba100561b1AD1B5A6b80` | `getAccountLiquidity`/`getHypotheticalAccountLiquidity`, `mintAllowed`/`borrowAllowed`/etc. hooks (which emit the `DistributedSupplier/BorrowerVenus` XVS-reward events during accrual). |
-| RewardFacet | `0xFaC00Dc856F454BB674c8588d4CC16Edef9dc28b` | `claimVenus`, `venusAccrued`, reward bookkeeping. (Note: the per-action `DistributedSupplier/BorrowerVenus` events are actually emitted from the policy hooks in PolicyFacet — all surface from the Unitroller address either way.) |
-| SetterFacet | `0x4a45FBAf2A736bdF025DEd1D0Af3dF80070EDac0` | All admin parameter setters + `_setActionsPaused`. |
-| FlashLoanFacet | `0x7F00af2f30a55e79311392C98fBBfA629D19b3A5` | Comptroller-level flash loan (later addition). |
-| **VBep20Delegate** (shared vToken logic) | `0xb25b57599BA969c4829699F7E4Fc4076D14745E1` | Logic for every ERC-20 vToken delegator. |
+| **DIAMOND** (Comptroller impl) | `0xA66B2b5D50ce68A125bBad6B2265b637868c6E66` (8,218 B; read 2026-10-05) (retired: `0x82cA18785BBbacBeD1C4f482921E2B2E989D8C08`) | The Diamond contract behind the Unitroller (= `Unitroller_Implementation`). Routes selectors to the 5 facets. |
+| MarketFacet | `0x21f8E1471b153f49BE1d645A008E4a57434eEd23` (retired: `0x7397B6bcFA9332Cc8791c886F339B4D114651719`) | `getAllMarkets`, `getAssetsIn`, `markets`, `_supportMarket`, **`enterMarkets`/`exitMarket`** (these route here, not Policy), `liquidateCalculateSeizeTokens`. |
+| PolicyFacet | `0x8930B02c69EDd37464B50991680D306Bb9B8FDBD` (retired: `0x1CcDaf39085bae4e27c3Ba100561b1AD1B5A6b80`) | `getAccountLiquidity`/`getHypotheticalAccountLiquidity`, `mintAllowed`/`borrowAllowed`/etc. hooks (which emit the `DistributedSupplier/BorrowerVenus` XVS-reward events during accrual). |
+| RewardFacet | `0x9e0CCD70b5E0030472D5013bbBd37B6E868d416f` (retired: `0xFaC00Dc856F454BB674c8588d4CC16Edef9dc28b`) | `claimVenus`, `venusAccrued`, reward bookkeeping. (Note: the per-action `DistributedSupplier/BorrowerVenus` events are actually emitted from the policy hooks in PolicyFacet — all surface from the Unitroller address either way.) |
+| SetterFacet | `0xbc4885e5A27050E321d094503597aC6734AB1871` (retired: `0x4a45FBAf2A736bdF025DEd1D0Af3dF80070EDac0`) | All admin parameter setters + `_setActionsPaused`. |
+| FlashLoanFacet | `0xAC54A4D148690b7FDA22B1D29c4439aCBF668fb2` (retired: `0x7F00af2f30a55e79311392C98fBBfA629D19b3A5`) | Comptroller-level flash loan (later addition). |
+| **VBep20Delegate** (shared vToken logic) | `0xCDfea50f7CECCB24Fe804657DB8E6c93b689941e` (retired: `0xb25b57599BA969c4829699F7E4Fc4076D14745E1`) | Logic for every ERC-20 vToken delegator. |
 | **ComptrollerLens** | `0x75A71Ad878f6f24616A2AE21d046C0C8E72f67F8` | Liquidity/seize math helper used by the Comptroller. |
 | **VenusLens** | `0x344cD779C5aAF3436795B49f7C375E716A20f527` | Off-chain read aggregator. |
 | SnapshotLens | `0xDE876091531c92BFED078af29CAaD3dbd4157f7a` | Account snapshot helper. |
@@ -322,7 +322,7 @@ Each market reads its IRM via `vToken.interestRateModel()`. Venus deploys one `J
 
 | Chain | ID | Core Pool? | Unitroller | Diamond (Comptroller impl) | VBep20Delegate | vBNB | Markets |
 |-------|----|-----------|-----------|---------------------------|----------------|------|---------|
-| **BNB Smart Chain** | 56 | ✅ | `0xfD36E2c2…8384` | `0x82cA1878…8C08` | `0xb25b5759…45E1` | `0xA07c5b74…ea36` | 48 (`getAllMarkets()`) |
+| **BNB Smart Chain** | 56 | ✅ | `0xfD36E2c2…8384` | `0xA66B2b5D…6E66` | `0xCDfea50f…941e` | `0xA07c5b74…ea36` | 48 (`getAllMarkets()`) |
 | Ethereum | 1 | ❌ (isolated pools only) | — | — | — | — | 0 |
 | Base | 8453 | ❌ (isolated pools only) | — | — | — | — | 0 |
 | Avalanche | 43114 | ❌ (not deployed) | — | — | — | — | 0 |
@@ -343,9 +343,9 @@ Venus Core mixes **four** proxy/upgrade families. Getting them wrong is the #1 i
 
 | Contract | Pattern | How to read the impl | Verified (BSC, 2026-06-08) |
 |----------|---------|----------------------|----------------------------|
-| **Unitroller** (Comptroller) | **Compound Unitroller** — NOT EIP-1967. Impl in **storage slot 2** (`comptrollerImplementation`), pending in slot 3; `admin` slot 0, `pendingAdmin` slot 1. | `comptrollerImplementation()` (`0xbb82aa5e`) or `eth_getStorageAt(slot 2)`. | slot0=`…939bd8d6…` (NormalTimelock=admin) ✓; slot2=`…82ca1878…8c08`=Diamond ✓; EIP-1967 impl slot = `0x0` ✓ |
+| **Unitroller** (Comptroller) | **Compound Unitroller** — NOT EIP-1967. Impl in **storage slot 2** (`comptrollerImplementation`), pending in slot 3; `admin` slot 0, `pendingAdmin` slot 1. | `comptrollerImplementation()` (`0xbb82aa5e`) or `eth_getStorageAt(slot 2)`. | slot0=`…939bd8d6…` (NormalTimelock=admin) ✓; slot2=`…a66b2b5d…6e66`=Diamond (2026-10-05) ✓; EIP-1967 impl slot = `0x0` ✓ |
 | **Diamond** (Comptroller impl) | **EIP-2535-style Diamond** sitting *behind* the Unitroller. Per-selector dispatch via internal `selectorToFacetAndPosition` mapping. | `facetAddresses()` (`0x52ef6b2c`) / `facetAddress(bytes4)` (`0xcdffacc6`). | `facetAddresses()` = 5 facets ✓; `facetAddress(getAllMarkets)`→MarketFacet ✓, `facetAddress(claimVenus)`→RewardFacet ✓, `facetAddress(_setActionsPaused)`→SetterFacet ✓ |
-| **vToken** (VBep20Delegator) | **Compound delegator** — NOT EIP-1967. `implementation` is a plain storage var; swapped via `_setImplementation(address,bool,bytes)`. | `implementation()` (`0x5c60da1b`). | vUSDT `implementation()`=`0xb25b5759…45E1`=VBep20Delegate ✓; EIP-1967 impl slot = `0x0` ✓; `comptroller()`→Unitroller ✓ |
+| **vToken** (VBep20Delegator) | **Compound delegator** — NOT EIP-1967. `implementation` is a plain storage var; swapped via `_setImplementation(address,bool,bytes)`. | `implementation()` (`0x5c60da1b`). | vUSDT `implementation()`=`0xCDfea50f…941e`=VBep20Delegate ✓; EIP-1967 impl slot = `0x0` ✓; `comptroller()`→Unitroller ✓ |
 | **vBNB** | **Immutable / monolithic** — no proxy, no delegator. | n/a. | `implementation()`→`0x` (reverts) ✓; `underlying()`→`0x` (native) ✓ |
 | **Liquidator** | **EIP-1967 transparent proxy** (OpenZeppelin). | EIP-1967 impl slot `0x360894…bbc`. | impl slot=`0xD65297…0B819`=Liquidator_Implementation ✓ |
 | **ResilientOracle** | **EIP-1967 transparent proxy**. | EIP-1967 impl slot. | impl slot=`0x90d840f4…865c` ✓; `getUnderlyingPrice(vUSDT)` returns live price ✓ |
@@ -488,13 +488,13 @@ SEL_LIQUIDATOR_LIQUIDATE     = '\x64fd7078'   -- liquidateBorrow(address,address
 
 -- ===== BNB Smart Chain (chain 56) — the ONLY Core-Pool chain =====
 BSC_UNITROLLER               = '\xfd36e2c2a6789db23113685031d7f16329158384'
-BSC_DIAMOND_COMPTROLLER_IMPL = '\x82ca18785bbbacbed1c4f482921e2b2e989d8c08'
-BSC_FACET_MARKET             = '\x7397b6bcfa9332cc8791c886f339b4d114651719'
-BSC_FACET_POLICY             = '\x1ccdaf39085bae4e27c3ba100561b1ad1b5a6b80'
-BSC_FACET_REWARD             = '\xfac00dc856f454bb674c8588d4cc16edef9dc28b'
-BSC_FACET_SETTER             = '\x4a45fbaf2a736bdf025ded1d0af3df80070edac0'
-BSC_FACET_FLASHLOAN          = '\x7f00af2f30a55e79311392c98fbbfa629d19b3a5'
-BSC_VBEP20_DELEGATE          = '\xb25b57599ba969c4829699f7e4fc4076d14745e1'
+BSC_DIAMOND_COMPTROLLER_IMPL = '\xa66b2b5d50ce68a125bbad6b2265b637868c6e66'
+BSC_FACET_MARKET             = '\x21f8e1471b153f49be1d645a008e4a57434eed23'
+BSC_FACET_POLICY             = '\x8930b02c69edd37464b50991680d306bb9b8fdbd'
+BSC_FACET_REWARD             = '\x9e0ccd70b5e0030472d5013bbbd37b6e868d416f'
+BSC_FACET_SETTER             = '\xbc4885e5a27050e321d094503597ac6734ab1871'
+BSC_FACET_FLASHLOAN          = '\xac54a4d148690b7fda22b1d29c4439acbf668fb2'
+BSC_VBEP20_DELEGATE          = '\xcdfea50f7ceccb24fe804657db8e6c93b689941e'
 BSC_COMPTROLLER_LENS         = '\x75a71ad878f6f24616a2ae21d046c0c8e72f67f8'
 BSC_VENUS_LENS               = '\x344cd779c5aaf3436795b49f7c375e716a20f527'
 BSC_LIQUIDATOR               = '\x0870793286aada55d39ce7f82fb2766e8004cf43'
@@ -524,9 +524,9 @@ EIP1967_ADMIN_SLOT           = '\xb53127684a568b3173ae13b9f8a6016e243e63b6e8ee11
 
 - **topic0 / selectors:** all computed locally as `keccak256(canonical signature)` / `[0:4]`. Spot-matched against known Compound selectors (`mint`=`0xa0712d68`, `borrow`=`0xc5ebeaec`, `getAllMarkets`=`0xb0772d0b`, `getUnderlyingPrice`=`0xfc57d4df`) and ERC-20 (`Transfer`=`0xddf252ad…`). Event/fn signatures taken from `VenusProtocol/venus-protocol` source: `contracts/Tokens/VTokens/VTokenInterfaces.sol` (`AccrueInterest` 4-arg, line ~200), `contracts/Comptroller/Diamond/Diamond.sol` (`DiamondCut(FacetCut[])`), `contracts/Comptroller/Diamond/interfaces/IDiamondCut.sol` (`FacetCut(address,uint8,bytes4[])`, `FacetCutAction{Add,Replace,Remove}`), `contracts/Comptroller/Diamond/facets/XVSRewardsHelper.sol` (`DistributedSupplierVenus`/`DistributedBorrowerVenus` 4-arg), `contracts/Comptroller/ComptrollerInterface.sol` (`Action` enum order), `contracts/Liquidator/Liquidator.sol` (`LiquidateBorrowedTokens`, `liquidateBorrow(address,address,uint256,address)`).
 - **Live event confirmation (BSC):** `AccrueInterest` 4-arg topic `0x4dec04e7…` confirmed against recent vUSDT logs (data = 128 B = 4×uint256). `DistributedSupplierVenus`/`DistributedBorrowerVenus` confirmed as the **4-arg** forms (`0xfa9d964d…`/`0x837bdc11…`, 64-B data, 3 topics; 294 logs in a recent 2 000-block window on the Unitroller); the 5-arg variant returned **zero** logs. **Workhorse vToken events are the upgraded forms:** the deployed VBep20Delegate emits `Mint(addr,u,u,totalSupply)`=`0xb4c03061…` (128 B), `Redeem(addr,u,u,totalSupply)`=`0xbd5034ff…` (128 B), `MintBehalf(addr,addr,u,u,totalSupply)`=`0xa24ddbdf…` (160 B); the legacy 3/4-arg Compound forms (`0x4c209b5f…`/`0xe5b754fb…`/`0x297989b8…`) returned **0 logs over the recent ~1M blocks** (and the legacy 3-arg `Mint` topic is absent from the live VBep20Delegate bytecode). `Borrow`(128 B)/`RepayBorrow`/`LiquidateBorrow`(5-arg) topics are unchanged.
-- **Diamond confirmation (BSC):** Unitroller `comptrollerImplementation()` = `0x82cA1878…` (the Diamond); `facetAddresses()` returns the 5 facets; `facetAddress(0xb0772d0b)`→MarketFacet, `facetAddress(0xadcd5fb9)`→RewardFacet, `facetAddress(0x2b5d790c)`→SetterFacet — confirming per-selector dispatch. `facetAddress(0xc2998238 enterMarkets)`/`(0xede4edd0 exitMarket)`/`(0xc488847b liquidateCalculateSeizeTokens)` all → **MarketFacet** (not Policy); `facetAddress(0x5ec88c79 getAccountLiquidity)`/`(0x4e79238f)` → PolicyFacet.
-- **Multi-pool / upgraded-facet confirmation (BSC):** the deployed SetterFacet (`0x4a45FBAf…`) routes `setCollateralFactor(address,uint256,uint256)`=`0x5cc4fdeb` and `setLiquidationIncentive(address,uint256)`=`0x9bd8f6e8`; the old `_setCollateralFactor(address,uint256)`=`0xe4028eee` resolves to `0x0` (not in diamond). Its bytecode contains the 4-arg `NewCollateralFactor`=`0x0d1a6153…` and 4-arg `NewLiquidationIncentive`=`0xc1d7bc09…` and **not** the legacy 3-arg/2-arg topics. `markets(vUSDT)` returns 7 fields `(isListed, collateralFactorMantissa, isVenus, liquidationThresholdMantissa, liquidationIncentiveMantissa, poolId=0, isBorrowAllowed)` — matching the `Market` struct in `contracts/Comptroller/ComptrollerStorage.sol`. Sources: `contracts/Comptroller/Diamond/facets/SetterFacet.sol` (`setCollateralFactor`/`setLiquidationIncentive` + 4-arg events), `contracts/Tokens/VTokens/VTokenInterfaces.sol` (`Mint`/`Redeem`/`MintBehalf` with trailing `uint256 totalSupply`, `RedeemFee`).
-- **Proxy wiring (live, BSC):** Unitroller slot 0 (admin)=`0x939bd8d6…` (NormalTimelock), slot 2 (impl)=`0x82cA1878…` (Diamond), EIP-1967 impl slot empty. vUSDT `implementation()`=`0xb25b5759…` (VBep20Delegate), `comptroller()`=Unitroller, `symbol()`="vUSDT", `decimals()`=8, EIP-1967 impl slot empty. vBNB `implementation()`/`underlying()` revert (monolithic). Liquidator EIP-1967 impl slot=`0xD65297…`. ResilientOracle EIP-1967 impl slot=`0x90d840…`, `getUnderlyingPrice(vUSDT)` returns a live price. VBNBAdmin EIP-1967 impl slot=`0xae2713Fb…`. VenusChainlinkOracle EIP-1967 slot empty (non-proxy). Comptroller `oracle()`=`0x6592b5DE…` (ResilientOracle, ≠ the legacy ChainlinkOracle).
+- **Diamond confirmation (BSC):** Unitroller `comptrollerImplementation()` = `0xA66B2b5D…` (the Diamond); `facetAddresses()` returns the 5 facets; `facetAddress(0xb0772d0b)`→MarketFacet, `facetAddress(0xadcd5fb9)`→RewardFacet, `facetAddress(0x2b5d790c)`→SetterFacet — confirming per-selector dispatch. `facetAddress(0xc2998238 enterMarkets)`/`(0xede4edd0 exitMarket)`/`(0xc488847b liquidateCalculateSeizeTokens)` all → **MarketFacet** (not Policy); `facetAddress(0x5ec88c79 getAccountLiquidity)`/`(0x4e79238f)` → PolicyFacet.
+- **Multi-pool / upgraded-facet confirmation (BSC):** the deployed SetterFacet (`0xbc4885e5…`) routes `setCollateralFactor(address,uint256,uint256)`=`0x5cc4fdeb` and `setLiquidationIncentive(address,uint256)`=`0x9bd8f6e8`; the old `_setCollateralFactor(address,uint256)`=`0xe4028eee` resolves to `0x0` (not in diamond). Its bytecode contains the 4-arg `NewCollateralFactor`=`0x0d1a6153…` and 4-arg `NewLiquidationIncentive`=`0xc1d7bc09…` and **not** the legacy 3-arg/2-arg topics. `markets(vUSDT)` returns 7 fields `(isListed, collateralFactorMantissa, isVenus, liquidationThresholdMantissa, liquidationIncentiveMantissa, poolId=0, isBorrowAllowed)` — matching the `Market` struct in `contracts/Comptroller/ComptrollerStorage.sol`. Sources: `contracts/Comptroller/Diamond/facets/SetterFacet.sol` (`setCollateralFactor`/`setLiquidationIncentive` + 4-arg events), `contracts/Tokens/VTokens/VTokenInterfaces.sol` (`Mint`/`Redeem`/`MintBehalf` with trailing `uint256 totalSupply`, `RedeemFee`).
+- **Proxy wiring (live, BSC):** Unitroller slot 0 (admin)=`0x939bd8d6…` (NormalTimelock), slot 2 (impl)=`0xA66B2b5D…` (Diamond), EIP-1967 impl slot empty. vUSDT `implementation()`=`0xCDfea50f…` (VBep20Delegate), `comptroller()`=Unitroller, `symbol()`="vUSDT", `decimals()`=8, EIP-1967 impl slot empty. vBNB `implementation()`/`underlying()` revert (monolithic). Liquidator EIP-1967 impl slot=`0xD65297…`. ResilientOracle EIP-1967 impl slot=`0x90d840…`, `getUnderlyingPrice(vUSDT)` returns a live price. VBNBAdmin EIP-1967 impl slot=`0xae2713Fb…`. VenusChainlinkOracle EIP-1967 slot empty (non-proxy). Comptroller `oracle()`=`0x6592b5DE…` (ResilientOracle, ≠ the legacy ChainlinkOracle).
 - **Accrual model:** BSC vUSDT `supplyRatePerBlock()` returns a live value → per-block accrual confirmed.
 - **Non-deployment:** the BSC Unitroller `0xfD36E2c2…` returns empty `eth_getCode` (`0x`) on Ethereum, Base, Avalanche, Arbitrum, Optimism and Polygon (checked live on each publicnode RPC). The `ethereum`/`basemainnet` `deployments/*_addresses.json` files contain no Core-Pool keys (`Unitroller`/`Comptroller`/`VBep20Delegate`) — those chains run isolated pools only.
 

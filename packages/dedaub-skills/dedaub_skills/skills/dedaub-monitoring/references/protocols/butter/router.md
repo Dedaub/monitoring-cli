@@ -1,6 +1,6 @@
-# Butter Network — ButterRouter (V2 / V3 / V31 / V4) + Receiver + SwapAdapter — Topics, Selectors, Addresses (Ethereum, Base, BNB, Avalanche, Arbitrum, Optimism, Polygon, Robinhood Chain)
+# Butter Network — ButterRouter (V2 / V3 / V31 / V4) + Receiver + SwapAdapter — Topics, Selectors, Addresses (Ethereum, Base, BNB, Avalanche, Arbitrum, Optimism, Polygon, Robinhood Chain, Arc)
 
-**Status:** verified against live RPC on Ethereum (1), Base (8453), BNB (56), Avalanche (43114), Arbitrum One (42161), Optimism (10), Polygon PoS (137) and the canonical `butternetwork/butter-router-contracts` repo on 2026-06-09. Extended on 2026-09-29: Robinhood Chain (4663), the live destination executor **Receiver V3.1** `0xC6136f019a7ca92044482373c73367e13bA4c672`, the second V4 set of `deployments/deploy.json` (env `main`) and the OmniAdapter; every address re-checked with `eth_getCode` on all eight chains, and the receiver event topics checked in the deployed bytecode.
+**Status:** verified against live RPC on Ethereum (1), Base (8453), BNB (56), Avalanche (43114), Arbitrum One (42161), Optimism (10), Polygon PoS (137) and the canonical `butternetwork/butter-router-contracts` repo on 2026-06-09. Extended on 2026-09-29: Robinhood Chain (4663), the live destination executor **Receiver V3.1** `0xC6136f019a7ca92044482373c73367e13bA4c672`, the second V4 set of `deployments/deploy.json` (env `main`) and the OmniAdapter; every address re-checked with `eth_getCode` on all eight chains, and the receiver event topics checked in the deployed bytecode. Extended on 2026-10-05 with Arc (5042).
 **Scope:** the **user-facing router layer** that sits in front of the MOS bridge ([mos-v3.md](mos-v3.md)): `ButterRouterV2` (legacy), `ButterRouterV3`, `ButterRouterV31`, `ButterRouterV4`, the destination-side `Receiver` / `ReceiverV2` / Receiver V3.1, and the DEX-call helpers `SwapAdapter` / `SwapAdapterV3` / `SwapAggregator` (plus the MORC20 `OmniAdapter`). Topics + selectors are **chain-agnostic**; addresses are network-specific (and **identical across chains** by deterministic deploy — key on `(chainId, address)`).
 
 A ButterRouter is a **swap-and-bridge aggregator**, not the bridge itself. The source-side flow is: `swapAndBridge` does an optional local DEX swap (via SwapAdapter/SwapAggregator, e.g. into USDC), takes the integrator/router fee (`CollectFee`), then calls `MOS.swapOutToken` — all in one tx, emitting **`SwapAndBridge`** alongside the bridge's `MessageOut`. The destination side: the MOS bridge calls **`Receiver.onReceived`**, which does the destination DEX swap + final callback and emits **`RemoteSwapAndCall`**. A same-chain swap with no bridge emits **`SwapAndCall`**.
@@ -153,27 +153,28 @@ All verified via `eth_getCode` returning non-empty bytecode on `https://ethereum
 | SwapAggregator | `0x4C0Ce9aD38BC3132ad1C8AE7E00D48f9524EbC03` | 11749 B | DEX aggregation helper. |
 | OmniAdapter | `0x3321dE36B6C29A6fa102A67bd5C48E5756Baa596` | 8545 B | MORC20 omnichain-token adapter (also on BNB; no code on the other six targets). |
 
-## 4. Addresses — Base / BNB / Arbitrum / Optimism / Polygon (identical literals) + Avalanche and Robinhood Chain (partial)
+## 4. Addresses — Base / BNB / Arbitrum / Optimism / Polygon (identical literals) + Avalanche, Robinhood Chain and Arc (partial)
 
 Verified via `eth_getCode` on each chain on 2026-09-29 (✓ = runtime bytecode present, ✗ = `0x` and nonce 0). **Base (8453), BNB (56), Arbitrum (42161) and Polygon (137) carry almost the full set at the exact Ethereum literals**; Optimism, Avalanche and Robinhood Chain carry a subset. The bytecode size is given where it differs from Ethereum; a same-size contract can still have a different code hash (constructor arguments differ per chain).
 
-| Router/contract | Address | ETH | Base | BNB | Arb | OP | Poly | Avax | RH |
-|---|---|---|---|---|---|---|---|---|---|
-| ButterRouterV2 | `0xbB21e441fb738F54e6eC244e435475096E179d66` | ✓ | ✓ | ✓ | ✓ (15640 B) | ✓ (15640 B) | ✓ | ✗ | ✗ |
-| ButterRouterV3 | `0xEE030ec6F4307411607E55aCD08e628Ae6655B86` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✗ | ✗ |
-| ButterRouterV31 | `0xEE0319cF0BCa5d09333f9F6277743E8De31bD69A` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ (15473 B) |
-| ButterRouterV4 | `0xee040187f934FB9E41621966B1bd3E98D8319b86` | ✓ | ✓ | ✓ | ✓ | ✗ | ✓ | ✗ | ✗ |
-| ButterRouterV4 (env `main`) | `0x2c702868572b2B7BAa70B7296dB6C0991f46B150` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✗ | ✗ |
-| Receiver | `0xFF031cc2563988Bc4afA29E2cD7Bcc2d389900a5` | ✓ | ✓ (14829 B) | ✓ (14829 B) | ✓ (14829 B) | ✓ (14829 B) | ✓ (14829 B) | ✓ (14465 B) | ✗ |
-| ReceiverV2 | `0xa410c91AE49633D78A55BbB3479FDb8fCae0D883` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✗ | ✓ |
-| **Receiver V3.1** | `0xC6136f019a7ca92044482373c73367e13bA4c672` | ✓ | ✓ | ✓ | ✓ | ✗ | ✓ | ✗ | ✓ |
-| ReceiverV2 (env `main`) | `0xed991c6c1B24811CA4D15ed0E0CFB21aAB3c2ef7` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✗ | ✗ |
-| SwapAdapter | `0x002162B2aEe2dD657FB131b28CC34deE6797b66f` | ✓ | ✓ | ✓ | ✓ (10919 B) | ✓ (10919 B) | ✓ | ✗ | ✗ |
-| SwapAdapterV3 | `0xaa301070448385cfAaC5913A67B16C4392944a8f` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ (10784 B) | ✓ (10784 B) |
-| SwapAggregator | `0x4C0Ce9aD38BC3132ad1C8AE7E00D48f9524EbC03` | ✓ | ✓ (11714 B) | ✓ (11714 B) | ✓ (11714 B) | ✓ | ✓ (11714 B) | ✗ | ✓ |
-| OmniAdapter | `0x3321dE36B6C29A6fa102A67bd5C48E5756Baa596` | ✓ | ✗ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ |
+| Router/contract | Address | ETH | Base | BNB | Arb | OP | Poly | Avax | RH | Arc |
+|---|---|---|---|---|---|---|---|---|---|---|
+| ButterRouterV2 | `0xbB21e441fb738F54e6eC244e435475096E179d66` | ✓ | ✓ | ✓ | ✓ (15640 B) | ✓ (15640 B) | ✓ | ✗ | ✗ | ✗ |
+| ButterRouterV3 | `0xEE030ec6F4307411607E55aCD08e628Ae6655B86` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✗ | ✗ | ✗ |
+| ButterRouterV31 | `0xEE0319cF0BCa5d09333f9F6277743E8De31bD69A` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ (15473 B) | ✓ (15588 B) |
+| ButterRouterV4 | `0xee040187f934FB9E41621966B1bd3E98D8319b86` | ✓ | ✓ | ✓ | ✓ | ✗ | ✓ | ✗ | ✗ | ✗ |
+| ButterRouterV4 (env `main`) | `0x2c702868572b2B7BAa70B7296dB6C0991f46B150` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✗ | ✗ | ✗ |
+| Receiver | `0xFF031cc2563988Bc4afA29E2cD7Bcc2d389900a5` | ✓ | ✓ (14829 B) | ✓ (14829 B) | ✓ (14829 B) | ✓ (14829 B) | ✓ (14829 B) | ✓ (14465 B) | ✗ | ✗ |
+| ReceiverV2 | `0xa410c91AE49633D78A55BbB3479FDb8fCae0D883` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✗ | ✓ | ✗ |
+| **Receiver V3.1** | `0xC6136f019a7ca92044482373c73367e13bA4c672` | ✓ | ✓ | ✓ | ✓ | ✗ | ✓ | ✗ | ✓ | ✓ |
+| ReceiverV2 (env `main`) | `0xed991c6c1B24811CA4D15ed0E0CFB21aAB3c2ef7` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✗ | ✗ | ✗ |
+| SwapAdapter | `0x002162B2aEe2dD657FB131b28CC34deE6797b66f` | ✓ | ✓ | ✓ | ✓ (10919 B) | ✓ (10919 B) | ✓ | ✗ | ✗ | ✗ |
+| SwapAdapterV3 | `0xaa301070448385cfAaC5913A67B16C4392944a8f` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ (10784 B) | ✓ (10784 B) | ✓ (10784 B) |
+| SwapAggregator | `0x4C0Ce9aD38BC3132ad1C8AE7E00D48f9524EbC03` | ✓ | ✓ (11714 B) | ✓ (11714 B) | ✓ (11714 B) | ✓ | ✓ (11714 B) | ✗ | ✓ | ✓ |
+| OmniAdapter | `0x3321dE36B6C29A6fa102A67bd5C48E5756Baa596` | ✓ | ✗ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ |
+| Receiver (Arc build) | `0x1c657A87071ff402acD673f3559457e1003D9718` | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✓ (14000 B) |
 
-**Optimism** lacks ButterRouterV4 `0xee040187f934FB9E41621966B1bd3E98D8319b86` and Receiver V3.1; it does carry the `main` V4 set, ReceiverV2 `0xa410c91AE49633D78A55BbB3479FDb8fCae0D883` and SwapAggregator (the 2026-06-09 check found `0x` at the last two; both had code on 2026-09-29). The official docs list the Receiver `0xFF031cc2563988Bc4afA29E2cD7Bcc2d389900a5` for Optimism. **Avalanche** runs a minimal set: **ButterRouterV31 + Receiver + SwapAdapterV3 only**. MOS V3 is fully present on Optimism, Avalanche and Robinhood Chain (see mos-v3.md).
+**Optimism** lacks ButterRouterV4 `0xee040187f934FB9E41621966B1bd3E98D8319b86` and Receiver V3.1; it does carry the `main` V4 set, ReceiverV2 `0xa410c91AE49633D78A55BbB3479FDb8fCae0D883` and SwapAggregator (the 2026-06-09 check found `0x` at the last two; both had code on 2026-09-29). The official docs list the Receiver `0xFF031cc2563988Bc4afA29E2cD7Bcc2d389900a5` for Optimism. **Avalanche** runs a minimal set: **ButterRouterV31 + Receiver + SwapAdapterV3 only**. MOS V3 is fully present on Optimism, Avalanche, Robinhood Chain and Arc (see mos-v3.md).
 
 ### 4.1 Robinhood Chain (chain ID 4663)
 
@@ -189,6 +190,20 @@ Listed on the official "Deployed Contracts v3" page (Router V3.1, Adaptor, Recei
 
 **Not deployed on Robinhood Chain** (`eth_getCode` = `0x`, nonce 0): ButterRouterV2, ButterRouterV3, ButterRouterV4 (both sets), Receiver `0xFF031cc2563988Bc4afA29E2cD7Bcc2d389900a5`, ReceiverV2 (env `main`), SwapAdapter, OmniAdapter. The bridged asset in the sampled Robinhood transfers is WETH `0x0bd7d308f8e1639fab988df18a8011f41eacad73` (`symbol()` = `WETH`): `swapAndBridge` wraps the native ETH (a `Transfer` from `0x0` to the router), then the router moves the WETH into the bridge. An inbound `messageIn` burns WETH at the bridge (a `Transfer` to `0x0`) and pays native ETH to the recipient, which leaves no log: the sampled `MessageIn` (tx `0x048dd79a5812c456d87fb53cf0c172aa1e3e3238693677c7fce6a65072d89f91`, from X Layer 196) has `token` = `0x0000000000000000000000000000000000000000` and `to` = the recipient.
 
+### 4.2 Arc (chain ID 5042)
+
+Verified with `eth_getCode` on `https://rpc.mainnet.arc.io` on 2026-10-05. The official docs list the Arc Receiver `0x1c657A87071ff402acD673f3559457e1003D9718`. All five contracts are immutable (EIP-1967 impl slot `0x0` on the router and both receivers).
+
+| Role | Address | Bytecode | One-liner |
+|------|---------|----------|-----------|
+| **ButterRouterV31** | `0xEE0319cF0BCa5d09333f9F6277743E8De31bD69A` | 15588 B | The only router on Arc; an Arc-specific build (bytecode carries the `SwapAndBridge` topic0 and the V3 `swapAndBridge` selector `0x6e1537da`). 4 `SwapAndBridge` in the window 2026-10-04 11:50 – 2026-10-05 10:23 UTC. |
+| **Receiver V3.1** | `0xC6136f019a7ca92044482373c73367e13bA4c672` | 13807 B | `owner()` = EOA `0x0cdae5da23b64bfecd421d6487ffeabf6558828d`; `bridgeAddress()` = `0x0000317Bec33Af037b5fAb2028f52d14658F6A56`; carries the seven-field `SwapRescueFunds` topic0. 0 receiver events in that window. |
+| Receiver (Arc build) | `0x1c657A87071ff402acD673f3559457e1003D9718` | 14000 B | Arc-only literal (no code on the other eight targets). Same `owner()` and `bridgeAddress()` as Receiver V3.1; carries the seven-field `SwapRescueFunds` topic0. 0 receiver events in that window. |
+| SwapAdapterV3 | `0xaa301070448385cfAaC5913A67B16C4392944a8f` | 10784 B | DEX-call helper. |
+| SwapAggregator | `0x4C0Ce9aD38BC3132ad1C8AE7E00D48f9524EbC03` | 11749 B | DEX aggregation helper. |
+
+**Not deployed on Arc** (`eth_getCode` = `0x`): ButterRouterV2, ButterRouterV3, ButterRouterV4 (both sets), Receiver `0xFF031cc2563988Bc4afA29E2cD7Bcc2d389900a5`, ReceiverV2 (both), SwapAdapter, OmniAdapter. Arc's native gas token is USDC.
+
 ## 5. Cross-chain summary
 
 | Chain | ID | V2 | V3 | V31 | V4 | V4 (`main`) | Receiver | ReceiverV2 | Receiver V3.1 | SwapAdapterV3 | SwapAggregator |
@@ -201,12 +216,13 @@ Listed on the official "Deployed Contracts v3" page (Router V3.1, Adaptor, Recei
 | Polygon | 137 | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | Avalanche | 43114 | ✗ | ✗ | ✓ | ✗ | ✗ | ✓ | ✗ | ✗ | ✓ | ✗ |
 | Robinhood Chain | 4663 | ✗ | ✗ | ✓ (15473 B build) | ✗ | ✗ | ✗ | ✓ | ✓ | ✓ | ✓ |
+| Arc | 5042 | ✗ | ✗ | ✓ (15588 B build) | ✗ | ✗ | ✗ (Arc Receiver `0x1c657A87071ff402acD673f3559457e1003D9718` instead) | ✗ | ✓ | ✓ | ✓ |
 
 Columns: V2 `0xbB21e441fb738F54e6eC244e435475096E179d66`, V3 `0xEE030ec6F4307411607E55aCD08e628Ae6655B86`, V31 `0xEE0319cF0BCa5d09333f9F6277743E8De31bD69A`, V4 `0xee040187f934FB9E41621966B1bd3E98D8319b86`, V4 (`main`) `0x2c702868572b2B7BAa70B7296dB6C0991f46B150`, Receiver `0xFF031cc2563988Bc4afA29E2cD7Bcc2d389900a5`, ReceiverV2 `0xa410c91AE49633D78A55BbB3479FDb8fCae0D883`, Receiver V3.1 `0xC6136f019a7ca92044482373c73367e13bA4c672`, SwapAdapterV3 `0xaa301070448385cfAaC5913A67B16C4392944a8f`, SwapAggregator `0x4C0Ce9aD38BC3132ad1C8AE7E00D48f9524EbC03`. The ReceiverV2 (`main`) `0xed991c6c1B24811CA4D15ed0E0CFB21aAB3c2ef7` follows the V4 (`main`) column; SwapAdapter `0x002162B2aEe2dD657FB131b28CC34deE6797b66f` follows the V2 column; OmniAdapter `0x3321dE36B6C29A6fa102A67bd5C48E5756Baa596` is on Ethereum and BNB only.
 
 **Vanity-address tells:** the live routers V3 `0xEE030ec6F4307411607E55aCD08e628Ae6655B86` and V31 `0xEE0319cF0BCa5d09333f9F6277743E8De31bD69A` share their first two bytes, and V4 `0xee040187f934FB9E41621966B1bd3E98D8319b86` and the Receiver `0xFF031cc2563988Bc4afA29E2cD7Bcc2d389900a5` follow the same vanity pattern (a version-like second byte). Receiver V3.1 `0xC6136f019a7ca92044482373c73367e13bA4c672` and ReceiverV2 `0xa410c91AE49633D78A55BbB3479FDb8fCae0D883` have no vanity prefix. Same literal everywhere ⇒ key on `(chainId, address)`.
 
-**Counterparty / extra-target chains:** the same router addresses also exist on zkSync Era (324, *different* literals — ButterRouterV2 `0x73E0d6E696Fc38DaC6bf68b4A0b06d35Df10492E`), Linea, Scroll, Mantle, Blast (81457), Merlin, Bevm, AINN, Conflux, Klaytn, X Layer, Unichain, zkLink, Monad, Arc (5042, Receiver `0x1c657A87071ff402acD673f3559457e1003D9718` per the official docs), plus **Tron** (base58 addresses, e.g. ButterRouterV3 `TPYm4fQJxmoBuhAbNWCBx2ehzhVJ1fxFNP`) and a **Solana** receiver (`SolanaReceiver.sol`). Recorded as findings; only the eight targets are detailed above.
+**Counterparty / extra-target chains:** the same router addresses also exist on zkSync Era (324, *different* literals — ButterRouterV2 `0x73E0d6E696Fc38DaC6bf68b4A0b06d35Df10492E`), Linea, Scroll, Mantle, Blast (81457), Merlin, Bevm, AINN, Conflux, Klaytn, X Layer, Unichain, zkLink, Monad, plus **Tron** (base58 addresses, e.g. ButterRouterV3 `TPYm4fQJxmoBuhAbNWCBx2ehzhVJ1fxFNP`) and a **Solana** receiver (`SolanaReceiver.sol`). Recorded as findings; only the eight targets and Arc (§4.2) are detailed above.
 
 ## 6. Proxies (old & new)
 
@@ -299,6 +315,12 @@ RH_BUTTER_RECEIVER_V2      = '\xa410c91ae49633d78a55bbb3479fdb8fcae0d883'
 RH_BUTTER_SWAP_ADAPTER_V3  = '\xaa301070448385cfaac5913a67b16c4392944a8f'
 RH_BUTTER_SWAP_AGGREGATOR  = '\x4c0ce9ad38bc3132ad1c8ae7e00d48f9524ebc03'
 RH_WETH                    = '\x0bd7d308f8e1639fab988df18a8011f41eacad73'   -- bridged asset in the sampled transfers
+-- ===== Arc (chain ID 5042) =====
+ARC_BUTTER_ROUTER_V31      = '\xee0319cf0bca5d09333f9f6277743e8de31bd69a'   -- 15588 B build
+ARC_BUTTER_RECEIVER_V31    = '\xc6136f019a7ca92044482373c73367e13ba4c672'
+ARC_BUTTER_RECEIVER        = '\x1c657a87071ff402acd673f3559457e1003d9718'   -- Arc-only literal
+ARC_BUTTER_SWAP_ADAPTER_V3 = '\xaa301070448385cfaac5913a67b16c4392944a8f'
+ARC_BUTTER_SWAP_AGGREGATOR = '\x4c0ce9ad38bc3132ad1c8ae7e00d48f9524ebc03'
 ```
 
 ## 9. Verification & sources

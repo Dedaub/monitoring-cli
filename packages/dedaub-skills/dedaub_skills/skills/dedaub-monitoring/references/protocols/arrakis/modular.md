@@ -1,6 +1,6 @@
-# Arrakis Modular — Topics, Selectors, Addresses (Ethereum, Base, Arbitrum, Optimism, Polygon, BNB; absent on Avalanche)
+# Arrakis Modular — Topics, Selectors, Addresses (Ethereum, Base, Arbitrum, Optimism, Polygon, BNB, Robinhood Chain; absent on Avalanche and Arc)
 
-**Status:** verified 2026-06-04. Topic0/selector hashes computed locally with `keccak256` from the canonical `ArrakisFinance/arrakis-modular` Solidity interfaces; addresses confirmed via `eth_getCode` on all seven target chains; the factory event topic0, the factory→manager/registry wiring, and the proxy/beacon slots confirmed live via `eth_getStorageAt` / `eth_call` / `eth_getLogs` on Ethereum.
+**Status:** verified 2026-06-04; Manager impl, Robinhood Chain (4663) and Arc (5042) presence re-checked 2026-10-05. Topic0/selector hashes computed locally with `keccak256` from the canonical `ArrakisFinance/arrakis-modular` Solidity interfaces; addresses confirmed via `eth_getCode` on all seven target chains; the factory event topic0, the factory→manager/registry wiring, and the proxy/beacon slots confirmed live via `eth_getStorageAt` / `eth_call` / `eth_getLogs` on Ethereum.
 **Scope:** **Arrakis Modular** — the current generation of Arrakis: a universal **Meta Vault** standard with pluggable per-strategy **modules** (Uniswap V4 module, Valantis HOT module, …). Covers `ArrakisMetaVaultFactory`, the public ERC-20 vaults (`ArrakisMetaVaultPublic`) and private NFT-owned vaults (`ArrakisMetaVaultPrivate`), `ArrakisStandardManager`, `ArrakisPublicVaultRouter` (+ `RouterSwapExecutor`/`RouterSwapResolver`), `Guardian`, `TimeLock`, the `ModulePublicRegistry`/`ModulePrivateRegistry`, the module beacons, and the Private-Vault NFT. This is a **new architecture, not Arrakis V2** (PALM/`ArrakisV2` vaults are a separate, older generation).
 
 ## Orientation
@@ -155,30 +155,44 @@ Read helpers (view): `numOfPublicVaults()` `0x…` , `numOfPrivateVaults()`, `pu
 
 ### Singleton infrastructure (one CREATE3 address; per-chain presence noted)
 
-| Role | Address | ETH (1) | Base (8453) | Arb (42161) | OP (10) | Poly (137) | BNB (56) | Avax (43114) |
-|------|---------|:--:|:--:|:--:|:--:|:--:|:--:|:--:|
-| **ArrakisMetaVaultFactory** | `0x820FB8127a689327C863de8433278d6181123982` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | `0x` |
-| **ArrakisStandardManager** (proxy) | `0x2e6E879648293e939aA68bA4c6c129A1Be733bDA` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | `0x` |
-| **Guardian** | `0x6F441151B478E0d60588f221f1A35BcC3f7aB981` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | `0x` |
-| **TimeLock** | `0xAf6f9640092cB1236E5DB6E517576355b6C40b7f` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | `0x` |
-| **ArrakisPublicVaultRouter** | `0x72aa2C8e6B14F30131081401Fa999fC964A66041` | ✓ | ✓ | ✓ | `0x` | `0x` | `0x` | `0x` |
-| **RouterSwapExecutor** | `0x19488620Cdf3Ff1B0784AC4529Fb5c5AbAceb1B6` | ✓ | ✓¹ | ✓¹ | `0x` | `0x` | `0x` | `0x` |
-| **RouterSwapResolver** | `0xC6c53369c36D6b4f4A6c195441Fe2d33149FB265` | ✓¹ | ✓¹ | ✓¹ | `0x` | `0x` | `0x` | `0x` |
-| **ModulePublicRegistry** | `0x791d75F87a701C3F7dFfcEC1B6094dB22c779603` | ✓ | ✓¹ | ✓¹ | ✓¹ | ✓¹ | ✓¹ | `0x` |
-| **ModulePrivateRegistry** | `0xe278C1944BA3321C1079aBF94961E9fF1127A265` | ✓ | ✓¹ | ✓¹ | ✓¹ | ✓¹ | ✓¹ | `0x` |
-| **Private-Vault NFT** (PrivateVaultNFT) | `0x44A801e7E2E073bd8bcE4bCCf653239Fa156B762` | ✓ | ✓¹ | ✓¹ | ✓¹ | ✓¹ | ✓¹ | `0x` |
-| **RendererController** | `0x1Cc0Adff599F244f036a5C2425f646Aef884149D` | ✓¹ | ✓¹ | ✓¹ | ✓¹ | ✓¹ | ✓¹ | `0x` |
-| **Pauser** | `0x700a1cdA1495C1B34c4962e9742A8A8832aAc03A` | ✓¹ | ✓¹ | ✓¹ | ✓¹ | ✓¹ | ✓¹ | `0x` |
-| **MigrationHelper** | `0xd61407B9B63956CfB61341AAfeFbD7EDA1F9B962` | ✓¹ | ✓¹ | ✓¹ | ✓¹ | ✓¹ | ✓¹ | `0x` |
-| **Withdraw Helper** | `0x3a2e9c26fBB53990BAFAec0342e38bd2a06f46d3` | ✓ | ✓¹ | ✓¹ | ✓¹ | ✓¹ | ✓¹ | `0x` |
+| Role | Address | ETH (1) | Base (8453) | Arb (42161) | OP (10) | Poly (137) | BNB (56) | Robin (4663) | Avax (43114) |
+|------|---------|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|
+| **ArrakisMetaVaultFactory** | `0x820FB8127a689327C863de8433278d6181123982` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | `0x` |
+| **ArrakisStandardManager** (proxy) | `0x2e6E879648293e939aA68bA4c6c129A1Be733bDA` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | `0x` |
+| **Guardian** | `0x6F441151B478E0d60588f221f1A35BcC3f7aB981` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | `0x` |
+| **TimeLock** | `0xAf6f9640092cB1236E5DB6E517576355b6C40b7f` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | `0x` |
+| **ArrakisPublicVaultRouter** | `0x72aa2C8e6B14F30131081401Fa999fC964A66041` | ✓ | ✓ | ✓ | `0x` | `0x` | `0x` | `0x` | `0x` |
+| **RouterSwapExecutor** | `0x19488620Cdf3Ff1B0784AC4529Fb5c5AbAceb1B6` | ✓ | ✓¹ | ✓¹ | `0x` | `0x` | `0x` | `0x` | `0x` |
+| **RouterSwapResolver** | `0xC6c53369c36D6b4f4A6c195441Fe2d33149FB265` | ✓¹ | ✓¹ | ✓¹ | `0x` | `0x` | `0x` | `0x` | `0x` |
+| **ModulePublicRegistry** | `0x791d75F87a701C3F7dFfcEC1B6094dB22c779603` | ✓ | ✓¹ | ✓¹ | ✓¹ | ✓¹ | ✓¹ | ✓ | `0x` |
+| **ModulePrivateRegistry** | `0xe278C1944BA3321C1079aBF94961E9fF1127A265` | ✓ | ✓¹ | ✓¹ | ✓¹ | ✓¹ | ✓¹ | ✓ | `0x` |
+| **Private-Vault NFT** (PrivateVaultNFT) | `0x44A801e7E2E073bd8bcE4bCCf653239Fa156B762` | ✓ | ✓¹ | ✓¹ | ✓¹ | ✓¹ | ✓¹ | ✓ | `0x` |
+| **RendererController** | `0x1Cc0Adff599F244f036a5C2425f646Aef884149D` | ✓¹ | ✓¹ | ✓¹ | ✓¹ | ✓¹ | ✓¹ | ✓ | `0x` |
+| **Pauser** | `0x700a1cdA1495C1B34c4962e9742A8A8832aAc03A` | ✓¹ | ✓¹ | ✓¹ | ✓¹ | ✓¹ | ✓¹ | `0x` | `0x` |
+| **MigrationHelper** | `0xd61407B9B63956CfB61341AAfeFbD7EDA1F9B962` | ✓¹ | ✓¹ | ✓¹ | ✓¹ | ✓¹ | ✓¹ | `0x` | `0x` |
+| **Withdraw Helper** | `0x3a2e9c26fBB53990BAFAec0342e38bd2a06f46d3` | ✓ | ✓¹ | ✓¹ | ✓¹ | ✓¹ | ✓¹ | `0x` | `0x` |
 
 > **Module beacons (not exhaustively listed above):** beyond the Uniswap V4 and Valantis HOT modules, the official deployments page also lists **Uniswap V3**, **PancakeSwap (Infinity on BNB + V3)**, and **Aerodrome Slipstream** (Base-only; Staked/Fees variants) module beacons, each with per-chain addresses. Spot-verified code-present: UniV3 beacon (Base) `0x82c0a11A…`, Pancake-Infinity beacon (BNB) `0x741d420e…`, Aerodrome-Slipstream-V3-staked beacon (Base) `0x568336B9…`. A complete monitor should enumerate the module beacons from the deployments page per chain. The **active venue events** (swaps/LP) come from each module's underlying pool (UniV4 `PoolManager`, Valantis `SovereignPool`, UniV3/Pancake pool, Aerodrome pool) — see §Detection invariants.
 
 ✓ = `eth_getCode` non-empty, directly verified here. ✓¹ = CREATE3 same-address contract from the official deployments page, code-verified on Ethereum here; presence on the other chains follows the CREATE3 deployment set in the docs (re-check `eth_getCode` per chain before relying on it for a specific chain). The **Factory / Manager / Guardian / TimeLock / Router** ✓ marks are all from direct per-chain `eth_getCode` in this pass.
 
-> The official deployments page lists Modular as live on Mainnet, Base, Arbitrum, BNB, Plasma, Optimism, Polygon, Ink, Unichain, Sepolia. **Avalanche is not in that set** (confirmed `0x` on-chain here). **Ink / Unichain / Plasma / Sepolia are out of scope** for this file.
+> The official deployments page lists Modular as live on Mainnet, Base, Arbitrum, BNB, Plasma, Optimism, Polygon, Ink, Unichain, Sepolia. **Avalanche is not in that set** (confirmed `0x` on-chain here). Robinhood Chain (4663) is live on-chain (section below); Arc (5042) returns `0x` for the factory/manager/guardian (2026-10-05). **Ink / Unichain / Plasma / Sepolia are out of scope** for this file.
 
 **CREATE3 shared-address claim — CONFIRMED, with a nuance.** The factory address `0x820F…3982` is identical and code-present on ETH/Base/Arb/OP/Poly/BNB (absent on Avax). Bytecode is **byte-identical across ETH = Base = Arbitrum** (`keccak`/sha256 of `eth_getCode` matches), **identical across OP = Polygon** (a different build), and **slightly different on BNB** (different size). So the *address* is CREATE3-deterministic and shared, but the *deployed bytecode* is not byte-identical on every chain (different compiler/immutable batches per deployment wave) — the address determinism is what CREATE3 guarantees, not bytecode equality. Same pattern holds for the Manager and Guardian.
+
+### Robinhood Chain (4663)
+
+Live: 3,660 manager `LogRebalance` + 5 factory `LogPrivateVaultCreation` in the 7 days to 2026-10-05. Same CREATE3 addresses; chain-specific values:
+```
+0x820FB8127a689327C863de8433278d6181123982 -> ArrakisMetaVaultFactory (21832B ✓; manager()→Manager ✓; numOfPublicVaults 0, numOfPrivateVaults 16)
+0x2e6E879648293e939aA68bA4c6c129A1Be733bDA -> ArrakisStandardManager (2882B ✓; impl 0xD6a035de7b5d5C7689f26A035bcA9208CADA7f9c, admin = TimeLock ✓)
+0x6F441151B478E0d60588f221f1A35BcC3f7aB981 -> Guardian (1310B ✓)
+0xAf6f9640092cB1236E5DB6E517576355b6C40b7f -> TimeLock (9077B ✓ — a different build from the 9481B ETH TimeLock)
+0xe278C1944BA3321C1079aBF94961E9fF1127A265 -> ModulePrivateRegistry (✓; beacons() = 0xBeb59Fe03e6057cEdfD7B5B4D8FDDA61975adD2d, 0xd668a65c796892C9873a2bab1857E7C6F1410637)
+0x791d75F87a701C3F7dFfcEC1B6094dB22c779603 -> ModulePublicRegistry (✓; beacons() empty — no public vaults)
+0x8c758f3CdAE675e0c90A2e2ec1f391276d0649e4 -> owner() of the Manager (chain-specific; not the ETH owner)
+# Router stack, Pauser, MigrationHelper, Withdraw Helper: eth_getCode = 0x on Robinhood. V1/V2 addresses: all 0x.
+```
 
 ### Module beacons (chain-specific addresses — NOT CREATE3-shared)
 
@@ -221,7 +235,7 @@ Vaults are **not** at deterministic shared addresses — each is CREATE3-deploye
 | **ArrakisMetaVaultFactory** | **Immutable** (full deploy, not a proxy) | EIP-1967 impl slot `0x3608…bbc` reads `0x0`. |
 | **ArrakisPublicVaultRouter** | **Immutable** | impl slot `0x0`. |
 | **Guardian / TimeLock / registries** | **Immutable** | not proxies. |
-| **ArrakisStandardManager** | **ERC-1967 upgradeable proxy** | impl slot `0x3608…bbc` = `0x85881de0eFab6a902C9Ff17C47C6E08C0Ab9FDB3` (the logic); admin slot `0xb531…6103` = `0xAf6f9640092cB1236E5DB6E517576355b6C40b7f` (= **TimeLock**). So the manager logic is upgradeable by the TimeLock. |
+| **ArrakisStandardManager** | **ERC-1967 upgradeable proxy** | impl slot `0x3608…bbc` = `0xD6a035de7b5d5C7689f26A035bcA9208CADA7f9c` (the logic; same impl on ETH/Base/BNB/Robinhood, re-read 2026-10-05 — it was `0x85881de0eFab6a902C9Ff17C47C6E08C0Ab9FDB3` at 2026-06-04); admin slot `0xb531…6103` = `0xAf6f9640092cB1236E5DB6E517576355b6C40b7f` (= **TimeLock**). So the manager logic is upgradeable by the TimeLock. |
 | **Meta-vaults (public & private)** | **Full instances**, not proxies | impl slot `0x0` and beacon slot `0xa3f0…3d50` both `0x0` on sampled vaults. They are CREATE3-deployed concrete contracts. |
 | **Modules** | **BeaconProxy (EIP-1967 beacon)** | sampled vault's `module()` has beacon slot `0xa3f0ad74e5423aebfd80d3ef4346578335a9a72aeaee59ff6cb3582b35133d50` set (public vault module → beacon `0xE973Cf1e…`; private vault module → beacon `0x022a0C7d…`). Module impl resolves via `beacon.implementation()`. Beacons are `UpgradeableBeacon` owned by the TimeLock. |
 
@@ -234,7 +248,7 @@ Slots used: EIP-1967 implementation `0x360894a13ba1a3210667c828492db98dca3e2076c
 1. **Public ≠ Private.** A public vault is an **ERC-20** (shares transferable; `mint`/`burn`/`LogMint`/`LogBurn`; router-served `addLiquidity`). A private vault is **NFT-owned** with whitelisted depositors (`deposit`/`withdraw`/`LogDeposit`/`LogWithdraw`). They are created by `deployPublicVault` vs `deployPrivateVault` and emit `LogPublicVaultCreation` vs `LogPrivateVaultCreation`. Classify any address with `factory.isPublicVault` / `isPrivateVault`.
 2. **The vault is not where the swaps happen.** Real AMM swap/LP events come from the **module's underlying venue** — e.g. a Uniswap V4 `PoolManager` `Swap`/`ModifyLiquidity`, or a Valantis `SovereignPool`. The vault only emits accounting events (`LogMint`/`LogBurn`/`LogDeposit`/`LogWithdraw`/`LogSetModule`) and the manager emits `LogRebalance`. To see liquidity actually move, follow `vault.module()` → its venue, and correlate in the same tx.
 3. **Multiple same-named events with different topic0.** `LogSetManager` exists as factory 2-arg (`0x496dcec0…`) and vault 1-arg (`0x9b6ffaf4…`). `LogSetModule` exists as vault 2-arg (`0x098a4cb3…`) and manager 3-arg (`0x67cc0d0f…`). `LogWithdraw` exists as private-vault 3-arg (`0x3228bf4a…`) and module 4-arg (`0x9744d0a1…`). `LogWithdrawManagerBalance` exists as vault/module 2-arg (`0xa292e28c…`) and manager 4-arg (`0x728744d6…`). Match on the **emitting contract** + topic0, not the name.
-4. **CREATE3 = same address, presence differs.** Disambiguate chains by `chain_id`. The **router stack is only on ETH/Base/Arbitrum**; the factory/manager/guardian/timelock are on those six chains; **Avalanche has none of it** (`0x`).
+4. **CREATE3 = same address, presence differs.** Disambiguate chains by `chain_id`. The **router stack is only on ETH/Base/Arbitrum**; the factory/manager/guardian/timelock are on those six chains and on Robinhood Chain; **Avalanche and Arc have none of it** (`0x`).
 5. **CREATE3 ≠ byte-identical bytecode.** The factory address is shared, but its deployed bytecode differs between deployment waves (ETH/Base/Arb one build, OP/Poly another, BNB another). Verify by address + presence, not bytecode hash equality.
 6. **Manager is upgradeable; everything else core is immutable.** The manager is an ERC-1967 proxy whose admin is the TimeLock; the factory/router/guardian are not proxies. Module logic upgrades happen at the **beacon** (TimeLock-owned), affecting all vaults on that beacon at once.
 7. **Don't hardcode module beacons.** Read `ModulePublicRegistry.beacons()` / `ModulePrivateRegistry.beacons()` per chain — beacon addresses are chain-specific.
@@ -303,7 +317,7 @@ SEL_GUARDIAN_SET_PAUSER          = '\x2d88af4a'
 
 -- ===== Addresses (CREATE3 — SAME on every chain; presence per-chain, see table) =====
 ARRAKIS_META_VAULT_FACTORY       = '\x820fb8127a689327c863de8433278d6181123982'
-ARRAKIS_STANDARD_MANAGER         = '\x2e6e879648293e939aa68ba4c6c129a1be733bda'  -- ERC1967 proxy; impl 0x85881de0..., admin = TimeLock
+ARRAKIS_STANDARD_MANAGER         = '\x2e6e879648293e939aa68ba4c6c129a1be733bda'  -- ERC1967 proxy; impl 0xd6a035de... (2026-10), admin = TimeLock
 ARRAKIS_GUARDIAN                 = '\x6f441151b478e0d60588f221f1a35bcc3f7ab981'
 ARRAKIS_TIMELOCK                 = '\xaf6f9640092cb1236e5db6e517576355b6c40b7f'
 ARRAKIS_PUBLIC_VAULT_ROUTER      = '\x72aa2c8e6b14f30131081401fa999fc964a66041'  -- ETH/Base/Arb only
@@ -334,7 +348,7 @@ How every constant here was verified (2026-06-04):
 - **Live topic0 confirmation:** `eth_getLogs` on the factory `0x820F…3982` (Ethereum, blocks 25236489/25236497) returned `topics[0] = 0x15509c43e33ed1fab25841b16998c22b4ed073f627883f1131d2e1b870df129a` — byte-for-byte the computed `LogPrivateVaultCreation`, with the indexed `creator` as the only topic (matching the single `indexed` arg). This validates the signature-hashing methodology for the whole factory event set. Example creation tx: `0x515b7cdd820d31a2153c777b42f14d10c092f4f12bdd86c2bb7f3ce351df65ba`.
 - **Factory wiring:** `factory.manager()` = `0x2e6E8796…733bDA` (= the Manager in the table); `factory.moduleRegistryPublic()` = `0x791d75F8…779603`; `factory.moduleRegistryPrivate()` = `0xe278C194…127A265`; `numOfPublicVaults()` = 2, `numOfPrivateVaults()` = 112 (Ethereum).
 - **Addresses — code presence:** `eth_getCode` on `ethereum/base/bsc/avalanche-c-chain/arbitrum-one/optimism/polygon-bor` publicnode RPCs. Factory/Manager/Guardian/TimeLock present on ETH/Base/Arb/OP/Poly/BNB and **absent (`0x`) on Avalanche**. Router present on ETH/Base/Arbitrum only; **absent on BNB/OP/Polygon/Avalanche**. Factory bytecode is byte-identical on ETH=Base=Arbitrum (one build) and on OP=Polygon (another), and differs on BNB — i.e. CREATE3 gives the same address but not byte-identical code across all waves.
-- **Proxy slots:** `eth_getStorageAt`. Manager impl slot = `0x85881de0eFab6a902C9Ff17C47C6E08C0Ab9FDB3`, admin slot = `0xAf6f9640…` (TimeLock) → ERC-1967 proxy. Factory/router impl slots = `0x0` (immutable). Sampled meta-vaults have impl & beacon slots `0x0` (full instances). Sampled vault modules have the EIP-1967 beacon slot set; `beacon.implementation()` and `beacon.owner()` (= TimeLock) read live.
+- **Proxy slots:** `eth_getStorageAt`. Manager impl slot = `0xD6a035de7b5d5C7689f26A035bcA9208CADA7f9c` (2026-10-05; `0x85881de0…` at 2026-06-04 — the TimeLock has upgraded it), admin slot = `0xAf6f9640…` (TimeLock) → ERC-1967 proxy. Factory/router impl slots = `0x0` (immutable). Sampled meta-vaults have impl & beacon slots `0x0` (full instances). Sampled vault modules have the EIP-1967 beacon slot set; `beacon.implementation()` and `beacon.owner()` (= TimeLock) read live.
 - **Module beacons:** read live from `ModulePublicRegistry.beacons()` (2 beacons) and `ModulePrivateRegistry.beacons()` (5 beacons) on Ethereum; each beacon's `implementation()` resolved. Per-chain UniV4 private beacon table taken from the official deployments page.
 - **Unconfirmed / flagged:**
   - `LogPublicVaultCreation` topic0 (`0x78a30a…`) is computed from source, **not** matched against a live emission (only 2 public vaults on Ethereum; their creation logs were not range-scanned here). The private creation topic0 *was* live-confirmed, and both come from the same interface, so confidence is high.
@@ -343,13 +357,3 @@ How every constant here was verified (2026-06-04):
   - ✓¹ presence marks (registries, NFT, executor/resolver, renderer, pauser, migration helper on non-Ethereum chains) follow the docs' CREATE3 set and were code-verified on Ethereum only in this pass; re-check `eth_getCode` on the specific chain before relying on them there.
 
 - **Authoritative sources:** [Arrakis Modular deployments page](https://docs.arrakis.finance/text/arrakisModular/deployments.html) · `ArrakisFinance/arrakis-modular` Solidity interfaces (source for all signatures) · explorers: [Etherscan](https://etherscan.io/address/0x820FB8127a689327C863de8433278d6181123982) / [BaseScan](https://basescan.org) / [Arbiscan](https://arbiscan.io) / [Optimistic Etherscan](https://optimistic.etherscan.io) / [PolygonScan](https://polygonscan.com) / [BscScan](https://bscscan.com).
-
-### Independent fact-check (2026-06) — confirmed, additions folded in
-Cross-checked against the Arrakis Modular deployments page, GitHub, and live RPC. Verdicts:
-1. **Factory `0x820FB81…3982` + all singleton addresses, CREATE3 same-address (6 target chains, `0x` Avalanche), router stack only ETH/Base/Arbitrum** — ✅ confirmed verbatim against the deployments page + live RPC.
-2. **Manager = ERC-1967 proxy (admin = TimeLock); Factory/Guardian immutable; modules = TimeLock-owned BeaconProxy; meta-vaults delegate to module → events from the underlying venue** — ✅ confirmed (impl/admin slots read live).
-3. **`LogPrivateVaultCreation` topic0 `0x15509c43…`** — ✅ live-confirmed; **`LogPublicVaultCreation`** remains computed-only (no public-vault creation in sampled window).
-4. **Module set** — ➕ added: the deployments page also ships **Uniswap V3, PancakeSwap (Infinity/V3), and Aerodrome Slipstream** module beacons (not just UniV4/Valantis) — note + spot-verified beacons added above.
-5. **Withdraw Helper `0x3a2e9c26…`** — ➕ added to the singleton table (5529B on ETH ✓).
-
-**Net corrections folded in:** broader module-beacon set documented; Withdraw Helper added. No address corrections — all confirmed. (`ArrakisRoles` still has no published address — the `arrakis-modular` repo is private; left flagged.)

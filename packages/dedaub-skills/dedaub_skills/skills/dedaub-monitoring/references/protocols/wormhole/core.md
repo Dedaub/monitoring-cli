@@ -1,4 +1,4 @@
-# Wormhole Core — Topics, Selectors, Addresses (Ethereum, Base, Arbitrum, Optimism, Polygon, BNB, Avalanche, Robinhood Chain)
+# Wormhole Core — Topics, Selectors, Addresses (Ethereum, Base, Arbitrum, Optimism, Polygon, BNB, Avalanche, Robinhood Chain, Arc)
 
 **Status:** verified on 2026-09-29 against live RPC on all eight chains, the canonical `wormhole-foundation/wormhole` repo (`ethereum/contracts/`), the Wormhole docs contract-address page and the `wormhole-foundation/wormhole-sdk-ts` address constants. Topics and selectors recomputed as `keccak256(signature)`; addresses existence-checked with `eth_getCode`; implementations read from the EIP-1967 slot; implementation bytecode scanned for each event topic (`PUSH32`) and selector (`PUSH4`).
 **Scope:** the Wormhole **Core contract** (the message bus that every Wormhole product publishes through), its guardian-set and governance surface, and three small guardian-governed helpers (Guardian Governance, Delegated Guardians, Custom Consistency Level). The Core is deployed on **all eight target chains, Robinhood Chain (4663) included**. Topics and selectors are chain-agnostic; addresses are network-specific. The products that sit on top (Token Bridge, NFT Bridge, Wormhole Relayer, Executor, Circle integration, NTT) have their own files; see [README.md](README.md).
@@ -16,8 +16,8 @@ Two facts a monitor must know first:
 
 | Contract | Chains | Role | Proxy? |
 |----------|--------|------|--------|
-| **Core (`Wormhole` proxy + `Implementation`)** | all 8 | Publishes messages (`publishMessage`), verifies VAAs (`parseAndVerifyVM`), holds the guardian sets, executes core governance VAAs. | EIP-1967 proxy, upgraded by governance VAA (`submitContractUpgrade`) |
-| **Guardian Governance** (`Governance.sol` of the NTT repo) | ETH, Base, ARB, OP, BNB, AVAX (not listed for Polygon or Robinhood) | "Guardian-governed ownership": an owner contract that executes only calls signed by a guardian quorum (`performGovernance`). It owns, for example, the W token's NTT managers. | No (immutable, 3,408 B) |
+| **Core (`Wormhole` proxy + `Implementation`)** | all 8 + Arc | Publishes messages (`publishMessage`), verifies VAAs (`parseAndVerifyVM`), holds the guardian sets, executes core governance VAAs. | EIP-1967 proxy, upgraded by governance VAA (`submitContractUpgrade`) |
+| **Guardian Governance** (`Governance.sol` of the NTT repo) | ETH, Base, ARB, OP, BNB, AVAX (not listed for Polygon, Robinhood or Arc) | "Guardian-governed ownership": an owner contract that executes only calls signed by a guardian quorum (`performGovernance`). It owns, for example, the W token's NTT managers. | No (immutable, 3,408 B) |
 | **Delegated Guardians** (`WormholeDelegatedGuardians`) | Ethereum only | Stores per-chain configs of a delegated subset of guardians (`submitConfig`, governance VAA). | No |
 | **Custom Consistency Level** (`CustomConsistencyLevel`) | Ethereum only (also Linea per the SDK) | Lets an emitter store a custom finality config (`configure`). | No (507 B) |
 
@@ -102,7 +102,7 @@ All existence-checked with `eth_getCode` on 2026-09-29. Wormhole chain id **2**.
 
 ---
 
-## 4. Addresses — the other seven chains
+## 4. Addresses — the other seven chains and Arc
 
 ### 4.1 Core proxy per chain
 
@@ -116,8 +116,9 @@ All existence-checked with `eth_getCode` on 2026-09-29. Wormhole chain id **2**.
 | BNB Smart Chain | 56 | 4 | `0x98f3c9e6E3fAce36bAAd05FE09d375Ef1464288B` | 680 B | `0xc41172cc37e98bebd12abb39f9124a47e4d072ee` |
 | Avalanche C-Chain | 43114 | 6 | `0x54a8e5f9c4CbA08F9943965859F6c34eAF03E26c` | 680 B | `0x64da33455c1abb6c018ac804f1930e36a02b5065` |
 | **Robinhood Chain** | 4663 | **72** | `0x141fBa8AD5D61bdaB45A047cF60b5Ad9784987FB` | 680 B | `0x1aafb0d5aab9ffbe09d4d30c9fd90d695c4f0881` |
+| **Arc** | 5042 | **71** | `0xC8aD24fC6063c41cB5C12a8e3851AafC3b3CF027` | 680 B | `0x5e02b1ec373bfe93077f335243f170f204db9777` |
 
-`chainId()` returned the Wormhole id and `evmChainId()` the EVM id on every chain. The implementations on Base, Arbitrum, Optimism, Polygon, BNB and Avalanche have identical bytecode (14,522 B, code hash `0xd2d3926de5f9d9b7e881155589b07c3a424a6cf1cddc2394257f4e1dc7b3f7fa`). Ethereum's implementation is an older 13,904 B build (code hash `0x637863b4940357181f66fc748cf3133b516864f6251bf89fde8dcf019d862522`). Robinhood's is 14,522 B with a different hash (`0x49ef719d3d246ab781470db9dba6aa4326112e79bb9bb402fd92952e74ded443`). All eight contain `LogMessagePublished`, `ContractUpgraded` and `Upgraded`, and none contains `GuardianSetAdded`.
+`chainId()` returned the Wormhole id and `evmChainId()` the EVM id on every chain. The implementations on Base, Arbitrum, Optimism, Polygon, BNB and Avalanche have identical bytecode (14,522 B, code hash `0xd2d3926de5f9d9b7e881155589b07c3a424a6cf1cddc2394257f4e1dc7b3f7fa`). Ethereum's implementation is an older 13,904 B build (code hash `0x637863b4940357181f66fc748cf3133b516864f6251bf89fde8dcf019d862522`). Robinhood's is 14,522 B with a different hash (`0x49ef719d3d246ab781470db9dba6aa4326112e79bb9bb402fd92952e74ded443`). Arc's is 14,522 B with hash `0x5651fcea0ee7c4a726467244e3967389d566fb4fe6326fdb0089eb368edf1c83` (read 2026-10-05). The SDK also lists `0xBB73cB66C26740F31d1FabDC6b7A46a038A300dd` for Arc and Robinhood in a second map; it has no code on Arc. All eight contain `LogMessagePublished`, `ContractUpgraded` and `Upgraded`, and none contains `GuardianSetAdded`.
 
 ### 4.2 Guardian Governance per chain (docs contract-address page)
 
@@ -131,6 +132,7 @@ All existence-checked with `eth_getCode` on 2026-09-29. Wormhole chain id **2**.
 | Avalanche C-Chain | `0x169D91C797edF56100F1B765268145660503a423` | 3,408 B |
 | Polygon PoS | — | not in the docs list |
 | Robinhood Chain | — | not in the docs list; the shared address `0x574B7864119C9223A9870Ea614dC91A8EE09E512` (HyperEVM, Monad, Unichain) has no code on Robinhood |
+| Arc | — | not in the docs list; `0x574B7864119C9223A9870Ea614dC91A8EE09E512` has no code on Arc |
 
 ---
 
@@ -146,6 +148,7 @@ All existence-checked with `eth_getCode` on 2026-09-29. Wormhole chain id **2**.
 | BNB Smart Chain | 56 | 4 | `0x98f3c9e6E3fAce36bAAd05FE09d375Ef1464288B` | ✅ | — | 7 | 0 |
 | Avalanche C-Chain | 43114 | 6 | `0x54a8e5f9c4CbA08F9943965859F6c34eAF03E26c` | ✅ | — | 7 | 0 |
 | **Robinhood Chain** | 4663 | 72 | `0x141fBa8AD5D61bdaB45A047cF60b5Ad9784987FB` | — (not listed) | — | 7 | 0 |
+| **Arc** | 5042 | 71 | `0xC8aD24fC6063c41cB5C12a8e3851AafC3b3CF027` | — (not listed) | — | 7 | 0 |
 
 **Shared literal address:** Ethereum and BNB use the same Core address. The other chains use chain-unique addresses. Key every Core query on `(chain, address)`.
 
@@ -155,7 +158,7 @@ All existence-checked with `eth_getCode` on 2026-09-29. Wormhole chain id **2**.
 
 | Contract | Pattern | Detection | Upgrade auth |
 |----------|---------|-----------|--------------|
-| **Core** (all 8) | EIP-1967 proxy (`Wormhole is ERC1967Proxy`); upgrade logic lives in the implementation (`Governance.upgradeImplementation`) | Implementation slot `0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc` populated (§4.1); admin slot `0xb53127684a568b3173ae13b9f8a6016e243e63b6e8ee1178d6a717850b5d6103` = 0 on all eight | Guardian governance VAA: `submitContractUpgrade`, module `Core` (`0x00000000000000000000000000000000000000000000000000000000436f7265`), emitter chain 1, emitter `0x0000000000000000000000000000000000000000000000000000000000000004`, signed by the current guardian set only |
+| **Core** (all 8 + Arc) | EIP-1967 proxy (`Wormhole is ERC1967Proxy`); upgrade logic lives in the implementation (`Governance.upgradeImplementation`) | Implementation slot `0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc` populated (§4.1); admin slot `0xb53127684a568b3173ae13b9f8a6016e243e63b6e8ee1178d6a717850b5d6103` = 0 on all eight and Arc | Guardian governance VAA: `submitContractUpgrade`, module `Core` (`0x00000000000000000000000000000000000000000000000000000000436f7265`), emitter chain 1, emitter `0x0000000000000000000000000000000000000000000000000000000000000004`, signed by the current guardian set only |
 | Guardian Governance | Not a proxy | 3,408 B full bytecode; implementation slot 0 | Guardian-signed VAA per call |
 | Delegated Guardians | Not a proxy | 7,422 B; implementation slot 0 | Governance VAA (`submitConfig`) |
 | Custom Consistency Level | Not a proxy | 507 B; implementation slot 0 | none (per-emitter self-service) |
@@ -172,7 +175,7 @@ An upgrade emits `Upgraded(address)` then `ContractUpgraded(old, new)` from the 
 4. **Guardian-set rotations are invisible in logs.** `submitNewGuardianSet` (`0x6606b4e0`) emits nothing. Detect it by the call selector, or poll `getCurrentGuardianSetIndex()` (7 today). The same is true for `submitSetMessageFee` and `submitTransferFees`: a fee withdrawal moves native value out of the Core with no event.
 5. **`consistencyLevel` is the finality that the sender requests**, not a status. The guardians sign only after that finality. The Token Bridge requests 1 on Ethereum, Base, Arbitrum, Optimism and Avalanche, and 15 on BNB and Polygon (`finality()`, measured). Other applications choose their own value per message.
 6. **`messageFee()` is 0 on all eight chains**, so a send transaction's `msg.value` is not a Core fee today. When a product forwards value, it is for the product (for example a relayer quote or WETH wrapping).
-7. **Robinhood Chain has a Core but few products.** The Core, the Executor and NTT-with-Executor helpers exist on Robinhood. The Token Bridge, NFT Bridge, Wormhole Relayer and Circle Integration have no code there (`eth_getCode` = `0x` at every known address, and no entry in the docs list or the SDK).
+7. **Robinhood Chain has a Core but few products.** The Core, the Executor and NTT-with-Executor helpers exist on Robinhood. The Token Bridge, NFT Bridge, Wormhole Relayer and Circle Integration have no code there (`eth_getCode` = `0x` at every known address, and no entry in the docs list or the SDK). **Arc** is the same shape: Core, Executor, NTT-with-Executor v2 and CCTPv2WithExecutor exist; Token Bridge, NFT Bridge, Wormhole Relayer and Circle Integration return `0x`.
 8. **Upgrades and governance come from Solana.** Every VAA-governed contract in this family checks `governanceChainId() == 1` and `governanceContract() == 0x0000000000000000000000000000000000000000000000000000000000000004`. There is no multisig owner to watch; watch the `submit*` selectors and the `Upgraded` / `ContractUpgraded` topics.
 
 ---
@@ -215,6 +218,7 @@ POLY_CORE                     = '\x7a4b5a56256163f07b2c80a7ca55abe66c4ec4d7'
 BNB_CORE                      = '\x98f3c9e6e3face36baad05fe09d375ef1464288b'
 AVAX_CORE                     = '\x54a8e5f9c4cba08f9943965859f6c34eaf03e26c'
 RH_CORE                       = '\x141fba8ad5d61bdab45a047cf60b5ad9784987fb'
+ARC_CORE                      = '\xc8ad24fc6063c41cb5c12a8e3851aafc3b3cf027'
 
 -- ===== Guardian-governed helpers =====
 ETH_GUARDIAN_GOVERNANCE       = '\x23fea5514dfc9821479fbe18ba1d7e1a61f6ffcf'
@@ -234,8 +238,8 @@ ETH_CUSTOM_CONSISTENCY_LEVEL  = '\x6a4b4a882f5f0a447078b4fd0b4b571a82371ec2'
 How every constant was verified (2026-09-29):
 
 - **Topic0 / selectors:** recomputed as `keccak256(canonical signature)` from `ethereum/contracts/Implementation.sol`, `Governance.sol`, `State.sol`, `interfaces/IWormhole.sol`, `delegated_guardians/WormholeDelegatedGuardians.sol`, `custom_consistency_level/CustomConsistencyLevel.sol` and the NTT repo's `evm/src/wormhole/Governance.sol`. Each live Core implementation was scanned for the topics as `PUSH32` constants: `LogMessagePublished`, `ContractUpgraded` and `Upgraded` present on all eight; `GuardianSetAdded` absent on all eight.
-- **Addresses:** the Core list of the Wormhole docs contract-address page and `core/base/src/constants/contracts/core.ts` of the SDK agree on all eight chains, Robinhood included. Every address was existence-checked with `eth_getCode`; implementation slots and admin slots were read live. `getCurrentGuardianSetIndex()` = 7, `messageFee()` = 0, `governanceChainId()` = 1 and `governanceContract()` = 4 on every chain; `chainId()` / `evmChainId()` returned the ids of §4.1.
-- **Activity (pinned 12-hour window 2026-09-28 00:00–12:00 UTC):** `LogMessagePublished` at the Core: Ethereum 1,031, Base 174, Arbitrum 61, Optimism 9, Polygon 85, BNB 750, Avalanche 62, Robinhood 4. `ContractUpgraded` and `GuardianSetAdded`: 0 on the seven chains scanned for them (all except Polygon). Sample: Robinhood transaction `0xd70f7def815e10b1f9c044a858c04bf6653232acc29839593bef2c577d15e4c5` shows the NTT flow (token burn, `LogMessagePublished` with `sender` = transceiver `0x352874cd039bd2f8e23ed203941c684912009d43`).
+- **Addresses:** the Core list of the Wormhole docs contract-address page and `core/base/src/constants/contracts/core.ts` of the SDK agree on all eight chains, Robinhood included. Every address was existence-checked with `eth_getCode`; implementation slots and admin slots were read live. `getCurrentGuardianSetIndex()` = 7, `messageFee()` = 0, `governanceChainId()` = 1 and `governanceContract()` = 4 on every chain; `chainId()` / `evmChainId()` returned the ids of §4.1. Arc (2026-10-05): the Core address is from `contracts/core.ts` of the SDK (not yet in the docs list); the same reads returned 71 / 5042, guardian set 7, fee 0, governance chain 1; the implementation contains `LogMessagePublished`, `ContractUpgraded` and `Upgraded`, not `GuardianSetAdded`.
+- **Activity (pinned 12-hour window 2026-09-28 00:00–12:00 UTC):** `LogMessagePublished` at the Core: Ethereum 1,031, Base 174, Arbitrum 61, Optimism 9, Polygon 85, BNB 750, Avalanche 62, Robinhood 4; Arc 0 in the ~7 days to 2026-10-05 (`eth_getLogs`). `ContractUpgraded` and `GuardianSetAdded`: 0 on the seven chains scanned for them (all except Polygon). Sample: Robinhood transaction `0xd70f7def815e10b1f9c044a858c04bf6653232acc29839593bef2c577d15e4c5` shows the NTT flow (token burn, `LogMessagePublished` with `sender` = transceiver `0x352874cd039bd2f8e23ed203941c684912009d43`).
 - **Sender attribution:** `SwiftDest` is the verified contract name of `0xd78d199f8c402e7b5cc2abe278df0412400a3bae` on the Ethereum Blockscout explorer (BscScan labels it "Mayan: Swift v2 Destination"); `MayanCircle` is the verified name of `0x875d6d37ec55c8cf220b9e5080717549d8aa8eca` on Polygon.
 
 Authoritative sources:

@@ -1,7 +1,7 @@
-# Across Protocol — Topics, Selectors, Addresses (Ethereum + Base + BNB + Arbitrum + Optimism + Polygon + Avalanche + Robinhood Chain)
+# Across Protocol — Topics, Selectors, Addresses (Ethereum + Base + BNB + Arbitrum + Optimism + Polygon + Avalanche + Robinhood Chain + Arc)
 
-**Status:** verified against Ethereum, Base, BNB, Avalanche, Arbitrum, Optimism, and Polygon mainnet RPC, the canonical `across-protocol/contracts` repo (`broadcast/deployed-addresses.json`, `deployments/legacy-addresses.json`) and `across-protocol/constants`, on 2026-06-09. Event topics/selectors recomputed locally as `keccak256(sig)` and cross-checked against live `eth_getLogs`; addresses existence-checked via `eth_getCode`; proxy impls read from the EIP-1967 slot live. Re-checked on 2026-09-29 against the current `broadcast/deployed-addresses.json`, the `DeployUniversalSpokePool` broadcasts and live RPC: Across now runs a `Universal_SpokePool` on **Avalanche (43114)** and on **Robinhood Chain (4663)**, both registered on the HubPool (§4.3, §4.4).
-**Scope:** the live Across intent-bridge system — one canonical **HubPool** + supporting contracts on Ethereum L1, plus one **SpokePool** per spoke chain. All eight target chains now have a SpokePool: Ethereum, Base, BNB, Arbitrum, Optimism and Polygon, plus **Avalanche C-Chain and Robinhood Chain** (both `Universal_SpokePool`, verified 2026-09-29; the 2026-06-09 check had found no Avalanche deployment). Topics/selectors are chain-agnostic; addresses are network-specific.
+**Status:** verified against Ethereum, Base, BNB, Avalanche, Arbitrum, Optimism, and Polygon mainnet RPC, the canonical `across-protocol/contracts` repo (`broadcast/deployed-addresses.json`, `deployments/legacy-addresses.json`) and `across-protocol/constants`, on 2026-06-09. Event topics/selectors recomputed locally as `keccak256(sig)` and cross-checked against live `eth_getLogs`; addresses existence-checked via `eth_getCode`; proxy impls read from the EIP-1967 slot live. Re-checked on 2026-09-29 against the current `broadcast/deployed-addresses.json`, the `DeployUniversalSpokePool` broadcasts and live RPC: Across now runs a `Universal_SpokePool` on **Avalanche (43114)** and on **Robinhood Chain (4663)**, both registered on the HubPool (§4.3, §4.4). Re-checked on 2026-10-05: six SpokePool implementations had rotated since 2026-06-09 (§4.1), and Across runs a `Universal_SpokePool` on **Arc (5042)** (§4.5).
+**Scope:** the live Across intent-bridge system — one canonical **HubPool** + supporting contracts on Ethereum L1, plus one **SpokePool** per spoke chain. All nine target chains have a SpokePool: Ethereum, Base, BNB, Arbitrum, Optimism and Polygon, plus **Avalanche C-Chain, Robinhood Chain and Arc** (all `Universal_SpokePool`; Avalanche and Robinhood verified 2026-09-29, Arc 2026-10-05; the 2026-06-09 check had found no Avalanche deployment). Topics/selectors are chain-agnostic; addresses are network-specific.
 
 Across is a UMA-optimistic-oracle **intent bridge**: a user *deposits* funds into the origin SpokePool specifying an output token/amount/recipient on a destination chain; a **relayer** *fills* the request on the destination chain immediately out of its own inventory, then is reimbursed (plus an LP fee) after the HubPool's UMA-bonded root-bundle settlement clears on L1. There is no per-transfer escrow on the canonical bridge — only the relayer-refund accounting bundled into Merkle roots and disbursed by `executeRelayerRefundLeaf`.
 
@@ -30,7 +30,7 @@ Three architectural facts a monitor must internalize before indexing:
 | **SpokePoolPeriphery** | all 6 spokes (shared addr) | Swap-and-bridge periphery (deposit with an input swap via the Swap API). | No (immutable) |
 | **AdminWithdrawManager / WithdrawImplementation / TransferProxy** | all 6 spokes (shared addr) | Periphery/admin helpers for the Swap API. | mixed |
 
-**Per-chain SpokePool subclasses** (`Ethereum_SpokePool`, `Arbitrum_SpokePool`, `Optimism_SpokePool`/`Ovm_SpokePool`, `Polygon_SpokePool`, `Universal_SpokePool` for BNB) differ only in their `_bridgeTokensToHubPool`/cross-domain-admin plumbing — **all inherit the same `SpokePool` base, so every event topic0 and core selector in §1–§2 is identical across all six chains** (verified live on Ethereum and Arbitrum). BNB runs the **`Universal_SpokePool`** variant whose admin messages arrive via a storage-proof light-client (`SP1Helios` on BNB + `Universal_Adapter_56` on L1), not a native canonical bridge. **Avalanche and Robinhood Chain run the same `Universal_SpokePool` variant** (`SP1Helios` on each chain + `Universal_Adapter_43114` / `Universal_Adapter_4663` on L1), each behind a 225-byte `ERC1967Proxy`.
+**Per-chain SpokePool subclasses** (`Ethereum_SpokePool`, `Arbitrum_SpokePool`, `Optimism_SpokePool`/`Ovm_SpokePool`, `Polygon_SpokePool`, `Universal_SpokePool` for BNB, Avalanche, Robinhood Chain and Arc) differ only in their `_bridgeTokensToHubPool`/cross-domain-admin plumbing — **all inherit the same `SpokePool` base, so every event topic0 and core selector in §1–§2 is identical across all six chains** (verified live on Ethereum and Arbitrum). BNB runs the **`Universal_SpokePool`** variant whose admin messages arrive via a storage-proof light-client (`SP1Helios` on BNB + `Universal_Adapter_56` on L1), not a native canonical bridge. **Avalanche and Robinhood Chain run the same `Universal_SpokePool` variant** (`SP1Helios` on each chain + `Universal_Adapter_43114` / `Universal_Adapter_4663` on L1), each behind a 225-byte `ERC1967Proxy`.
 
 ---
 
@@ -56,6 +56,7 @@ The `(bytes32,bytes32,uint256,uint8)` tuple in `FilledRelay` is `V3RelayExecutio
 | `0xfa7fa7cf6d7dde5f9be65a67e6a1a747e7aa864dcd2d793353c722d80fbbb357` | `TokensBridged(uint256 amountToReturn, uint256 indexed chainId, uint32 indexed leafId, bytes32 indexed l2TokenAddress, address caller)` — funds returned from spoke to HubPool |
 | `0xf4ad92585b1bc117fbdd644990adf0827bc4c95baeae8a23322af807b6d0020e` | `ExecutedRelayerRefundRoot(uint256 amountToReturn, uint256 indexed chainId, uint256[] refundAmounts, uint32 indexed rootBundleId, uint32 indexed leafId, address l2TokenAddress, address[] refundAddresses, bool deferredRefunds, address caller)` |
 | `0xc86ba04c55bc5eb2f2876b91c438849a296dbec7b08751c3074d92e04f0a77af` | `RelayedRootBundle(uint32 indexed rootBundleId, bytes32 indexed relayerRefundRoot, bytes32 indexed slowRelayRoot)` |
+| `0x3b0b856314838f509dfe81e9e13c651b0e544b42639c58be2c161b2c3892949d` | `RelayedCallData(uint256 indexed nonce, address caller)` — **`Universal_SpokePool` only** (BNB, Avalanche, Robinhood, Arc): emitted by `executeMessage` when an L1 admin call stored in `HubPoolStore` is relayed with a storage proof; pairs 1:1 with `RelayedRootBundle` for root-bundle relays (Robinhood 23 in 12 h, Arc 11 in ~5.7 h, 2026-10-05) |
 | `0x7c1af0646963afc3343245b103731965735a893347bfa0d58a5dc77a77ae691c` | `EmergencyDeletedRootBundle(uint256 indexed rootBundleId)` |
 | `0x0a21fdd43d0ad0c62689ee7230a47309a050755bcc52eba00310add65297692a` | `EnabledDepositRoute(address indexed originToken, uint256 indexed destinationChainId, bool enabled)` |
 | `0xe88463c2f254e2b070013a2dc7ee1e099f9bc00534cbdf03af551dc26ae49219` | `PausedDeposits(bool isPaused)` |
@@ -183,7 +184,7 @@ All verified via `eth_getCode` returning non-empty bytecode on `https://ethereum
 | Role | Address | One-liner |
 |------|---------|-----------|
 | **HubPool** | `0xc186fA914353c44b2E33eBE05f21846F1048bEda` | L1 hub; LP pool + UMA root-bundle settlement; owns/admins all spokes. ~19.5 kB, **not a proxy**. |
-| **Ethereum SpokePool** (proxy) | `0x5c7BCd6E7De5423a257D81B442095A1a6ced35C5` | The L1 spoke (deposits *from* Ethereum). UUPS, impl `0x5e5b726c81f43b953a62ad87e2835c85c4d9dd3b`. |
+| **Ethereum SpokePool** (proxy) | `0x5c7BCd6E7De5423a257D81B442095A1a6ced35C5` | The L1 spoke (deposits *from* Ethereum). UUPS, impl `0x456ac26e5ec083ee9889eba0d1a0a582502b8e84` (read 2026-10-05; was `0x5e5b726c81f43b953a62ad87e2835c85c4d9dd3b`). |
 | **AcrossConfigStore** | `0x3B03509645713718B78951126E0A6de6f10043f5` | Global/per-token config (rate models, thresholds). |
 | **BondToken** | `0xee1DC6BCF1Ee967a350e9aC6CaaAA236109002ea` | UMA proposal bond token. |
 | **LpTokenFactory** | `0x7dB69eb9F52eD773E9b03f5068A1ea0275b2fD9d` | Mints per-L1-token LP ERC20s. |
@@ -230,16 +231,19 @@ Each spoke has **one SpokePool proxy at a chain-unique address** plus the **shar
 
 | Chain | ID | SpokePool (proxy) | Live impl (EIP-1967) | Variant |
 |-------|----|--------------------|----------------------|---------|
-| Ethereum | 1 | `0x5c7BCd6E7De5423a257D81B442095A1a6ced35C5` | `0x5e5b726c81f43b953a62ad87e2835c85c4d9dd3b` | Ethereum_SpokePool |
-| Base | 8453 | `0x09aea4b2242abC8bb4BB78D537A67a245A7bEC64` | `0x77aa19d49484cc88c2ca1c8527226e891c5c72d8` | Ovm_SpokePool (OP-stack) |
-| BNB | 56 | `0x4e8E101924eDE233C13e2D8622DC8aED2872d505` | `0xe8ff2a3d5cc19ddcbd93328371e1dd8995e7afaa` | **Universal_SpokePool** (storage-proof admin) |
-| Arbitrum One | 42161 | `0xe35e9842fceaCA96570B734083f4a58e8F7C5f2A` | `0xae54d52223c34e4102927516900cc3c562afe02e` | Arbitrum_SpokePool |
-| Optimism | 10 | `0x6f26Bf09B1C792e3228e5467807a900A503c0281` | `0x0966f5034261cc50926fb9d5c1603a5034ffa81c` | Ovm_SpokePool (OP-stack) |
-| Polygon PoS | 137 | `0x9295ee1d8C5b022Be115A2AD3c30C72E34e7F096` | `0x4a84a43274f5f99e94aa0ebef53bc06af8bc3dfb` | Polygon_SpokePool |
+| Ethereum | 1 | `0x5c7BCd6E7De5423a257D81B442095A1a6ced35C5` | `0x456ac26e5ec083ee9889eba0d1a0a582502b8e84` | Ethereum_SpokePool |
+| Base | 8453 | `0x09aea4b2242abC8bb4BB78D537A67a245A7bEC64` | `0xf23c6c04a2b88e8651fe99bbdccbb5c9d306e6b0` | Ovm_SpokePool (OP-stack) |
+| BNB | 56 | `0x4e8E101924eDE233C13e2D8622DC8aED2872d505` | `0xc7b7029373f504949553106c9eb2dafdd48ef086` | **Universal_SpokePool** (storage-proof admin) |
+| Arbitrum One | 42161 | `0xe35e9842fceaCA96570B734083f4a58e8F7C5f2A` | `0xcfcda84333431bcc9155f2368b8362f0d1dff8c9` | Arbitrum_SpokePool |
+| Optimism | 10 | `0x6f26Bf09B1C792e3228e5467807a900A503c0281` | `0x60674c53a4cc4ed350659c95fb8020b5ac61ca1d` | Ovm_SpokePool (OP-stack) |
+| Polygon PoS | 137 | `0x9295ee1d8C5b022Be115A2AD3c30C72E34e7F096` | `0x304bed95daecd3e680073eab385193da711d59d4` | Polygon_SpokePool |
 | Avalanche C-Chain | 43114 | `0xFE9D541c92E4e90437C7152A00244886dE37a658` | `0x7a6122b88da543b5b62ef3453070d1929b035146` | **Universal_SpokePool** (225-B `ERC1967Proxy`; §4.3) |
 | Robinhood Chain | 4663 | `0xD29C85F15DF544bA632C9E25829fd29d767d7978` | `0x1771c470d41b8c39338450c380bf2c080a2cedd8` | **Universal_SpokePool** (225-B `ERC1967Proxy`; §4.4) |
+| Arc | 5042 | `0x9b4A302A548c7e313c2b74C461db7b84d3074A84` | `0x011a76d5ca7f537b4877d0fb6475065a90638478` | **Universal_SpokePool** (225-B `ERC1967Proxy`; §4.5) |
 
-`crossDomainAdmin()` returns the HubPool `0xc186fA914353c44b2E33eBE05f21846F1048bEda` on all eight spokes (on L2s this is the L1 admin whose messages arrive via the canonical bridge / storage proof; re-read on Avalanche and Robinhood Chain on 2026-09-29).
+Impl column read live on 2026-10-05. After the 2026-06-09 read the Ethereum, Base, BNB, Arbitrum, Optimism and Polygon impls rotated (Ethereum `Upgraded` at 2026-08-14 18:02 UTC; previous impls: `0x5e5b726c81f43b953a62ad87e2835c85c4d9dd3b`, `0x77aa19d49484cc88c2ca1c8527226e891c5c72d8`, `0xe8ff2a3d5cc19ddcbd93328371e1dd8995e7afaa`, `0xae54d52223c34e4102927516900cc3c562afe02e`, `0x0966f5034261cc50926fb9d5c1603a5034ffa81c`, `0x4a84a43274f5f99e94aa0ebef53bc06af8bc3dfb`); Avalanche and Robinhood did not.
+
+`crossDomainAdmin()` returns the HubPool `0xc186fA914353c44b2E33eBE05f21846F1048bEda` on all nine spokes (on L2s this is the L1 admin whose messages arrive via the canonical bridge / storage proof; re-read on Avalanche and Robinhood Chain on 2026-09-29).
 
 ### 4.2 Shared deterministic infra (identical literal address on the six older spoke chains)
 
@@ -252,7 +256,7 @@ Each spoke has **one SpokePool proxy at a chain-unique address** plus the **shar
 | WithdrawImplementation | `0x679D43e1d304001538Bf083D421484fD67c00a45` | **No (0x)** | **No (0x)** |
 | TransferProxy | `0x03743372098Aa51E1fCe537D51025F08b55C4144` | **No (0x)** — Avalanche uses `0x5dDA0da4f35826ec9426008155a912C756009252` | **No (0x)** |
 
-**Current periphery set (deployment file, 2026-09-29).** `broadcast/deployed-addresses.json` now names a newer set on every chain, all eight included: `SpokePoolPeriphery` `0x97CCDBea4632140639aD5eA9b944aa034eb15fD4` (16,914 B), `AdminWithdrawManager` `0x5adAbDE1b6AeDF8F768F782fFf1B1Cc396416f00` (3,650 B), `WithdrawImplementation` `0x4eCffb4A23e26aE937Bd9185969c8bb71073fBb9` (759 B), plus the deposit-address contracts `CounterfactualDepositSpokePool` `0xcD73a05979a1Ff8Ca444558BDA60E54161117EE2` and `CounterfactualDepositFactory` `0x9F62dcc4B939485911C4f9b24BdCa4324D6b97d1`. `eth_getCode` finds the three periphery contracts on all eight chains (2026-09-29). The older rows above were verified on the six older spokes on 2026-06-09; the Avalanche and Robinhood columns were read on 2026-09-29.
+**Current periphery set (deployment file, 2026-09-29).** `broadcast/deployed-addresses.json` now names a newer set on every chain, all eight included: `SpokePoolPeriphery` `0x97CCDBea4632140639aD5eA9b944aa034eb15fD4` (16,914 B), `AdminWithdrawManager` `0x5adAbDE1b6AeDF8F768F782fFf1B1Cc396416f00` (3,650 B), `WithdrawImplementation` `0x4eCffb4A23e26aE937Bd9185969c8bb71073fBb9` (759 B), plus the deposit-address contracts `CounterfactualDepositSpokePool` `0xcD73a05979a1Ff8Ca444558BDA60E54161117EE2` and `CounterfactualDepositFactory` `0x9F62dcc4B939485911C4f9b24BdCa4324D6b97d1`. `eth_getCode` finds the three periphery contracts on all eight chains (2026-09-29). Arc lists its own `SpokePoolPeriphery` `0xE791A2669bef779Ff7A4A9CF789F8Ee2CA20a32c`; `0x97CCDBea…` has no code there (§4.5). The older rows above were verified on the six older spokes on 2026-06-09; the Avalanche and Robinhood columns were read on 2026-09-29.
 
 Polygon also carries `PolygonTokenBridger 0x0330E9b4D0325cCfF515E81DFbc7754F2a02ac57` (same address as on L1) and `MintableERC1155 0xA15a90E7936A2F8B70E181E955760860D133e56B`. BNB also carries `SP1Helios 0x19256DCEa4B63c56B3EFc8708cd62F595B2d1922` (the storage-proof light client that authenticates L1 admin messages for the Universal spoke).
 
@@ -291,6 +295,23 @@ Listed in the deployment file under `4663 Robinhood`, deployed by `broadcast/Dep
 
 Measured flow (pinned window 2026-09-28 00:00–12:00 UTC): `FundsDeposited` 3,225 and `FilledRelay` 3,839 on the Robinhood spoke — more than Base in the same window. A sample deposit (tx `0x7fe216d5f6ff8f5c2b58cddb0b66b5da7ff6aebeecfed5475ce0f946f7e88068`, `depositV3` `0x7b939232`) sends 0.024590090433296045 ETH as `msg.value`; the spoke wraps it (WETH `Transfer` from `0x0` to the spoke) and emits `FundsDeposited` with `destinationChainId` 8453. A sample fill (tx `0x20b60db89917c28e5e2f2f81b30bfde8838197c9ec2aaa73bde5552b5276e162`, `fillRelay` `0xdeff4b24`, `originChainId` 56) moves WETH from the relayer through the spoke to the recipient.
 
+### 4.5 Arc (chain ID 5042) — `Universal_SpokePool`
+
+Listed in the deployment file under `5042 ARC`, and returned by `HubPool.crossChainContracts(5042)` with the L1 adapter `0xCA5f9960022078F3585a188e06F910eeC29c7eBD` (4,051 B on Ethereum). All addresses verified via `eth_getCode` on `https://rpc.mainnet.arc.io` on 2026-10-05.
+
+| Role | Address | Note |
+|------|---------|------|
+| **SpokePool** (`ERC1967Proxy`, 225 B) | `0x9b4A302A548c7e313c2b74C461db7b84d3074A84` | Live impl `0x011a76d5ca7f537b4877d0fb6475065a90638478` (23,729 B). `chainId()` = 5042; `crossDomainAdmin()` = `withdrawalRecipient()` = HubPool; `wrappedNativeToken()` = `0x0000000000000000000000000000000000000000` (Arc gas is USDC; no wrapped native); `numberOfDeposits()` = 19,611; `pausedDeposits()` = false. |
+| **SP1Helios** | `0x3baD7AD0728f9917d1Bf08af5782dCbD516cDd96` | 4,888 B. |
+| SpokePoolPeriphery | `0xE791A2669bef779Ff7A4A9CF789F8Ee2CA20a32c` | 17,588 B. Not the `0x97CCDBea…` literal (no code on Arc). |
+| MulticallHandler (chain-specific) | `0xA07480456C4EbaD7626e4FdF4a180709E238547b` | 2,905 B. The shared `0x0F7Ae28d…` has no code on Arc. |
+| SpokePoolVerifier | `0x3Fb9cED51E968594C87963a371Ed90c39519f65A` | 1,021 B (shared literal). |
+| Safe | `0xd396CcB6770EAB84045c9Bce2939c478639E2A7F` | 171-B Safe proxy. |
+
+**Address trap:** the Arc SpokePool literal `0x9b4A302A548c7e313c2b74C461db7b84d3074A84` is the **SP1Helios** on Robinhood Chain (4,888 B there). Key on `(chain, address)`.
+
+Measured flow (`eth_getLogs`, ~40,000 Arc blocks ≈ 5.7 h to 2026-10-05): `FundsDeposited` 89, `FilledRelay` 81, `RelayedRootBundle` 11, `RelayedCallData` 11, `ExecutedRelayerRefundRoot` 11. The Dedaub platform has no Arc network yet.
+
 ---
 
 ## 5. Cross-chain summary
@@ -305,8 +326,9 @@ Measured flow (pinned window 2026-09-28 00:00–12:00 UTC): `FundsDeposited` 3,2
 | Polygon PoS | 137 | ✅ `0x9295…F096` | ❌ | ✅ shared cluster | PolygonTokenBridger, MintableERC1155 |
 | Avalanche | 43114 | ✅ `0xFE9D541c92E4e90437C7152A00244886dE37a658` (Universal) | ❌ | current periphery only (older shared cluster `0x`); own MulticallHandler | SP1Helios `0x196767568F848fF7607145A7C1f3CDE44bb4Ce98` |
 | Robinhood Chain | 4663 | ✅ `0xD29C85F15DF544bA632C9E25829fd29d767d7978` (Universal) | ❌ | current periphery + Verifier/MulticallHandler | SP1Helios `0x9b4A302A548c7e313c2b74C461db7b84d3074A84`; WETH `0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73` |
+| Arc | 5042 | ✅ `0x9b4A302A548c7e313c2b74C461db7b84d3074A84` (Universal) | ❌ | Verifier + own Periphery `0xE791A266…` and MulticallHandler `0xA0748045…` | SP1Helios `0x3baD7AD0728f9917d1Bf08af5782dCbD516cDd96`; no wrapped native |
 
-**Counterparty chains OUTSIDE the eight target chains** (registered on the HubPool / have spokes, per `setCrossChainContracts` + L1 adapters): zkSync Era (324), Linea, Blast (81457), Scroll, Mode, Lisk, Zora, World Chain, Lens, Boba, Ink, Cher, Soneium, Plasma, HyperEVM, Monad, **Solana** (non-EVM — the very reason for the bytes32 event migration), and others. Record these as findings: Across is a ~25+-chain bridge, and all eight target chains now carry a SpokePool (Avalanche and Robinhood Chain as `Universal_SpokePool`s, checked 2026-09-29).
+**Counterparty chains OUTSIDE the nine target chains** (registered on the HubPool / have spokes, per `setCrossChainContracts` + L1 adapters): zkSync Era (324), Linea, Blast (81457), Scroll, Mode, Lisk, Zora, World Chain, Lens, Boba, Ink, Cher, Soneium, Plasma, HyperEVM, Monad, **Solana** (non-EVM — the very reason for the bytes32 event migration), and others. Record these as findings: Across is a ~25+-chain bridge, and all nine target chains now carry a SpokePool (Avalanche, Robinhood Chain and Arc as `Universal_SpokePool`s, checked 2026-09-29 / 2026-10-05).
 
 **No shared vanity** among SpokePools — each chain's proxy is a distinct address (unlike the periphery cluster). Always key SpokePool detection on `(chainId, address)`.
 
@@ -316,13 +338,13 @@ Measured flow (pinned window 2026-09-28 00:00–12:00 UTC): `FundsDeposited` 3,2
 
 | Contract | Pattern | Detection | Upgrade auth |
 |----------|---------|-----------|--------------|
-| **SpokePool** (all 8 chains) | **UUPS** (ERC-1967 + ERC-1822) | EIP-1967 impl slot `0x360894…bbc` **populated** (per-chain impl, §4.1); admin slot `0xb53127…6103` **empty**; impl exposes `upgradeToAndCall(0x4f1ef286)` + `proxiableUUID(0x52d1902d)`; `Upgraded(address)` topic `0xbc7cd75a…`. | cross-domain admin (the HubPool's message via the chain's canonical bridge / SP1Helios for BNB, Avalanche and Robinhood Chain). |
+| **SpokePool** (all 9 chains) | **UUPS** (ERC-1967 + ERC-1822) | EIP-1967 impl slot `0x360894…bbc` **populated** (per-chain impl, §4.1); admin slot `0xb53127…6103` **empty**; impl exposes `upgradeToAndCall(0x4f1ef286)` + `proxiableUUID(0x52d1902d)`; `Upgraded(address)` topic `0xbc7cd75a…`. | cross-domain admin (the HubPool's message via the chain's canonical bridge / SP1Helios for BNB, Avalanche, Robinhood Chain and Arc). |
 | **HubPool** | **Not a proxy** (immutable `Ownable`/`Lockable`) | EIP-1967 impl slot returns `0x0` (confirmed live); ~19.5 kB full bytecode. Upgrades = redeploy + `setCrossChainContracts`. | `owner()` = DAO Safe/Timelock `0xb524…3715`. |
 | AcrossConfigStore / BondToken / LpTokenFactory / HubPoolStore / AdapterStore | Not proxies | impl slot `0x0`; full bytecode. | `owner()` (ConfigStore/HubPool share owner). |
 | **SpokePoolVerifier / MulticallHandler / SpokePoolPeriphery / WithdrawImplementation / TransferProxy** | Immutable (no proxy) | impl slot `0x0`; deployed deterministically (same address all six chains). | none (immutable). |
 | PermissionSplitterProxy | Custom permission-splitting proxy | routes selectors to per-role delegates; not a standard EIP-1967 logic proxy. | HubPool owner. |
 
-The Avalanche and Robinhood spokes sit behind a 225-byte OpenZeppelin `ERC1967Proxy` (the six older spokes use a 680-byte proxy); both have the admin slot empty and the impl slot set (read 2026-09-29, §4.1).
+The Avalanche, Robinhood and Arc spokes sit behind a 225-byte OpenZeppelin `ERC1967Proxy` (the six older spokes use a 680-byte proxy); all have the admin slot empty and the impl slot set (read 2026-09-29 / 2026-10-05, §4.1).
 
 EIP-1967 slots: impl `0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc`, admin `0xb53127684a568b3173ae13b9f8a6016e243e63b6e8ee1178d6a717850b5d6103`. **Watch `Upgraded(address)` `0xbc7cd75a…` on every SpokePool proxy** — the impls in §4.1 are point-in-time; always read the live slot.
 
@@ -337,11 +359,11 @@ EIP-1967 slots: impl `0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca50
 5. **`FilledRelay.fillType` (the `uint8` in the trailing tuple) distinguishes FastFill(0) / ReplacedSlowFill(1) / SlowFill(2).** A `SlowFill` is the protocol-paid fallback (via `executeSlowRelayLeaf`) when no relayer filled; a `RequestedSlowFill` precedes it.
 6. **HubPool `RootBundleDisputed` / `RootBundleCanceled` / `EmergencyRootBundleDeleted` are the highest-severity signals.** A dispute bonds against the UMA optimistic oracle and pauses settlement — monitor these on `0xc186…BEda`. `Paused(true)` (`0x0e2fb031…`) halts the hub.
 7. **`SpokePoolAdminFunctionTriggered` (HubPool) → admin message dispatched to a spoke; `SetXDomainAdmin`/`Upgraded`/`PausedDeposits`/`PausedFills` (SpokePool) are the spoke-side admin events.** A SpokePool `Upgraded` is a UUPS impl swap — treat as a privileged change.
-8. **Avalanche and Robinhood Chain are Universal spokes.** The 2026-06-09 check found nothing on Avalanche; on 2026-09-29 the HubPool maps 43114 to `0xFE9D541c92E4e90437C7152A00244886dE37a658` (`Universal_Adapter_43114`) and 4663 to `0xD29C85F15DF544bA632C9E25829fd29d767d7978` (`Universal_Adapter_4663`). Their event schema is identical. Enumerate spokes from `CrossChainContractsSet`, not from a hard-coded list (gotcha 14).
-9. **BNB, Avalanche and Robinhood Chain run `Universal_SpokePool` + storage-proof admin.** Its admin messages are authenticated by `SP1Helios` (`0x19256DCE…` on BNB) against the `Universal_Adapter_56` + `HubPoolStore` on L1, not a native canonical bridge. The deposit/fill event schema is still identical.
+8. **Avalanche and Robinhood Chain are Universal spokes.** The 2026-06-09 check found nothing on Avalanche; on 2026-09-29 the HubPool maps 43114 to `0xFE9D541c92E4e90437C7152A00244886dE37a658` (`Universal_Adapter_43114`) and 4663 to `0xD29C85F15DF544bA632C9E25829fd29d767d7978` (`Universal_Adapter_4663`); on 2026-10-05 it maps 5042 (Arc) to `0x9b4A302A548c7e313c2b74C461db7b84d3074A84`. Their event schema is identical, plus `RelayedCallData`. Enumerate spokes from `CrossChainContractsSet`, not from a hard-coded list (gotcha 14).
+9. **BNB, Avalanche, Robinhood Chain and Arc run `Universal_SpokePool` + storage-proof admin.** Its admin messages are authenticated by `SP1Helios` (`0x19256DCE…` on BNB) against the `Universal_Adapter_56` + `HubPoolStore` on L1, not a native canonical bridge. The deposit/fill event schema is still identical.
 10. **`TokensBridged` exists in two schemas; only the bytes32 one (`0xfa7fa7cf…`, l2TokenAddress as bytes32) is live.** An older `TokensBridged(uint256,uint256,uint32,address,address)` (`0x828fc203…`) is historical. Same migration story as the deposit/fill events.
 11. **Periphery cluster shares one literal address across all six chains** (`SpokePoolVerifier 0x3Fb9cED5…`, `MulticallHandler 0x0F7Ae28d…`, `SpokePoolPeriphery 0x10D8b8Da…`). The **SpokePools do not** — key SpokePool monitoring on `(chainId, address)`, and don't assume the periphery address implies a spoke at the same address.
-12. **Several SpokePoolPeriphery generations are deployed** (`0x10D8b8DaA26d307489803e10477De69C0492B610` and `0x767e4c20F521a829dE4Ffc40C25176676878147f` on the six older spokes). The `deployed-addresses.json` of 2026-09-29 points to a newer `0x97CCDBea4632140639aD5eA9b944aa034eb15fD4`, present on all eight chains; Avalanche and Robinhood Chain have neither `0x767e4c20F521a829dE4Ffc40C25176676878147f` nor the older AdminWithdrawManager/WithdrawImplementation/TransferProxy. Index every generation when back-filling Swap-API flow.
+12. **Several SpokePoolPeriphery generations are deployed** (`0x10D8b8DaA26d307489803e10477De69C0492B610` and `0x767e4c20F521a829dE4Ffc40C25176676878147f` on the six older spokes). The `deployed-addresses.json` of 2026-09-29 points to a newer `0x97CCDBea4632140639aD5eA9b944aa034eb15fD4`, present on the eight pre-Arc chains (Arc: `0xE791A2669bef779Ff7A4A9CF789F8Ee2CA20a32c`); Avalanche and Robinhood Chain have neither `0x767e4c20F521a829dE4Ffc40C25176676878147f` nor the older AdminWithdrawManager/WithdrawImplementation/TransferProxy. Index every generation when back-filling Swap-API flow.
 13. **`message` payloads drive composability.** A non-empty `FundsDeposited.message`/`FilledRelay.messageHash` means the fill triggers a downstream call via `MulticallHandler` (bridge+swap / cross-chain action). The bridged token may immediately move again inside the same tx.
 14. **HubPool is the registry.** To enumerate the current spoke set + adapters, read `CrossChainContractsSet` history (`0x36050d95…`) or `crossChainContracts(chainId)` — don't hard-code; new spokes are added by governance.
 15. **Robinhood Chain address trap.** The Ethereum SpokePool literal `0x5c7BCd6E7De5423a257D81B442095A1a6ced35C5` has 522 bytes of unrelated code on Robinhood Chain. Key the Robinhood spoke on `0xD29C85F15DF544bA632C9E25829fd29d767d7978` only.
@@ -359,6 +381,7 @@ TOPIC_REQUESTED_SPEEDUP_DEPOSIT  = '\x45e04bc8f121ba11466985789ca2822a91109f31bb
 TOPIC_TOKENS_BRIDGED             = '\xfa7fa7cf6d7dde5f9be65a67e6a1a747e7aa864dcd2d793353c722d80fbbb357'
 TOPIC_EXECUTED_REFUND_ROOT       = '\xf4ad92585b1bc117fbdd644990adf0827bc4c95baeae8a23322af807b6d0020e'
 TOPIC_RELAYED_ROOT_BUNDLE        = '\xc86ba04c55bc5eb2f2876b91c438849a296dbec7b08751c3074d92e04f0a77af'
+TOPIC_RELAYED_CALL_DATA          = '\x3b0b856314838f509dfe81e9e13c651b0e544b42639c58be2c161b2c3892949d'   -- Universal_SpokePool only
 TOPIC_EMERGENCY_DELETED_BUNDLE   = '\x7c1af0646963afc3343245b103731965735a893347bfa0d58a5dc77a77ae691c'
 TOPIC_ENABLED_DEPOSIT_ROUTE      = '\x0a21fdd43d0ad0c62689ee7230a47309a050755bcc52eba00310add65297692a'
 TOPIC_PAUSED_DEPOSITS            = '\xe88463c2f254e2b070013a2dc7ee1e099f9bc00534cbdf03af551dc26ae49219'
@@ -431,7 +454,7 @@ EIP1967_ADMIN_SLOT               = '\xb53127684a568b3173ae13b9f8a6016e243e63b6e8
 -- ===== Ethereum (chain ID 1) — hub + L1 contracts =====
 ETH_HUBPOOL                      = '\xc186fa914353c44b2e33ebe05f21846f1048beda'
 ETH_SPOKEPOOL                    = '\x5c7bcd6e7de5423a257d81b442095a1a6ced35c5'
-ETH_SPOKEPOOL_IMPL               = '\x5e5b726c81f43b953a62ad87e2835c85c4d9dd3b'
+ETH_SPOKEPOOL_IMPL               = '\x456ac26e5ec083ee9889eba0d1a0a582502b8e84'   -- read 2026-10-05 (upgraded 2026-08-14)
 ETH_CONFIG_STORE                 = '\x3b03509645713718b78951126e0a6de6f10043f5'
 ETH_BOND_TOKEN                   = '\xee1dc6bcf1ee967a350e9ac6caaaa236109002ea'
 ETH_LP_TOKEN_FACTORY             = '\x7db69eb9f52ed773e9b03f5068a1ea0275b2fd9d'
@@ -440,12 +463,12 @@ ETH_ADAPTER_STORE                = '\x42df4d71f35ffbd28ae217d52e83c1da0007d63b'
 ETH_PERMISSION_SPLITTER          = '\x0bf07b2e415f02711ffbb32491f8ec9e5489b2e7'
 ETH_HUBPOOL_OWNER                = '\xb524735356985d2f267fa010d681f061dff03715'
 
--- ===== Per-chain SpokePool proxies (UNIQUE per chain — no shared vanity) =====
-BASE_SPOKEPOOL                   = '\x09aea4b2242abc8bb4bb78d537a67a245a7bec64'   -- impl 0x77aa19d4…
-BNB_SPOKEPOOL                    = '\x4e8e101924ede233c13e2d8622dc8aed2872d505'   -- impl 0xe8ff2a3d… (Universal)
-ARB_SPOKEPOOL                    = '\xe35e9842fceaca96570b734083f4a58e8f7c5f2a'   -- impl 0xae54d522…
-OP_SPOKEPOOL                     = '\x6f26bf09b1c792e3228e5467807a900a503c0281'   -- impl 0x0966f503…
-POLY_SPOKEPOOL                   = '\x9295ee1d8c5b022be115a2ad3c30c72e34e7f096'   -- impl 0x4a84a432…
+-- ===== Per-chain SpokePool proxies (UNIQUE per chain — no shared vanity; impls read 2026-10-05) =====
+BASE_SPOKEPOOL                   = '\x09aea4b2242abc8bb4bb78d537a67a245a7bec64'   -- impl 0xf23c6c04…
+BNB_SPOKEPOOL                    = '\x4e8e101924ede233c13e2d8622dc8aed2872d505'   -- impl 0xc7b70293… (Universal)
+ARB_SPOKEPOOL                    = '\xe35e9842fceaca96570b734083f4a58e8f7c5f2a'   -- impl 0xcfcda843…
+OP_SPOKEPOOL                     = '\x6f26bf09b1c792e3228e5467807a900a503c0281'   -- impl 0x60674c53…
+POLY_SPOKEPOOL                   = '\x9295ee1d8c5b022be115a2ad3c30c72e34e7f096'   -- impl 0x304bed95…
 
 -- ===== Shared deterministic infra (same address on the six older spoke chains; Verifier/MulticallHandler/Periphery 0x10d8 also on Robinhood Chain; none on Avalanche) =====
 ACROSS_SPOKEPOOL_VERIFIER        = '\x3fb9ced51e968594c87963a371ed90c39519f65a'
@@ -454,7 +477,7 @@ ACROSS_SPOKEPOOL_PERIPHERY       = '\x10d8b8daa26d307489803e10477de69c0492b610'
 ACROSS_SPOKEPOOL_PERIPHERY_LEGACY= '\x767e4c20f521a829de4ffc40c25176676878147f'
 -- BNB storage-proof light client:
 BNB_SP1_HELIOS                   = '\x19256dcea4b63c56b3efc8708cd62f595b2d1922'
--- Current periphery (deployed-addresses.json 2026-09-29; same address on all 8 chains)
+-- Current periphery (deployed-addresses.json 2026-09-29; same address on the 8 pre-Arc chains, not on Arc)
 ACROSS_SPOKEPOOL_PERIPHERY_2026  = '\x97ccdbea4632140639ad5ea9b944aa034eb15fd4'
 ACROSS_ADMIN_WITHDRAW_MANAGER    = '\x5adabde1b6aedf8f768f782fff1b1cc396416f00'
 -- ===== Universal spokes added after 2026-06-09 =====
@@ -466,6 +489,11 @@ RH_SP1_HELIOS                    = '\x9b4a302a548c7e313c2b74c461db7b84d3074a84'
 RH_WETH                          = '\x0bd7d308f8e1639fab988df18a8011f41eacad73'
 ETH_UNIVERSAL_ADAPTER_43114      = '\x1af659333172dc502bd71cf5b889521c97751838'
 ETH_UNIVERSAL_ADAPTER_4663       = '\xbc5e82035e2c8d4b335ccb751d6bf47e44dec678'
+ARC_SPOKEPOOL                    = '\x9b4a302a548c7e313c2b74c461db7b84d3074a84'   -- impl 0x011a76d5ca7f537b4877d0fb6475065a90638478; same literal = RH_SP1_HELIOS
+ARC_SP1_HELIOS                   = '\x3bad7ad0728f9917d1bf08af5782dcbd516cdd96'
+ARC_SPOKEPOOL_PERIPHERY          = '\xe791a2669bef779ff7a4a9cf789f8ee2ca20a32c'
+ARC_MULTICALL_HANDLER            = '\xa07480456c4ebad7626e4fdf4a180709e238547b'
+ETH_ADAPTER_5042                 = '\xca5f9960022078f3585a188e06f910eec29c7ebd'
 ```
 
 ---

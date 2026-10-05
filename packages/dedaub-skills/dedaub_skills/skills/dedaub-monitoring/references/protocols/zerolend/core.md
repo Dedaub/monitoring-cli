@@ -1,13 +1,13 @@
 # ZeroLend (ZeroLend One) — Topics, Selectors, Addresses (Ethereum + Base; absent on BNB/Avalanche/Arbitrum/Optimism/Polygon)
 
-**Status:** verified against Ethereum and Base mainnet RPC, the official ZeroLend deployed-addresses registry (`docs.zerolend.xyz/security/deployed-addresses`, mirror `github.com/zerolend/docs.zerolend.xyz`), and the canonical Aave V3 contract source (`aave-dao/aave-v3-origin`), on 2026-06-08.
+**Status:** **winding down — withdraw-only since the 2026-02-17 shutdown notice** (most markets set to 0% LTV; [The Block](https://www.theblock.co/post/390119/zerolend-to-shut-down)). Both target Pools had 0 logs in the 30 days to 2026-10-05, and both Pools were upgraded on 2026-08-26 to an impl that adds `resetReserveIndexes` (§8.1). Verified against Ethereum and Base mainnet RPC, the official ZeroLend deployed-addresses registry (`docs.zerolend.xyz/security/deployed-addresses`, mirror `github.com/zerolend/docs.zerolend.xyz`), and the canonical Aave V3 contract source (`aave-dao/aave-v3-origin`), on 2026-06-08.
 **Scope:** the seven requested chains. **The ZeroLend "One" lending market exists on only two of them — Ethereum (chain 1) and Base (chain 8453).** ZeroLend's *primary* markets live on non-target L2s (Linea, zkSync Era, Manta, Blast, X Layer) — those are noted in §11 for completeness but **not** exhaustively verified. **BNB Smart Chain (56), Avalanche C-Chain (43114), Arbitrum One (42161), Optimism (10) and Polygon PoS (137) have NO ZeroLend One contracts** (`eth_getCode` = `0x` for every candidate address — a recorded finding, §10). Topics + selectors are chain-agnostic; addresses are network-specific.
 
 ZeroLend One is a **soft fork of Aave V3** (V3.1/V3.2-era), so **its event topic0s and function selectors are byte-for-byte identical to Aave V3** — see [aave/v3.md](../aave/v3.md). aTokens are branded **zTokens** (`zWETH`, `zUSDC`, …) but are mechanically identical Aave aTokens; the price aggregator is an unmodified Aave `AaveOracle`; the data reader is `AaveProtocolDataProvider` (labelled `PoolDataProvider`); the incentives controller is Aave's `RewardsController`. Every core contract sits behind a proxy controlled by the `PoolAddressesProvider` / `ACLManager` governance stack. This file records what is *specific* to ZeroLend: which two target chains carry a market, the per-chain addresses (almost entirely **divergent** between ETH and Base — ZeroLend did **not** vanity-align them), the two distinct market identities, and the Aave-fork detection caveats (shared `Mint`/`Burn` topic, the `liquidationCall` dispatcher anomaly, the absent v3.3/v3.4 features).
 
 > **Two distinct markets, two distinct identities (verified on-chain 2026-06-08).** The Ethereum deployment is an **LRT (liquid-restaking) market** — `PoolAddressesProvider.getMarketId()` returns **"LRT ZeroLend Market"**, its Etherscan labels read `…-mainnet-lrt`, and its 12 reserves are WETH + liquid-restaking tokens (weETH, ezETH, rsETH, pufETH, swETH, pzETH, two Pendle PT tokens) plus DAI/USDC/USDT. The Base deployment (`getMarketId()` = **"Base ZeroLend Market"**) is a broader 18-reserve market (WETH, AERO, USDC, cbETH, cbBTC, LBTC, OETH/superOETH, USDz/sUSDz, ZAI, USR, Pendle PTs, …). They share the **same ABI** but **different addresses and reserves**.
 
-> **Version / lineage note (verified on-chain 2026-06-08).** The live Pool impls (`0xFF67…9385` on ETH, `0x8010…3A80` on Base) are an **Aave V3.1/V3.2-era Pool**. Bytecode selector scan: `supply`/`borrow`/`withdraw`/`repay`/`repayWithATokens`/`flashLoan`/`flashLoanSimple`/`mintUnbacked`/`mintToTreasury`/`rescueTokens` are **present**; the Aave **v3.3** (`getReserveDeficit`, `DeficitCreated`/`DeficitCovered`) and **v3.4** (`multicall`, `getReserveAToken`, Position Managers) additions are **all absent**. The `ReserveData` struct still carries the legacy `stableDebtTokenAddress` slot (id packed at struct word 7, token addrs at words 8/9/10) — confirming pre-v3.2-removal era — but stable-rate borrowing is disabled by config. There is no ZeroLend "v2" and no hub-and-spoke; each chain is one continuously-patched deployment.
+> **Version / lineage note (verified on-chain 2026-06-08; Pool impls re-read 2026-10-05).** The live Pool impls (`0xd37c…8f02` on ETH, `0xb3d7…b0ee` on Base, both since 2026-08-26; formerly `0xFF67…9385` / `0x8010…3A80`) are an **Aave V3.1/V3.2-era Pool**. Bytecode selector scan: `supply`/`borrow`/`withdraw`/`repay`/`repayWithATokens`/`flashLoan`/`flashLoanSimple`/`mintUnbacked`/`mintToTreasury`/`rescueTokens` are **present**; the Aave **v3.3** (`getReserveDeficit`, `DeficitCreated`/`DeficitCovered`) and **v3.4** (`multicall`, `getReserveAToken`, Position Managers) additions are **all absent**. The `ReserveData` struct still carries the legacy `stableDebtTokenAddress` slot (id packed at struct word 7, token addrs at words 8/9/10) — confirming pre-v3.2-removal era — but stable-rate borrowing is disabled by config. There is no ZeroLend "v2" and no hub-and-spoke; each chain is one continuously-patched deployment.
 
 > **Liquidation dispatcher anomaly (verified, same as Aave/Spark).** The canonical `liquidationCall` selector `0x00a718a9` is **absent from the live Pool impl bytecode** on both chains (raw + PUSH4 scan = 0 occurrences) even though `supply`/`borrow`/`flashLoan` are present, yet `LiquidationCall` events fire normally (16 logs in a 50k-block window on the ETH Pool; 1 on Base). **Detect ZeroLend liquidations by the `LiquidationCall` event topic0 `0xe413a321…`, never by the function selector.** See §8.2.
 
@@ -115,7 +115,7 @@ Identical to Aave V3 (ZeroLend is a fork). All values recomputed locally with ke
 
 ## 2. Function signatures (chain-agnostic)
 
-Selectors = `keccak256(canonical signature)[0:4]`. All Pool selectors below verified **present** in the live Pool impl bytecode (`0xFF67…9385` on ETH, `0x8010…3A80` on Base) on 2026-06-08 **except `liquidationCall`** (§8.2). The Aave v3.3/v3.4 selectors are listed at the end as **absent on ZeroLend**.
+Selectors = `keccak256(canonical signature)[0:4]`. All Pool selectors below verified **present** in the live Pool impl bytecode (`0xd37c…8f02` on ETH, `0xb3d7…b0ee` on Base; re-scanned 2026-10-05, same set as the retired impls) **except `liquidationCall`** (§8.2). The Aave v3.3/v3.4 selectors are listed at the end as **absent on ZeroLend**.
 
 ### 2.1 Pool — state-changing
 
@@ -246,7 +246,7 @@ zToken impl (shared) = `0xb7ed499e7570ee7691eef4df9d708d258de2b512`; variableDeb
 
 | Role | Address |
 |------|---------|
-| Pool impl | `0xFF679e5B4178A2f74A56f0e2c0e1FA1C80579385` |
+| Pool impl | `0xd37c2308b42fD8B74D918609F39Fbf0d8e068F02` (since block 25,836,192, 2026-08-26; retired: `0xFF679e5B4178A2f74A56f0e2c0e1FA1C80579385`) |
 | PoolConfigurator impl | `0x9C6F1367256bE65eE744740c72aD80dA5bc96cA6` |
 | zToken (aToken) impl | `0xb7ed499e7570ee7691eef4df9d708d258de2b512` |
 | variableDebtToken impl | `0x5d50be703836c330fc2d147a631cdd7bb8d7171c` |
@@ -311,7 +311,7 @@ zToken impl (shared) = `0xe230cf9cee7b299f69778ef950a61de0de520ba7` (verified li
 
 | Role | Address |
 |------|---------|
-| Pool impl | `0x80102a3cbAcADa39560555340e1bC567B83C3A80` |
+| Pool impl | `0xB3d7C6B4b2197BCa1565f4aB0b94b6edC7A7b0ee` (since block 50,489,626, ~2026-08-26; retired: `0x80102a3cbAcADa39560555340e1bC567B83C3A80`) |
 | PoolConfigurator impl | `0x749dF84Fd6DE7c0A67db3827e5118259ed3aBBa5` (same literal as **ETH's ACLManager** — collision, key on `(chainId, addr)`) |
 | zToken (aToken) impl | `0xe230cf9cee7b299f69778ef950a61de0de520ba7` |
 | RewardsController impl (IncentivesV2) | `0xaa999eA356F925BF1e856038c5D182Ae5E8A4973` |
@@ -361,7 +361,7 @@ Presence matrix — rows = chains (+ID), cols = key contracts. Cell = address (t
 - `0x749dF84F…BBa5` = **ETH ACLManager** AND **Base PoolConfigurator impl**.
 - `0x0A1198DD…100b` = **ETH UiIncentiveDataProviderV3** AND **Base UiPoolDataProviderV3**.
 - `0x7503A882…91eb` = **ETH PoolAddressesProviderRegistry** AND (per registry) **Blast ACLManager**.
-- `0xFF679e5B…9385` = **ETH Pool impl** AND (per registry) **Linea/Manta AaveOracle** — these are CREATE2 redeploys of the same bytecode, NOT the same contract.
+- `0xFF679e5B…9385` = **retired ETH Pool impl** (replaced 2026-08-26) AND (per registry) **Linea/Manta AaveOracle** — these are CREATE2 redeploys of the same bytecode, NOT the same contract.
 
 **Three things to internalize:**
 1. **ZeroLend One lending = Ethereum + Base** among the target chains. The bulk of ZeroLend TVL is on **Linea / zkSync / Manta / Blast / X Layer** (non-target; §11).
@@ -376,30 +376,31 @@ Every ZeroLend core contract that holds state is an **upgradeable proxy** (Aave'
 
 EIP-1967 implementation slot: `0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc`. Admin slot: `0xb53127684a568b3173ae13b9f8a6016e243e63b6e8ee1178d6a717850b5d6103`. `Upgraded(address)` topic0 = `0xbc7cd75a20ee27fd9adebab32041f755214dbc6bffa90cc0225b39da2e5c2d3b`.
 
-### 8.1 Live implementations (EIP-1967 slot read 2026-06-08)
+### 8.1 Live implementations (EIP-1967 slot read 2026-06-08; Pool rows re-read 2026-10-05)
 
 | Chain | Proxy | Live impl (from slot) | Matches registry? |
 |---|---|---|---|
-| Ethereum | Pool `0x3BC3…B4c0` | `0xFF679e5B4178A2f74A56f0e2c0e1FA1C80579385` | ✅ |
+| Ethereum | Pool `0x3BC3…B4c0` | `0xd37c2308b42fD8B74D918609F39Fbf0d8e068F02` (24,508 B; `Upgraded` at block 25,836,192, 2026-08-26) | ❌ newer than registry (`0xFF67…9385`, retired) |
 | Ethereum | PoolConfigurator `0x09Ed…8B5f` | `0x9C6F1367256bE65eE744740c72aD80dA5bc96cA6` | ✅ |
 | Ethereum | Incentives `0x5be8…73a2` | `0x854138f891FE0A86270f6F153A06fBfabF69E0Ad` | ✅ |
 | Ethereum | zToken (any reserve) | `0xb7ed499e7570ee7691eef4df9d708d258de2b512` | ✅ |
 | Ethereum | variableDebtToken (any reserve) | `0x5d50be703836c330fc2d147a631cdd7bb8d7171c` | ✅ |
-| Base | Pool `0x766f…c671` | `0x80102a3cbAcADa39560555340e1bC567B83C3A80` | ✅ |
+| Base | Pool `0x766f…c671` | `0xB3d7C6B4b2197BCa1565f4aB0b94b6edC7A7b0ee` (24,508 B; `Upgraded` at block 50,489,626, ~2026-08-26) | ❌ newer than registry (`0x8010…3A80`, retired) |
 | Base | PoolConfigurator `0xB40e…e6E3` | `0x749dF84Fd6DE7c0A67db3827e5118259ed3aBBa5` | ✅ |
 | Base | Incentives `0x73a7…2CAE` | `0xaa999eA356F925BF1e856038c5D182Ae5E8A4973` | ✅ |
 | Base | zToken (any reserve) | `0xe230cf9cee7b299f69778ef950a61de0de520ba7` | ✅ |
 
-Admin slot on the Pool proxy reads `0x0` (immutable admin baked into bytecode, Aave pattern). **Read the live EIP-1967 slot — never hard-code an impl.** No `Upgraded` events fired in sampled windows (impls stable since deploy).
+Admin slot on the Pool proxy reads `0x0` (immutable admin baked into bytecode, Aave pattern). **Read the live EIP-1967 slot — never hard-code an impl.** Both Pools were upgraded on 2026-08-26 (the wind-down upgrade). The new impl keeps every documented selector and adds `resetReserveIndexes(address,uint256,uint256,address)` `0x717af0db`, `getSupplyData()` `0x79774338`, `expressRelay()` `0x6f6c0447`, `calculateInterestRates(…)` `0xa5898709`, `POOL_WITH_INDEX_RESET_REVISION()` `0xf0c08bb7` and `scaledTotalSupply()` `0xb1bf962d`. **Alert on any `resetReserveIndexes` call and any further `Upgraded`.** Configurator and Incentives impls are unchanged.
 
 ### 8.2 The `liquidationCall` dispatcher gotcha (verified, same as Aave/Spark)
 
-On both live Pool impls (ETH `0xFF67…9385`, 21,754 bytes; Base `0x8010…3A80`, 21,811 bytes), selector `0x00a718a9` (`liquidationCall`) is **absent from the bytecode** (raw + `63`-prefixed PUSH4 scan = 0), while `supply`/`borrow`/`withdraw`/`repay`/`flashLoan`/`flashLoanSimple` **are** present. Yet `LiquidationCall` events fire (16 in a 50k-block window on the ETH Pool, 1 on Base) and liquidations execute — liquidation logic is reached through a delegatecalled logic library / fallback extension that keeps the Pool under the EIP-170 limit. **Detect liquidations by `LiquidationCall` topic0 `0xe413a321…`, never by selector** — and most liquidations arrive via third-party bots, so `tx.to` ≠ Pool.
+On both live Pool impls (ETH `0xd37c…8f02`, Base `0xb3d7…b0ee`, 24,508 bytes each; same result on the retired `0xFF67…9385` / `0x8010…3A80`), selector `0x00a718a9` (`liquidationCall`) is **absent from the bytecode** (raw + `63`-prefixed PUSH4 scan = 0), while `supply`/`borrow`/`withdraw`/`repay`/`flashLoan`/`flashLoanSimple` **are** present. Yet `LiquidationCall` events fire (16 in a 50k-block window on the ETH Pool, 1 on Base) and liquidations execute — liquidation logic is reached through a delegatecalled logic library / fallback extension that keeps the Pool under the EIP-170 limit. **Detect liquidations by `LiquidationCall` topic0 `0xe413a321…`, never by selector** — and most liquidations arrive via third-party bots, so `tx.to` ≠ Pool.
 
 ---
 
 ## 9. Detection invariants & gotchas
 
+0. **Withdraw-only since 2026-02-17.** New supply/borrow is not expected; treat a large new `Borrow`/`Supply`, a `resetReserveIndexes` call or an `Upgraded` as the alert-worthy events.
 1. **ZeroLend One lending lives on Ethereum (Pool `0x3BC3…B4c0`, "LRT ZeroLend Market") and Base (`0x766f…c671`, "Base ZeroLend Market") only** among the seven target chains. BNB/Avalanche/Arbitrum/Optimism/Polygon have **no** ZeroLend contracts (§6). The protocol's primary markets are on Linea/zkSync/Manta/Blast/X Layer (§11).
 2. **It's an Aave V3.1/V3.2 fork** — `Supply`/`Borrow`/`Repay`/`Withdraw`/`LiquidationCall`/`FlashLoan` topics and selectors are identical to [aave/v3.md](../aave/v3.md). Reuse that detection set.
 3. **No v3.3/v3.4 features.** Don't scan for `DeficitCreated`/`DeficitCovered`, `multicall`, `getReserveAToken`, `getReserveDeficit`, Position Managers — all absent (§2.6). The `ReserveData` struct is the **legacy layout** (id at struct word 7; aToken/stable/variable/strategy at words 8/9/10/11) — adjust any struct decoder accordingly.
@@ -486,7 +487,8 @@ ZL_ETH_INCENTIVES            = '\x5be89bb10e2234204a2607765714916ed95a73a2'
 ZL_ETH_EMISSION_MANAGER      = '\x859c2ca97ead2742a0758bc9dd889e9d0e7e84e8'
 ZL_ETH_TREASURY              = '\x464c71f6c2f760dda6093dcb91c24c39e5d6e18c'
 ZL_ETH_WETH_GATEWAY          = '\x6ea9d99c6653df987bdea11ffcd56dfb4b5d38b4'
-ZL_ETH_POOL_IMPL             = '\xff679e5b4178a2f74a56f0e2c0e1fa1c80579385'
+ZL_ETH_POOL_IMPL             = '\xd37c2308b42fd8b74d918609f39fbf0d8e068f02'  -- since 2026-08-26
+ZL_ETH_POOL_IMPL_RETIRED     = '\xff679e5b4178a2f74a56f0e2c0e1fa1c80579385'
 ZL_ETH_ZTOKEN_IMPL           = '\xb7ed499e7570ee7691eef4df9d708d258de2b512'
 ZL_ETH_VDEBT_IMPL            = '\x5d50be703836c330fc2d147a631cdd7bb8d7171c'
 ZL_ETH_ZERO_OFT              = '\x11dcc26d4bdac03ffa8841f69313c38240fc429e'
@@ -502,7 +504,8 @@ ZL_BASE_INCENTIVES           = '\x73a7a4b40f3fe11e0bcab5538c75d3b984082cae'
 ZL_BASE_EMISSION_MANAGER     = '\x0f9bfa294be6e3ca8c39221bb5dfb88032c8936e'
 ZL_BASE_TREASURY             = '\x6f5ae60d89dbbc4eed4b08d08a68dd5679ac61b4'
 ZL_BASE_WETH_GATEWAY         = '\x11ccdcfb19151feb086ee6f1f62bfa0940c85612'
-ZL_BASE_POOL_IMPL            = '\x80102a3cbacada39560555340e1bc567b83c3a80'
+ZL_BASE_POOL_IMPL            = '\xb3d7c6b4b2197bca1565f4ab0b94b6edc7a7b0ee'  -- since 2026-08-26
+ZL_BASE_POOL_IMPL_RETIRED    = '\x80102a3cbacada39560555340e1bc567b83c3a80'
 ZL_BASE_ZTOKEN_IMPL          = '\xe230cf9cee7b299f69778ef950a61de0de520ba7'
 
 -- ===== ZERO token (LayerZero OFT family) =====
@@ -536,7 +539,7 @@ ZeroLend's largest markets are on **non-target** chains. Addresses below are quo
 How constants in this doc were verified (2026-06-08):
 
 - **Event topic0 / selectors:** all recomputed locally as `keccak256(signature)`. On the ETH Pool `0x3BC3…B4c0`: `ReserveDataUpdated` (36 logs / 50k blocks), `Withdraw` (several windows), `LiquidationCall` (16 logs / 50k blocks). On the Base Pool `0x766f…c671`: `Withdraw` (10 logs / 50k), `LiquidationCall` (1 log / 50k). `Supply`/`Borrow` are low-frequency (restaking market) but their topics match Aave V3 and the selectors are present in the Pool impls.
-- **Selector presence:** raw + PUSH4 byte-scan of the live Pool impls (ETH `0xFF67…9385`, 21,754 bytes; Base `0x8010…3A80`, 21,811 bytes). Present: supply/borrow/withdraw/repay/repayWithATokens/flashLoan/flashLoanSimple/mintUnbacked/mintToTreasury/rescueTokens. **Absent:** `liquidationCall` (§8.2), `multicall`, `getReserveAToken` (v3.4), `getReserveDeficit` (v3.3) — confirming a pre-v3.3 fork.
+- **Selector presence:** raw + PUSH4 byte-scan of the Pool impls (retired ETH `0xFF67…9385`, 21,754 bytes; Base `0x8010…3A80`, 21,811 bytes; re-run 2026-10-05 on the live `0xd37c…8f02` / `0xb3d7…b0ee`, no selector removed). Present: supply/borrow/withdraw/repay/repayWithATokens/flashLoan/flashLoanSimple/mintUnbacked/mintToTreasury/rescueTokens. **Absent:** `liquidationCall` (§8.2), `multicall`, `getReserveAToken` (v3.4), `getReserveDeficit` (v3.3) — confirming a pre-v3.3 fork.
 - **Addresses:** taken from the official ZeroLend deployed-addresses registry and existence-checked via `eth_getCode` (all ETH + Base core contracts non-empty; the five other target chains all `0x`). Pool wiring (`ADDRESSES_PROVIDER`/`getPool`/`getMarketId`/`getPriceOracle`/`getACLManager`/`getPoolConfigurator`/`getPoolDataProvider`) read live and round-trips cleanly. Reserve token addresses pulled from `getReservesList()` + `getReserveData(asset)` per reserve (12 ETH, 18 Base); zToken/debt impls read via the EIP-1967 slot. Oracle `BASE_CURRENCY_UNIT` = `1e8` and `getAssetPrice(WETH)` read live.
 - **Proxy classification:** EIP-1967 impl + admin slots read live (`eth_getStorageAt`). Pool/Configurator/Incentives/zTokens = proxies (impl slot non-zero, admin slot zero = immutable-admin Aave proxy); AddressesProvider/Oracle/ACLManager/DataProvider/EmissionManager = non-proxy (impl slot `0x0`); Treasury = minimal-proxy clone (answers `masterCopy()` `0xa619486e` → `0xfb1b…91ea` on Base; the canonical `implementation()` `0x5c60da1b` reverts).
 - **ZERO token:** ETH OFT `0x11dC…429e` confirmed via `symbol()`="ZERO" / `name()`="ZeroLend"; no ZERO OFT on Base.

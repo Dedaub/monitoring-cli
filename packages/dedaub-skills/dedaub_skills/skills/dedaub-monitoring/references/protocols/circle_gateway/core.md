@@ -1,7 +1,7 @@
-# Circle Gateway — Topics, Selectors, Addresses (Ethereum + Base + Arbitrum + Optimism + Polygon + Avalanche; NOT BNB, NOT Robinhood Chain)
+# Circle Gateway — Topics, Selectors, Addresses (Ethereum + Base + Arbitrum + Optimism + Polygon + Avalanche + Arc; NOT BNB, NOT Robinhood Chain)
 
 **Status:** verified on 2026-09-29 against live RPC on all eight target chains, Circle's Gateway contract-address and supported-blockchain pages, and the canonical `circlefin/evm-gateway-contracts` repository (commit `fd51093c`, 2026-09-02, release 1.3.0). Topics and selectors recomputed as `keccak256(signature)` and matched against the deployed implementation bytecode. Addresses existence-checked with `eth_getCode`; proxy implementations read from the EIP-1967 slot; roles read with `eth_call`.
-**Scope:** Circle Gateway, the unified USDC balance: **GatewayWallet** (deposits, burns, withdrawals, batches) and **GatewayMinter** (attested mints). One vanity address per contract, the same on the six deployed target chains: Ethereum (1), Base (8453), Arbitrum One (42161), Optimism (10), Polygon PoS (137) and Avalanche C-Chain (43114). **BNB Smart Chain (56) and Robinhood Chain (4663) have no deployment.** Topics and selectors are chain-agnostic; addresses and roles are network-specific. Circle CCTP is a different product: see [../cctp/README.md](../cctp/README.md).
+**Scope:** Circle Gateway, the unified USDC balance: **GatewayWallet** (deposits, burns, withdrawals, batches) and **GatewayMinter** (attested mints). One vanity address per contract, the same on the seven deployed target chains: Ethereum (1), Base (8453), Arbitrum One (42161), Optimism (10), Polygon PoS (137), Avalanche C-Chain (43114) and Arc (5042). **BNB Smart Chain (56) and Robinhood Chain (4663) have no deployment.** Topics and selectors are chain-agnostic; addresses and roles are network-specific. Circle CCTP is a different product: see [../cctp/README.md](../cctp/README.md).
 
 Gateway is not a message bridge. A user first deposits USDC into the GatewayWallet of a chain. Circle's off-chain Gateway system adds the deposits of all chains into one unified balance. To move value, the depositor (or its delegate) signs a burn intent and sends it to Circle's Gateway API (`/v1/transfer`). The API returns an attestation signed by a Circle attestation signer. The user (or a relayer) calls `gatewayMint` on the destination GatewayMinter, which mints new USDC to the recipient. After that mint is final, Circle submits `gatewayBurn` on the source GatewayWallet: the Wallet deducts the depositor's balance, pays the fee and burns the rest.
 
@@ -17,11 +17,11 @@ Three facts to know before indexing:
 
 | Contract | Role | Proxy | Chains |
 |----------|------|-------|--------|
-| **GatewayWallet** | Holds deposited USDC. Keeps per-depositor `available` and `withdrawing` balances. Burns on attested transfers, runs batches and trustless withdrawals. | **UUPS** (ERC1967Proxy, 163-byte runtime) | ETH, Base, Arb, OP, Poly, Avax |
-| **GatewayMinter** | Verifies Circle attestations and mints USDC to the recipient. | **UUPS** (ERC1967Proxy, 163-byte runtime) | ETH, Base, Arb, OP, Poly, Avax |
+| **GatewayWallet** | Holds deposited USDC. Keeps per-depositor `available` and `withdrawing` balances. Burns on attested transfers, runs batches and trustless withdrawals. | **UUPS** (ERC1967Proxy, 163-byte runtime) | ETH, Base, Arb, OP, Poly, Avax, Arc |
+| **GatewayMinter** | Verifies Circle attestations and mints USDC to the recipient. | **UUPS** (ERC1967Proxy, 163-byte runtime) | ETH, Base, Arb, OP, Poly, Avax, Arc |
 | USDC (FiatToken) | The token. The GatewayMinter is a USDC minter (`tokenMintAuthority(USDC)` = `0x0` on every chain, so the Minter calls `USDC.mint` directly). | FiatToken proxy | per chain (§3–§8) |
 | Circle off-chain system | Gateway API, attestation signer, burn signer, batch signer. | not on chain | — |
-| xReserve (related Circle product) | Calls `depositFor` into the GatewayWallet. Seen on Ethereum at `0x8888888199b2df864bf678259607d6d5ebb4e3ce` (verified name `xReserve`; Circle's xReserve repository gives the mainnet prefix `0x8888888`). Not in Circle's Gateway list. | EIP-1967 | ETH (observed) |
+| xReserve (related Circle product) | Calls `depositFor` into the GatewayWallet. Seen on Ethereum at `0x8888888199b2df864bf678259607d6d5ebb4e3ce` (verified name `xReserve`; Circle's xReserve repository gives the mainnet prefix `0x8888888`). Not in Circle's Gateway list. | EIP-1967 | ETH (observed); a 141-byte proxy also sits at the same address on Arc |
 
 | Leg | Chain | Call (contract) | Event | Value movement in the same transaction |
 |-----|-------|-----------------|-------|------------------------------------------|
@@ -34,7 +34,7 @@ Three facts to know before indexing:
 | **Refund / exit** | source | `withdraw` (Wallet), after the delay | `WithdrawalCompleted` | USDC `Transfer(Wallet → depositor)` |
 | Expiry | — | intent `maxBlockHeight` / attestation `maxBlockHeight` | none | An expired attestation reverts in `gatewayMint`; the balance stays in the Wallet. |
 
-**Gateway domains = CCTP domains** (read live with `domain()` on both contracts): Ethereum `0`, Avalanche `1`, Optimism `2`, Arbitrum `3`, Base `6`, Polygon PoS `7`. BNB (CCTP domain 17) and Robinhood Chain (CCTP domain 35) have no Gateway contracts. Off-target Gateway domains per Circle: Solana 5, Unichain 10, Sonic 13, World Chain 14, Sei 16, HyperEVM 19, Arc 26.
+**Gateway domains = CCTP domains** (read live with `domain()` on both contracts): Ethereum `0`, Avalanche `1`, Optimism `2`, Arbitrum `3`, Base `6`, Polygon PoS `7`, Arc `26`. BNB (CCTP domain 17) and Robinhood Chain (CCTP domain 35) have no Gateway contracts. Off-target Gateway domains per Circle: Solana 5, Unichain 10, Sonic 13, World Chain 14, Sei 16, HyperEVM 19.
 
 ---
 
@@ -186,12 +186,12 @@ Three facts to know before indexing:
 
 ## 3. Addresses — Ethereum mainnet (chain ID 1)
 
-The two contract addresses are identical on all six deployed chains (CREATE2 vanity); §4–§8 list only the per-chain values. Every address below was existence-checked with `eth_getCode` on 2026-09-29; every role was read with `eth_call`.
+The two contract addresses are identical on all seven deployed chains (CREATE2 vanity); §4–§8 and the Arc section list only the per-chain values. Every address below was existence-checked with `eth_getCode` on 2026-09-29; every role was read with `eth_call`.
 
 | Role | Address | One-liner |
 |------|---------|-----------|
 | **GatewayWallet** (proxy) | `0x77777777Dcc4d5A8B6E418Fd04D8997ef11000eE` | Deposits, burns, batches, withdrawals. Impl `0xf7a6d9d7df917c072ac8987a820c58aa27a0e798`. |
-| **GatewayMinter** (proxy) | `0x2222222d7164433c4C09B0b0D809a9b52C04C205` | Attested mints. Impl `0xc2ff68068362aea1ca22a3896d05b2b812ce51b1` (the same implementation on all six chains). |
+| **GatewayMinter** (proxy) | `0x2222222d7164433c4C09B0b0D809a9b52C04C205` | Attested mints. Impl `0xc2ff68068362aea1ca22a3896d05b2b812ce51b1` (the same implementation on the six non-Arc chains; Arc differs, see the Arc section). |
 | Wallet `owner()` — EOA | `0x2a6a86466f181721ec8ff946967b56f1aa4758c5` | Upgrade and signer authority (nonce 11). |
 | Minter `owner()` — EOA | `0x3c54ffa14d01ef3a555106007a4fed6e8964aab6` | Upgrade and attestation-signer authority (nonce 1). |
 | Wallet `feeRecipient()` — EOA | `0xfbaf3a19b1c02b8bef52a7e9fa855c86c69ab95c` | Receives every burn fee (nonce 0). |
@@ -268,10 +268,30 @@ The two contract addresses are identical on all six deployed chains (CREATE2 van
 | Optimism | `0x686d129a7a78c2b83b51d67abbd94c9a99cab1fa` | `0x281b36386962ece4db95d499b305d944447c3280` | `0x89aa3ff7484ce48a030febb471f796095abbff5b` |
 | Avalanche | `0x4c1167fc1b133b382a172de89aab691f0834255d` | `0x053075ab5271b121fd897488aee57a119c9f5546` | `0x12ea8487edae9cec60dec6bfae82d41b8116e5ff` |
 | Polygon | `0xf999330e9f1e853bd69dfd2706cdbc3ee120d13b` | `0x2d884aebb34cd83efb6d3c72e7f4e1569f4d0853` | `0x8367b237a120ae6ee4be9bcb41b502f7e24cd756` |
+| Arc | `0xf1e32bd59911af66c25bcf21323f08eade6a7fc0` | `0x34bf1d947a39cf6459c2c3d666356a9dc6e93d08` | `0xaf7b96c4c4a62c2a8d243bfc0bf49394ab8ca15c` |
 
 ### 8.2 BNB Smart Chain (56) and Robinhood Chain (4663) — no deployment
 
 `eth_getCode` returns `0x` at `0x77777777Dcc4d5A8B6E418Fd04D8997ef11000eE` and `0x2222222d7164433c4C09B0b0D809a9b52C04C205` on both chains (nonce 0: the deployer never used the vanity addresses there). Circle's contract-address and supported-blockchain pages list neither chain. The pinned window holds zero Gateway events on both. Both chains do run CCTP v2 (BNB domain 17, Robinhood Chain domain 35; see [../cctp/README.md](../cctp/README.md)).
+
+---
+
+## Arc (5042) — Addresses
+
+Existence-checked with `eth_getCode` on 2026-10-05 (`https://rpc.mainnet.arc.io`); roles read with `eth_call`. Arc uses USDC as its gas token; the Gateway token is the USDC ERC-20 interface.
+
+| Role | Address / value |
+|------|-----------------|
+| GatewayWallet / GatewayMinter | shared addresses (§3); 163-byte UUPS proxies, admin slot `0x0` |
+| Wallet implementation | `0xd15002e19d75f6abe69e46b2a94cc7c0cc5857de` (22,818 bytes) |
+| Minter implementation | `0x30b6d05cb9b89e73732dbf7d47c028a67346eb3b` (11,619 bytes; not the shared `0xc2ff6806…` impl) |
+| Wallet `owner()` — EOA | `0x6b8850c498dfca92b54f9e0147040e5c8d83d4e2` (nonce 7) |
+| Minter `owner()` — EOA | `0xdbd44f0e06644b0281411607afa76b1f056e01db` (nonce 1) |
+| Wallet `feeRecipient()` — EOA | `0xc2c291a46f999432f019ba1c33cbf5845582da46` |
+| USDC | `0x3600000000000000000000000000000000000000` (`symbol()` "USDC", 6 decimals; `isTokenSupported` = true; `tokenMintAuthority` = `0x0`) |
+| `domain()` / `withdrawalDelay()` | `26` / 1,209,600 blocks (7 days at 0.5 s) |
+
+Live: `eth_getLogs` over the last 9,000 Arc blocks (to block 24,375,636) returned `Deposited`, `GatewayBurned` and `BatchProcessed` on the Wallet and `AttestationUsed` on the Minter.
 
 ---
 
@@ -287,8 +307,9 @@ The two contract addresses are identical on all six deployed chains (CREATE2 van
 | BNB Smart Chain | 56 | — (CCTP 17) | ❌ `0x` | ❌ `0x` | — | — |
 | Avalanche C-Chain | 43114 | 1 | ✅ | ✅ | `0xeb4ea4637f38c37b8fca6f7857957772eafa71a9` | 545,000 |
 | Robinhood Chain | 4663 | — (CCTP 35) | ❌ `0x` | ❌ `0x` | — | — |
+| Arc | 5042 | 26 | ✅ | ✅ | `0xd15002e19d75f6abe69e46b2a94cc7c0cc5857de` | 1,209,600 |
 
-The four Wallet implementations have the same size (22,818 bytes) and the same event and selector surface (the 1.3.0 set, with batches and ERC-1271 signer support); their code hashes differ. The Minter implementation is one contract on all six chains.
+The five Wallet implementations have the same size (22,818 bytes) and the same event and selector surface (the 1.3.0 set, with batches and ERC-1271 signer support); their code hashes differ. The Minter implementation is one contract on the six non-Arc chains. Arc runs its own Wallet implementation (22,818 bytes, the same event surface) and its own Minter implementation (11,619 bytes against 12,101 elsewhere; every documented Minter topic is in its bytecode).
 
 ---
 
@@ -297,9 +318,9 @@ The four Wallet implementations have the same size (22,818 bytes) and the same e
 | Contract | Pattern | Detection | Upgrade auth |
 |----------|---------|-----------|--------------|
 | **GatewayWallet** | **UUPS** (ERC1967Proxy) | 163-byte runtime; EIP-1967 impl slot set (§9); admin slot `0x0`; `upgradeToAndCall` `0x4f1ef286` in the implementation. | `owner()` via `_authorizeUpgrade onlyOwner`. A different **EOA** per chain (§3–§8), `Ownable2Step`; `renounceOwnership` is disabled. |
-| **GatewayMinter** | **UUPS** (ERC1967Proxy) | Same proxy runtime; impl `0xc2ff68068362aea1ca22a3896d05b2b812ce51b1` everywhere; admin slot `0x0`. | `owner()`, a different EOA per chain. |
+| **GatewayMinter** | **UUPS** (ERC1967Proxy) | Same proxy runtime; impl `0xc2ff68068362aea1ca22a3896d05b2b812ce51b1` on the six non-Arc chains, `0x30b6d05cb9b89e73732dbf7d47c028a67346eb3b` on Arc; admin slot `0x0`. | `owner()`, a different EOA per chain. |
 
-Watch `Upgraded(address)` `0xbc7cd75a20ee27fd9adebab32041f755214dbc6bffa90cc0225b39da2e5c2d3b` and `OwnershipTransferStarted` on both addresses on all six chains. The Wallet owners have nonces 7–11 (they have run upgrades); the Minter owners have nonce 1. The implementations listed are point-in-time: read the EIP-1967 slot `0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc` for the current one.
+Watch `Upgraded(address)` `0xbc7cd75a20ee27fd9adebab32041f755214dbc6bffa90cc0225b39da2e5c2d3b` and `OwnershipTransferStarted` on both addresses on all seven chains. The Wallet owners have nonces 7–11 (they have run upgrades); the Minter owners have nonce 1. The implementations listed are point-in-time: read the EIP-1967 slot `0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc` for the current one.
 
 ---
 
@@ -313,7 +334,7 @@ Watch `Upgraded(address)` `0xbc7cd75a20ee27fd9adebab32041f755214dbc6bffa90cc0225
 6. **A plain USDC transfer to the Wallet is lost.** It credits no balance and emits no `Deposited` (Circle's docs say so). Do not treat a `Transfer` into the Wallet without `Deposited` as a deposit.
 7. **`Deposited.sender` is not always the user.** Integrators call `depositFor`; for example Circle's xReserve (`0x8888888199b2df864bf678259607d6d5ebb4e3ce` on Ethereum) pulls USDC from the user and deposits for another `depositor`. Credit `depositor`, not `sender`.
 8. **`Deposited(address,address,address,uint256)` is a common signature.** Other contracts emit the same topic0 (in the pinned window: two contracts on Arbitrum with 51 logs, one on Base with 7). Always filter by the Wallet address.
-9. **`InsufficientBalance` is the loss signal.** It means a burn or a batch could not collect the full amount after Circle had already minted. 0 logs in the pinned window on all six deployed chains. Alert on any.
+9. **`InsufficientBalance` is the loss signal.** It means a burn or a batch could not collect the full amount after Circle had already minted. 0 logs in the pinned window on the six chains measured there. Alert on any.
 10. **Withdrawal is a two-step trustless exit.** `WithdrawalInitiated` (status only) and, after `withdrawalDelay()` blocks, `WithdrawalCompleted` (USDC leaves). The withdrawing balance still pays burns (`fromWithdrawing` in `GatewayBurned`), so a pending withdrawal can shrink.
 11. **Admin triggers.** `Upgraded`, `OwnershipTransferStarted`, `AttestationSignerAdded`, `BurnSignerAdded`, `BatchSignerAdded`, `MintAuthorityChanged`, `FeeRecipientChanged`, `WithdrawalDelayChanged`, `PauserChanged`, `Paused`. Every owner is a single EOA per chain and per contract.
 12. **Gateway is not CCTP.** No `DepositForBurn`, `MessageSent` or `MintAndWithdraw` fires on a Gateway transfer, and CCTP nonces do not apply. Gateway reuses only the domain numbering. A CCTP monitor sees nothing of Gateway flow, and the reverse.
@@ -375,7 +396,7 @@ SEL_AVAILABLE_BALANCE            = '\x3ccb64ae'
 SEL_TOTAL_BALANCE                = '\x1453b987'
 SEL_DOMAIN                       = '\xc2fb26a6'
 
--- ===== Addresses (the same on ETH, BASE, ARB, OP, POLY, AVAX; no code on BNB or RH) =====
+-- ===== Addresses (the same on ETH, BASE, ARB, OP, POLY, AVAX, ARC; no code on BNB or RH) =====
 ETH_GATEWAY_WALLET               = '\x77777777dcc4d5a8b6e418fd04d8997ef11000ee'
 ETH_GATEWAY_MINTER               = '\x2222222d7164433c4c09b0b0d809a9b52c04c205'
 BASE_GATEWAY_WALLET              = '\x77777777dcc4d5a8b6e418fd04d8997ef11000ee'
@@ -388,6 +409,9 @@ POLY_GATEWAY_WALLET              = '\x77777777dcc4d5a8b6e418fd04d8997ef11000ee'
 POLY_GATEWAY_MINTER              = '\x2222222d7164433c4c09b0b0d809a9b52c04c205'
 AVAX_GATEWAY_WALLET              = '\x77777777dcc4d5a8b6e418fd04d8997ef11000ee'
 AVAX_GATEWAY_MINTER              = '\x2222222d7164433c4c09b0b0d809a9b52c04c205'
+ARC_GATEWAY_WALLET               = '\x77777777dcc4d5a8b6e418fd04d8997ef11000ee'
+ARC_GATEWAY_MINTER               = '\x2222222d7164433c4c09b0b0d809a9b52c04c205'
+ARC_USDC                         = '\x3600000000000000000000000000000000000000'
 -- implementations (point-in-time)
 ETH_GATEWAY_WALLET_IMPL          = '\xf7a6d9d7df917c072ac8987a820c58aa27a0e798'
 BASE_GATEWAY_WALLET_IMPL         = '\x85558ae0c8234d4b1b36b2ca6ca9d5380688242b'
@@ -395,7 +419,9 @@ ARB_GATEWAY_WALLET_IMPL          = '\xd87210dfc0804fc5d8b4defb59491621b016c0f3'
 OP_GATEWAY_WALLET_IMPL           = '\x85558ae0c8234d4b1b36b2ca6ca9d5380688242b'
 POLY_GATEWAY_WALLET_IMPL         = '\xeb4ea4637f38c37b8fca6f7857957772eafa71a9'
 AVAX_GATEWAY_WALLET_IMPL         = '\xeb4ea4637f38c37b8fca6f7857957772eafa71a9'
+ARC_GATEWAY_WALLET_IMPL          = '\xd15002e19d75f6abe69e46b2a94cc7c0cc5857de'
 ETH_GATEWAY_MINTER_IMPL          = '\xc2ff68068362aea1ca22a3896d05b2b812ce51b1'
+ARC_GATEWAY_MINTER_IMPL          = '\x30b6d05cb9b89e73732dbf7d47c028a67346eb3b'
 -- owners and fee recipients (EOAs)
 ETH_GATEWAY_WALLET_OWNER_EOA     = '\x2a6a86466f181721ec8ff946967b56f1aa4758c5'
 ETH_GATEWAY_MINTER_OWNER_EOA     = '\x3c54ffa14d01ef3a555106007a4fed6e8964aab6'
@@ -412,6 +438,9 @@ OP_GATEWAY_FEE_RECIPIENT_EOA     = '\x1a17c995f532de51580ffdc4862d3b1c3dfe082b'
 AVAX_GATEWAY_WALLET_OWNER_EOA    = '\x0286eab5e62785ad04de13934d011a69f19c2608'
 AVAX_GATEWAY_MINTER_OWNER_EOA    = '\xe636a3e1acf976c98dc1652a52ecfb9583a66799'
 AVAX_GATEWAY_FEE_RECIPIENT_EOA   = '\x96c790d3b06ae69e2f5be0b782e1bdad2825c917'
+ARC_GATEWAY_WALLET_OWNER_EOA     = '\x6b8850c498dfca92b54f9e0147040e5c8d83d4e2'
+ARC_GATEWAY_MINTER_OWNER_EOA     = '\xdbd44f0e06644b0281411607afa76b1f056e01db'
+ARC_GATEWAY_FEE_RECIPIENT_EOA    = '\xc2c291a46f999432f019ba1c33cbf5845582da46'
 POLY_GATEWAY_WALLET_OWNER_EOA    = '\x488805c75f57d4f29e578bf66b0f0d320196126c'
 POLY_GATEWAY_MINTER_OWNER_EOA    = '\xef1efc49d4df1a9f2b1bea0ffa169640336d9bd2'
 POLY_GATEWAY_FEE_RECIPIENT_EOA   = '\x8b49a7dccf2328c633b7b3aede098f19e50e511a'
@@ -427,7 +456,7 @@ ETH_XRESERVE                     = '\x8888888199b2df864bf678259607d6d5ebb4e3ce'
 How each constant was verified (2026-09-29):
 
 - **Topic0 / selectors:** recomputed as `keccak256(canonical signature)` from the Solidity in `circlefin/evm-gateway-contracts` (`src/modules/wallet/*.sol`, `src/modules/minter/Mints.sol`, `src/modules/common/*.sol`, `src/GatewayCommon.sol`). Each event topic and each listed selector was found in the deployed implementation bytecode (the four Wallet implementations and the one Minter implementation, read with `eth_getCode`). Live logs confirm `Deposited`, `GatewayBurned`, `AttestationUsed`, `BatchProcessed` and `WithdrawalInitiated`, and the USDC `Mint`/`Burn` topics in the sample transactions below.
-- **Addresses:** from Circle's contract-address page; existence-checked with `eth_getCode` on all eight chains. BNB and Robinhood Chain return `0x` (nonce 0) at both addresses. Implementations from the EIP-1967 slot; admin slot `0x0` on every proxy. `owner()`, `pauser()`, `denylister()`, `feeRecipient()`, `domain()`, `withdrawalDelay()`, `isTokenSupported(USDC)` and `tokenMintAuthority(USDC)` read with `eth_call`; every owner, role holder and fee recipient returned no code (EOA).
+- **Addresses:** from Circle's contract-address page; existence-checked with `eth_getCode` on all eight chains (Arc added 2026-10-05). BNB and Robinhood Chain return `0x` (nonce 0) at both addresses. Implementations from the EIP-1967 slot; admin slot `0x0` on every proxy. `owner()`, `pauser()`, `denylister()`, `feeRecipient()`, `domain()`, `withdrawalDelay()`, `isTokenSupported(USDC)` and `tokenMintAuthority(USDC)` read with `eth_call`; every owner, role holder and fee recipient returned no code (EOA).
 - **Sample transactions read (`eth_getTransactionReceipt`):** Ethereum burn `0x2f25fc39bf447929c8413cd85c588a1af70aa4405e2d448df8af7709b433ec38` (`GatewayBurned`, fee `Transfer`, USDC `Burn`, `Transfer` to `0x0`); Ethereum mint `0x1c83f78ca15bf2d9c2c91da4f86313e9fb13b029856c0836f6c6fa75b3edd18b` (USDC `Mint`, `Transfer` from `0x0`, `AttestationUsed`); Ethereum deposit `0x84d67c4dcc371be4323df84dc727a5df1d74b101a90fed4326e84f76153be4b0` (via xReserve `depositFor`); Base batch `0xf5d97bec66592cfaa4579496cdb9bcef3624e188a298485ec71b6497894c23eb` (one `BatchProcessed`, no transfer); Base withdrawal start `0x8ab5295ee067cf4b7c48c45f19aae7cd0ec9f68951a34234c4be6ebace1a6e74` (one `WithdrawalInitiated`, no transfer). The burn-to-mint join in §11.1 was found with `eth_getLogs` filtered on topic3.
 - **Activity, pinned 12-hour window 2026-09-28 00:00–12:00 UTC** (logs at the Gateway addresses; BNB and Robinhood Chain have no deployment and 0 logs):
 

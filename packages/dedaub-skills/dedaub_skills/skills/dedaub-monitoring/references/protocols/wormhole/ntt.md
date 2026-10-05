@@ -1,4 +1,4 @@
-# Wormhole Native Token Transfers (NTT) — Topics, Selectors, Addresses (Ethereum, Base, Arbitrum, Optimism, Polygon, BNB, Avalanche, Robinhood Chain)
+# Wormhole Native Token Transfers (NTT) — Topics, Selectors, Addresses (Ethereum, Base, Arbitrum, Optimism, Polygon, BNB, Avalanche, Robinhood Chain; Arc helpers only)
 
 **Status:** verified on 2026-09-29 against live RPC on all eight chains, `wormhole-foundation/native-token-transfers` (`evm/src/` on `main` and the tags `v1.0.0+evm`, `v1.2.0+evm`, `v2.0.0+evm`), `wormholelabs-xyz/example-ntt-with-executor-evm`, the Executor deployment registry and the Wormholescan NTT API (`api.wormholescan.io/api/v1/native-token-transfer/token-list` and `/ntt/token/{chain}/{token}`). Topics and selectors recomputed as `keccak256(signature)`; manager addresses existence-checked with `eth_getCode`; `token()`, `getMode()` and `owner()` read live.
 **Scope:** the events and functions that **every NTT token emits** (the `NttManager` and the `WormholeTransceiver`), the NTT-with-Executor helpers, and a list of major NTT tokens with their managers per chain. NTT is live on **all eight target chains, Robinhood Chain (4663) included**. Topics and selectors are chain-agnostic; there is **no single NTT address list**: each token deploys its own manager and transceiver on each chain.
@@ -219,6 +219,7 @@ These three are measured, not listed: the Wormholescan token list has no `robinh
 | BNB Smart Chain | `0x39B57Dd9908F8be02CfeE283b67eA1303Bc29fe1` | `0x83f5c7b03BBbE20FE2e39312b957D86dc7C3Dee2` | `0x0E4Eaf9c5c74bec4Cb651394db4847f77700e175` |
 | Avalanche C-Chain | `0x4e9Af03fbf1aa2b79A2D4babD3e22e09f18Bb8EE` | `0xf1Aa9693265E0Ba892C4a7AE77591424eEEd5cE9` | `0xe3cc16Cffa085C78e5D8144C74Fa97e4Fe53d68d` |
 | **Robinhood Chain** | — | `0x0AdA5f1289Ee5EC07e397Ee86dB6bc861ce0A728` | `0x0E4Eaf9c5c74bec4Cb651394db4847f77700e175` |
+| **Arc** (5042) | — | `0xBd9e400d4A64DFEf7B51666d751A29ccBff4e97C` | `0x0E4Eaf9c5c74bec4Cb651394db4847f77700e175` |
 
 All have code (v1 3,559 B, v2 4,163 B, receive helpers 862 B). The Ethereum v1 helper contains `0x39bb39eb`; the v2 helper contains `0xce972e0e` and `0xe3b1fb0b`. Ethereum also has a multi-token NTT helper (`0x03dB430D830601DB368991eE55DAa9A708df7912`, 4,980 B).
 
@@ -236,6 +237,7 @@ All have code (v1 3,559 B, v2 4,163 B, receive helpers 862 B). The Ethereum v1 h
 | BNB Smart Chain | 56 | 4 | 14 | 56 / 113 | ✅ |
 | Avalanche C-Chain | 43114 | 6 | 2 | 24 / 21 | ✅ |
 | **Robinhood Chain** | 4663 | 72 | 3 | 4 / 2 | ✅ |
+| **Arc** | 5042 | 71 | not measured (no Core message in the ~7 days to 2026-10-05) | — | ✅ |
 
 ---
 
@@ -338,6 +340,7 @@ POLY_NTT_WITH_EXECUTOR_V2     = '\x9d165221c3c68868d15b154c5aa66c32e044eb4b'
 BNB_NTT_WITH_EXECUTOR_V2      = '\x83f5c7b03bbbe20fe2e39312b957d86dc7c3dee2'
 AVAX_NTT_WITH_EXECUTOR_V2     = '\xf1aa9693265e0ba892c4a7ae77591424eeed5ce9'
 RH_NTT_WITH_EXECUTOR_V2       = '\x0ada5f1289ee5ec07e397ee86db6bc861ce0a728'
+ARC_NTT_WITH_EXECUTOR_V2      = '\xbd9e400d4a64dfef7b51666d751a29ccbff4e97c'
 ```
 
 ---

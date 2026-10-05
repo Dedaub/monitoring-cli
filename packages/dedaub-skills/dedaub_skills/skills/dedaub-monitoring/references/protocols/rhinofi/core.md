@@ -1,7 +1,7 @@
-# Rhino.fi Bridge — Topics, Selectors, Addresses (Ethereum, Base, Arbitrum, Optimism, Polygon, BNB, Avalanche, Robinhood Chain)
+# Rhino.fi Bridge — Topics, Selectors, Addresses (Ethereum, Base, Arbitrum, Optimism, Polygon, BNB, Avalanche, Robinhood Chain, Arc)
 
-**Status:** verified on 2026-09-29 against live RPC on all eight target chains, the verified `DVFDepositContract` implementation source (Ethereum, compiler 0.8.4), the canonical `rhinofi/contracts_public` repo (`bridge-deposit/DVFDepositContract.sol`, an older version), the Rhino.fi docs (contract addresses, EVM contract guide, supported chains, Smart Deposit Addresses) and the public bridge config API (`https://api.rhino.fi/bridge/configs`). Topic0s and selectors are recomputed as `keccak256(sig)`. Addresses are existence-checked with `eth_getCode`. The EIP-1967 implementation and admin slots, `owner()`, `authorized()` and `depositsDisallowed()` are read live.
-**Scope:** the Rhino.fi bridge contract (`DVFDepositContract` behind an OpenZeppelin `TransparentUpgradeableProxy`) on each of the eight target chains, its `ProxyAdmin`, its owner, its `BridgeVM`, and the operator wallets that send payouts. Chains: Ethereum (1), Base (8453), Arbitrum One (42161), Optimism (10), Polygon PoS (137), BNB Smart Chain (56), Avalanche C-Chain (43114), Robinhood Chain (4663). Topics and selectors are chain-agnostic. Addresses are network-specific. Rhino.fi also runs on chains that are not EVM (Solana, Starknet, TON, Tron, Stellar, Bitcoin); they are out of scope.
+**Status:** verified on 2026-09-29 against live RPC on all eight target chains (Arc added 2026-10-05 from live RPC and the config API), the verified `DVFDepositContract` implementation source (Ethereum, compiler 0.8.4), the canonical `rhinofi/contracts_public` repo (`bridge-deposit/DVFDepositContract.sol`, an older version), the Rhino.fi docs (contract addresses, EVM contract guide, supported chains, Smart Deposit Addresses) and the public bridge config API (`https://api.rhino.fi/bridge/configs`). Topic0s and selectors are recomputed as `keccak256(sig)`. Addresses are existence-checked with `eth_getCode`. The EIP-1967 implementation and admin slots, `owner()`, `authorized()` and `depositsDisallowed()` are read live.
+**Scope:** the Rhino.fi bridge contract (`DVFDepositContract` behind an OpenZeppelin `TransparentUpgradeableProxy`) on each of the nine target chains, its `ProxyAdmin`, its owner, its `BridgeVM`, and the operator wallets that send payouts. Chains: Ethereum (1), Base (8453), Arbitrum One (42161), Optimism (10), Polygon PoS (137), BNB Smart Chain (56), Avalanche C-Chain (43114), Robinhood Chain (4663), Arc (5042). Topics and selectors are chain-agnostic. Addresses are network-specific. Rhino.fi also runs on chains that are not EVM (Solana, Starknet, TON, Tron, Stellar, Bitcoin); they are out of scope.
 
 Rhino.fi is a liquidity bridge with an off-chain quote system. The user first gets a quote from the Rhino.fi API and commits it. The API returns a `quoteId`. The user then calls `depositWithId` (ERC-20) or `depositNativeWithId` (native) on the bridge contract of the source chain, with `commitmentId = quoteId`. The contract keeps the funds and emits `BridgedDepositWithId`. An authorized Rhino.fi operator then pays the recipient on the destination chain from the bridge contract's own inventory (`withdrawV2`, `withdrawNativeV2`, `withdrawWithData`, `swapWithData`). There is no mint, no burn and no message: each chain's bridge contract is a pool that Rhino.fi rebalances off chain.
 
@@ -13,11 +13,11 @@ Rhino.fi is a liquidity bridge with an off-chain quote system. The user first ge
 
 | Contract | Role | Proxy? | Where |
 |----------|------|--------|-------|
-| **Bridge** (`DVFDepositContract`, the config's `contractAddress`) | Source leg (`BridgedDepositWithId`) and destination leg (`BridgedWithdrawal*`, `SwapWithData`) on every chain. Holds the pool. | **Yes**: OpenZeppelin `TransparentUpgradeableProxy`; one implementation code (13,825 B) on all eight chains | all eight chains; one address per chain (Avalanche and Robinhood Chain share one) |
+| **Bridge** (`DVFDepositContract`, the config's `contractAddress`) | Source leg (`BridgedDepositWithId`) and destination leg (`BridgedWithdrawal*`, `SwapWithData`) on every chain. Holds the pool. | **Yes**: OpenZeppelin `TransparentUpgradeableProxy`; one implementation code (13,825 B) on all nine chains | all nine chains; one address per chain (Avalanche, Robinhood Chain and Arc share one) |
 | **ProxyAdmin** | OpenZeppelin `ProxyAdmin`: `upgrade`, `upgradeAndCall`, `changeProxyAdmin`. | No | one per chain |
-| **Owner** | `owner()` of the bridge and of the ProxyAdmin. Adds and removes operators; upgrades. | Safe multisig (threshold 2 where read) on seven chains; an address with no code on Robinhood Chain | one per chain |
+| **Owner** | `owner()` of the bridge and of the ProxyAdmin. Adds and removes operators; upgrades. | Safe multisig (threshold 2 where read) on eight chains; an address with no code on Robinhood Chain | one per chain |
 | **BridgeVM** | Created by the bridge. Executes the call lists of `withdrawWithData` and `swapWithData`. Only the bridge can call it. | No | one per chain |
-| **Operators** | EOAs in `authorized`. Send every payout, swap and rebalance. | n/a (EOA) | `0x7401e624f0E74d041F2D8A6f1429D8EaA51E208f` is authorized on all eight chains |
+| **Operators** | EOAs in `authorized`. Send every payout, swap and rebalance. | n/a (EOA) | `0x7401e624f0E74d041F2D8A6f1429D8EaA51E208f` is authorized on all nine chains |
 | Smart Deposit Addresses (SDAs) | Per-user deposit addresses. Swept into the bridge with EIP-7702. | n/a | not enumerable on chain |
 | SameChainSwaps (not a bridge) | Rhino.fi same-chain swap product (`SwapExecuted`). Listed only so a monitor does not confuse it with the bridge. | Transparent proxy | Ethereum, Base, Arbitrum, Optimism, Polygon, BNB |
 
@@ -25,7 +25,7 @@ The config's `multicallContractAddress` is a `Multicall2` read helper (Optimism 
 
 ### Rhino.fi chain keys (API only)
 
-The contracts carry no chain id. The API names chains with its own keys: `ETHEREUM` (1), `BASE` (8453), `ARBITRUM` (42161), `OPTIMISM` (10), `MATIC_POS` (137), `BINANCE` (56), `AVALANCHE` (43114), `ROBINHOOD` (4663).
+The contracts carry no chain id. The API names chains with its own keys: `ETHEREUM` (1), `BASE` (8453), `ARBITRUM` (42161), `OPTIMISM` (10), `MATIC_POS` (137), `BINANCE` (56), `AVALANCHE` (43114), `ROBINHOOD` (4663), `ARC` (5042).
 
 ---
 
@@ -109,7 +109,7 @@ No parameter of these events is indexed. Every field is in `data`.
 | `0x1c6dd8a1` | `withdrawVmFunds(address token)` | Anyone. Returns stray BridgeVM funds to the bridge. |
 | `0x3fbe4dbb` | `createVMContract()` | Deploys the BridgeVM once. |
 | `0xb9181611` | `authorized(address)` | View → `bool`. |
-| `0xf80dec97` | `depositsDisallowed()` | View → `bool`. Legacy flag; see §13. |
+| `0xf80dec97` | `depositsDisallowed()` | View → `bool`. Legacy flag; see §14. |
 | `0xd6441046` | `maxDepositAmount(address)` | View → `int256`. Legacy. |
 | `0x7729d644` | `processedWithdrawalIds(string)` | View → `bool`. Legacy. |
 | `0x8da5cb5b` | `owner()` | View → `address`. |
@@ -236,9 +236,24 @@ The docs' contract-addresses table omits Robinhood Chain. The `/bridge/configs` 
 | BridgeVM | `0x4611caCFC562C882eFb01bDda1E5326440c07cE2` | 3,375 B, same code hash as the Ethereum BridgeVM. Same address on Avalanche and Robinhood Chain. |
 | Operator (EOA) | `0x7401e624f0E74d041F2D8A6f1429D8EaA51E208f` | `authorized` = true. |
 
+## 11. Addresses — Arc (chain ID 5042)
+
+The docs' contract-addresses table omits Arc. The `/bridge/configs` API lists `ARC` (network id 5042, status enabled) with this bridge. All verified with `eth_getCode` and slot reads on 2026-10-05.
+
+| Role | Address | One-liner |
+|------|---------|-----------|
+| **Bridge** (proxy) | `0x5e023c31E1d3dCd08a1B3e8c96f6EF8Aa8FcaCd1` | 2,227 B transparent proxy. Same address as Avalanche and Robinhood Chain. |
+| Implementation | `0x2eF3AB3F8B30f2FA2B092eF1f6A9f46730547D50` | 13,825 B. Same address and code as the Avalanche implementation. |
+| ProxyAdmin | `0x04317f0E4795b1E1Bab333234153Fa10Aaac79E9` | 1,690 B. Same address as Avalanche and Robinhood Chain. |
+| Owner (bridge and ProxyAdmin) | `0x5Af8dEcb972c01540B252c6a870De5B276026276` | 171-byte Safe proxy, `getThreshold()` = 2. |
+| BridgeVM | `0x4611caCFC562C882eFb01bDda1E5326440c07cE2` | 3,375 B (storage slot `0x69`). Same address as Avalanche and Robinhood Chain. |
+| Operator (EOA) | `0x7401e624f0E74d041F2D8A6f1429D8EaA51E208f` | `authorized` = true. |
+
+`depositsDisallowed()` returns `false` on Arc. The config's `multicallContractAddress` on Arc is `0x73699b0c5542472B927dd779F2A1085ac9Bd2704`.
+
 ---
 
-## 11. Cross-chain summary
+## 12. Cross-chain summary
 
 | Chain | ID | Bridge (proxy) | Owner | `BridgedDepositWithId` | `BridgedWithdrawal` | `BridgedWithdrawalWithData` |
 |-------|----|----------------|-------|----|----|----|
@@ -250,17 +265,18 @@ The docs' contract-addresses table omits Robinhood Chain. The `/bridge/configs` 
 | BNB Smart Chain | 56 | `0xB80A582fa430645A043bB4f6135321ee01005fEf` | Safe | 28 | 332 | 0 |
 | Avalanche C-Chain | 43114 | `0x5e023c31E1d3dCd08a1B3e8c96f6EF8Aa8FcaCd1` | Safe | 0 | 41 | 33 |
 | Robinhood Chain | 4663 | `0x5e023c31E1d3dCd08a1B3e8c96f6EF8Aa8FcaCd1` | no code | 0 | 288 | 0 |
+| Arc | 5042 | `0x5e023c31E1d3dCd08a1B3e8c96f6EF8Aa8FcaCd1` | Safe | 2 | 0 | 13 |
 
-Counts are from the pinned 12-hour window 2026-09-28 00:00–12:00 UTC. The bridge is deployed on all eight target chains. The config also lists Arc, Celo, Gnosis, HyperEVM, Ink, Kaia, Mantle, Plasma, Stable and Tempo (enabled) and Katana, Linea and opBNB (disabled).
+Counts are from the pinned 12-hour window 2026-09-28 00:00–12:00 UTC, except Arc: blocks 24,335,451–24,375,451 (2026-10-05 04:44–10:22 UTC, `eth_getLogs`). The bridge is deployed on all nine target chains. The config also lists Celo, Gnosis, HyperEVM, Ink, Kaia, Mantle, Plasma, Stable and Tempo (enabled) and Katana, Linea and opBNB (disabled).
 
 ---
 
-## 12. Proxies
+## 13. Proxies
 
 | Contract | Pattern | Detection | Upgrade auth |
 |----------|---------|-----------|--------------|
-| **Bridge** (all eight chains) | OpenZeppelin `TransparentUpgradeableProxy` (EIP-1967) | EIP-1967 implementation slot populated (per-chain implementation in §3–§10, all with code hash `0x3e9099fb0a2ed123665fc37ab856b69c98b27e0e53d3c6867e682bdb4d7837fc`). Admin slot `0xb53127684a568b3173ae13b9f8a6016e243e63b6e8ee1178d6a717850b5d6103` = the ProxyAdmin. | ProxyAdmin `owner()`: a Safe on seven chains; `0x478615F37FcCB0DF69C191a8674233f6899D092e` (no code) on Robinhood Chain. |
-| ProxyAdmin | Immutable OpenZeppelin `ProxyAdmin` (verified on Ethereum; `owner()` answers on all eight chains) | No EIP-1967 slots. | Its `owner()` (same address as the bridge owner on every chain). |
+| **Bridge** (all nine chains) | OpenZeppelin `TransparentUpgradeableProxy` (EIP-1967) | EIP-1967 implementation slot populated (per-chain implementation in §3–§11, all with code hash `0x3e9099fb0a2ed123665fc37ab856b69c98b27e0e53d3c6867e682bdb4d7837fc`). Admin slot `0xb53127684a568b3173ae13b9f8a6016e243e63b6e8ee1178d6a717850b5d6103` = the ProxyAdmin. | ProxyAdmin `owner()`: a Safe on eight chains; `0x478615F37FcCB0DF69C191a8674233f6899D092e` (no code) on Robinhood Chain. |
+| ProxyAdmin | Immutable OpenZeppelin `ProxyAdmin` (verified on Ethereum; `owner()` answers on all nine chains) | No EIP-1967 slots. | Its `owner()` (same address as the bridge owner on every chain). |
 | BridgeVM | Immutable, created by the bridge | No EIP-1967 slots. | None. Only the bridge can call `execute`. |
 | SameChainSwaps | OpenZeppelin `TransparentUpgradeableProxy` | EIP-1967 implementation slot populated (7,656-byte implementation on all six chains). | Not researched (not a bridge). |
 
@@ -268,7 +284,7 @@ The three proxy sizes (2,227 B, 2,141 B, 2,112 B) are all EIP-1967 transparent p
 
 ---
 
-## 13. Detection invariants & gotchas
+## 14. Detection invariants & gotchas
 
 1. **The payout has no key on chain.** `BridgedWithdrawal.withdrawalId` is `""` in the current code (the sampled Ethereum log has a 0-length string). The sampled `BridgedWithdrawalWithData.ref` is empty too. Link a payout to its deposit through the Rhino.fi API (`quoteId` → `depositTxHash`, `withdrawTxHash`).
 2. **`commitmentId` = the API `quoteId`.** The SDK passes `BigInt('0x' + quoteId)`. Example: Ethereum deposit `0x5b8f94916ac401f5f682faf648a660599d5ff542ba4f07a84863a9cee81384f1` has `commitmentId` `0x6ab9b158ad7a6c21e63c0c9c` (24 hex digits). The docs warn that a deposit with an invalid `commitmentId` is not processed, so its funds stay in the pool.
@@ -276,15 +292,15 @@ The three proxy sizes (2,227 B, 2,141 B, 2,112 B) are all EIP-1967 transparent p
 4. **Silent value paths.** These move funds with no bridge event: `removeFunds` / `removeFundsNative` (operator rebalance out), `withdrawV2WithNativeNoEvent`, `withdrawWithDataNoEvent`, `addFunds` / `addFundsNative`, SDA sweeps into the bridge (EIP-7702), and plain transfers to the bridge. For drains, alert on a large `Transfer` from the bridge in a transaction with no `Bridged*` or `SwapWithData` log, or on the selectors `0xd6c9b6a5` and `0x143531c0`.
 5. **`BridgedWithdrawalWithData` names no recipient.** The token goes bridge → BridgeVM → the targets of the call list (a DEX, a vault, a recipient). Follow the `Transfer` logs of the same transaction. The sampled Base payout `0x350fdab9b2d90a29330a8be634e8c72cbfc821d76f204906bab5e001c5e595cd` routes USDC through the BridgeVM and several vaults.
 6. **`SwapWithData` can be a rebalance.** In the sampled Ethereum transaction `0x5d6ac3fa62c5db74fbd55bdef53520fc4de0ec4ac21b1d8990d273894616cc3a`, the output token goes back to the bridge. Treat `recipient` = the bridge as internal.
-7. **Operator changes are invisible in logs.** `authorize` and `authorizeMulti` emit no event. Watch their selectors (`0x2d1fb389`, `0x653b954c`) on the bridge, or read `authorized(addr)`. `0x7401e624f0E74d041F2D8A6f1429D8EaA51E208f` is authorized on all eight chains.
-8. **`depositsDisallowed()` is a dead flag.** It returns `true` on seven chains (`false` on Robinhood Chain), yet deposits work: the live `depositWithId` and `depositNativeWithId` do not read it. It is not a pause signal. The contract has no pause.
-9. **Addresses repeat across chains with different roles.** `0x5e023c31E1d3dCd08a1B3e8c96f6EF8Aa8FcaCd1` is the bridge on Avalanche and Robinhood Chain (and on nine more chains in the config), but an unrelated contract on Ethereum. `0x2B4553122D960CA98075028d68735cC6b15DeEB5` is the Base ProxyAdmin and the opBNB bridge. `0x04317f0E4795b1E1Bab333234153Fa10Aaac79E9` is the Avalanche and Robinhood ProxyAdmin and the Katana bridge. `0x242794484D89F46E679a5F88c1544125Ef2507A9` is a SameChainSwaps proxy on BNB and its implementation on Ethereum. Key on `(chain, address)`.
+7. **Operator changes are invisible in logs.** `authorize` and `authorizeMulti` emit no event. Watch their selectors (`0x2d1fb389`, `0x653b954c`) on the bridge, or read `authorized(addr)`. `0x7401e624f0E74d041F2D8A6f1429D8EaA51E208f` is authorized on all nine chains.
+8. **`depositsDisallowed()` is a dead flag.** It returns `true` on seven chains (`false` on Robinhood Chain and Arc), yet deposits work: the live `depositWithId` and `depositNativeWithId` do not read it. It is not a pause signal. The contract has no pause.
+9. **Addresses repeat across chains with different roles.** `0x5e023c31E1d3dCd08a1B3e8c96f6EF8Aa8FcaCd1` is the bridge on Avalanche, Robinhood Chain and Arc (and on eight more chains in the config), but an unrelated contract on Ethereum. `0x2B4553122D960CA98075028d68735cC6b15DeEB5` is the Base ProxyAdmin and the opBNB bridge. `0x04317f0E4795b1E1Bab333234153Fa10Aaac79E9` is the Avalanche, Robinhood and Arc ProxyAdmin and the Katana bridge. `0x242794484D89F46E679a5F88c1544125Ef2507A9` is a SameChainSwaps proxy on BNB and its implementation on Ethereum. Key on `(chain, address)`.
 10. **Robinhood Chain is live, but its upgrade authority is an undeployed address.** 288 `BridgedWithdrawal` in the pinned window, 0 `BridgedDepositWithId` (deposits there may arrive by SDA sweeps or plain transfers; not measured). The ProxyAdmin owner `0x478615F37FcCB0DF69C191a8674233f6899D092e` has no code and nonce 0 there, so no upgrade can happen until something is deployed at that address.
 11. **Topic collisions.** `OwnershipTransferred` and `Upgraded` are generic OpenZeppelin topics. `SwapExecuted` (SameChainSwaps) also carries a `commitmentId`. Filter on the emitter.
 
 ---
 
-## 14. Quick-copy detection constants (bytea-ready for PG)
+## 15. Quick-copy detection constants (bytea-ready for PG)
 
 ```
 -- ===== Topics (chain-agnostic) =====
@@ -333,6 +349,7 @@ POLY_BRIDGE                            = '\xba4eee20f434bc3908a0b18da49634865713
 BNB_BRIDGE                             = '\xb80a582fa430645a043bb4f6135321ee01005fef'
 AVAX_BRIDGE                            = '\x5e023c31e1d3dcd08a1b3e8c96f6ef8aa8fcacd1'
 RH_BRIDGE                              = '\x5e023c31e1d3dcd08a1b3e8c96f6ef8aa8fcacd1'
+ARC_BRIDGE                             = '\x5e023c31e1d3dcd08a1b3e8c96f6ef8aa8fcacd1'
 
 -- ===== ProxyAdmins =====
 ETH_PROXY_ADMIN                        = '\x70911642e4ea509735e77cba23ce1856abed87bf'
@@ -343,6 +360,7 @@ POLY_PROXY_ADMIN                       = '\xd80a8890f5b07cffcd5c939f2c63781ef4fe
 BNB_PROXY_ADMIN                        = '\xb8ee2cd0e210fac991e441dba767082d9cdceec3'
 AVAX_PROXY_ADMIN                       = '\x04317f0e4795b1e1bab333234153fa10aaac79e9'
 RH_PROXY_ADMIN                         = '\x04317f0e4795b1e1bab333234153fa10aaac79e9'
+ARC_PROXY_ADMIN                        = '\x04317f0e4795b1e1bab333234153fa10aaac79e9'
 
 -- ===== Owners (Safe multisigs; Robinhood owner has no code) =====
 ETH_OWNER_SAFE                         = '\x520cf70a2d0b3dfb7386a2bc9f800321f62a5c3a'
@@ -353,6 +371,7 @@ POLY_OWNER_SAFE                        = '\x249aabb1d67a76404cc1197fa37adaf358b1
 BNB_OWNER_SAFE                         = '\x7af3828c0b061552af3479806add982eef04f0c8'
 AVAX_OWNER_SAFE                        = '\xb1fdfd298dcaf4e710024c30347af7d4c598c23c'
 RH_OWNER_NO_CODE                       = '\x478615f37fccb0df69c191a8674233f6899d092e'   -- no code, nonce 0: an EOA or an undeployed Safe
+ARC_OWNER_SAFE                         = '\x5af8decb972c01540b252c6a870de5b276026276'
 
 -- ===== BridgeVMs =====
 ETH_BRIDGE_VM                          = '\x0551e6700a0c7c5a1633e912710ed80c88facc07'
@@ -363,23 +382,24 @@ POLY_BRIDGE_VM                         = '\xde52e32f1efc70b9d7c0dedd664c7b7a531e
 BNB_BRIDGE_VM                          = '\x12ef0730ca80b618c2789e74fab685bed72491f7'
 AVAX_BRIDGE_VM                         = '\x4611cacfc562c882efb01bdda1e5326440c07ce2'
 RH_BRIDGE_VM                           = '\x4611cacfc562c882efb01bdda1e5326440c07ce2'
+ARC_BRIDGE_VM                          = '\x4611cacfc562c882efb01bdda1e5326440c07ce2'
 
 -- ===== Operators (EOAs) =====
-ETH_OPERATOR_EOA                       = '\x7401e624f0e74d041f2d8a6f1429d8eaa51e208f'   -- authorized on all eight chains
+ETH_OPERATOR_EOA                       = '\x7401e624f0e74d041f2d8a6f1429d8eaa51e208f'   -- authorized on all nine chains
 ETH_SWAP_OPERATOR_EOA                  = '\x51497124089abdec0d3749d6db082f66ca03750a'
 ```
 
 ---
 
-## 15. Verification & sources
+## 16. Verification & sources
 
 How the constants in this file were verified (2026-09-29):
 
 - **Topic0 / selectors:** recomputed as `keccak256(canonical signature)` from the verified implementation source on Ethereum (`contracts/DVFDepositContract.sol`, verified 2026-09-18), the older `rhinofi/contracts_public` source (for `BridgedDeposit` and the legacy functions), the verified OpenZeppelin `ProxyAdmin`, and the verified `SameChainSwaps` implementation. The selectors of the sampled transactions match: `0x2700bbaf` (deposit), `0x9c66c25d` (withdrawal), `0xec8acddf` (withdrawal with data), `0x2090d831` (swap).
-- **Addresses:** the bridge per chain comes from the Rhino.fi contract-addresses page and the `/bridge/configs` API (which also gives Robinhood Chain). `eth_getCode` confirms every proxy. The implementation of every bridge has code hash `0x3e9099fb0a2ed123665fc37ab856b69c98b27e0e53d3c6867e682bdb4d7837fc` (13,825 B). The EIP-1967 admin slot gives each ProxyAdmin; `owner()` of the ProxyAdmin equals `owner()` of the bridge on every chain. The Ethereum, Base and Polygon owners return `getThreshold()` = 2; the Ethereum and Base owners hold Safe v1.3.0 singletons in slot 0. The BridgeVM of each chain is read from the bridge's storage slot 105 (`0x69`, the private `vm` field after the OpenZeppelin upgradeable layout); on Ethereum and Base it matches the transfer target of the sampled transactions, and the Ethereum one is verified as `BridgeVM`. All eight have the same 3,375-byte code (hash `0x3c39f095d6fcff747a60bf92318812e2bc85012c4fea89ba874009b4790bd456`). `authorized(0x7401e624f0E74d041F2D8A6f1429D8EaA51E208f)` returns true on all eight chains; `authorized(0x51497124089aBDEc0d3749D6dB082f66ca03750a)` returns true on Ethereum.
+- **Addresses:** the bridge per chain comes from the Rhino.fi contract-addresses page and the `/bridge/configs` API (which also gives Robinhood Chain and Arc). `eth_getCode` confirms every proxy. The implementation of every bridge has code hash `0x3e9099fb0a2ed123665fc37ab856b69c98b27e0e53d3c6867e682bdb4d7837fc` (13,825 B). The EIP-1967 admin slot gives each ProxyAdmin; `owner()` of the ProxyAdmin equals `owner()` of the bridge on every chain. The Ethereum, Base, Polygon and Arc owners return `getThreshold()` = 2; the Ethereum and Base owners hold Safe v1.3.0 singletons in slot 0. The BridgeVM of each chain is read from the bridge's storage slot 105 (`0x69`, the private `vm` field after the OpenZeppelin upgradeable layout); on Ethereum and Base it matches the transfer target of the sampled transactions, and the Ethereum one is verified as `BridgeVM`. All nine have the same 3,375-byte code (hash `0x3c39f095d6fcff747a60bf92318812e2bc85012c4fea89ba874009b4790bd456`). `authorized(0x7401e624f0E74d041F2D8A6f1429D8EaA51E208f)` returns true on all nine chains; `authorized(0x51497124089aBDEc0d3749D6dB082f66ca03750a)` returns true on Ethereum.
 - **Value movement, read from receipts:** deposit `0x5b8f94916ac401f5f682faf648a660599d5ff542ba4f07a84863a9cee81384f1` (Ethereum: 134,306.05 USDT user → bridge, then `BridgedDepositWithId`, `sender` = `origin` = the user). Withdrawal `0x81614d01818dccc660ff7ae1471ec70d6ce45c63377657f1ec34e8ba1455eb80` (Ethereum: sent by the operator, 5 USDT bridge → recipient, empty `withdrawalId`). Withdrawal with data `0x350fdab9b2d90a29330a8be634e8c72cbfc821d76f204906bab5e001c5e595cd` (Base). Swap `0x5d6ac3fa62c5db74fbd55bdef53520fc4de0ec4ac21b1d8990d273894616cc3a` (Ethereum).
-- **Activity (pinned 12-hour window 2026-09-28 00:00–12:00 UTC, emitter = the bridge):** see §11. `BridgedWithdrawalWithNative` was 0 on all eight chains. `SwapWithData`: Ethereum 2, Avalanche 1, the other chains 0. The Ethereum `BridgedDepositWithId` count (36) was measured twice with the same result. A 0 is a measurement of this window only.
-- **Chain coverage:** all eight target chains carry a bridge. Robinhood Chain is confirmed by the config API, the supported-chains page and 288 withdrawals in the window.
+- **Activity (pinned 12-hour window 2026-09-28 00:00–12:00 UTC, emitter = the bridge):** see §12. `BridgedWithdrawalWithNative` was 0 on all eight chains in that window. `SwapWithData`: Ethereum 2, Avalanche 1, the other chains 0. The Ethereum `BridgedDepositWithId` count (36) was measured twice with the same result. A 0 is a measurement of this window only.
+- **Chain coverage:** all nine target chains carry a bridge. Robinhood Chain is confirmed by the config API, the supported-chains page and 288 withdrawals in the window. Arc is confirmed by the config API, `eth_getCode`, the EIP-1967 slots and live `BridgedDepositWithId` / `BridgedWithdrawalWithData` logs (2026-10-05).
 
 Authoritative sources:
 - Docs — [Contract addresses](https://docs.rhino.fi/general/contract-addresses) · [EVM contract guide](https://docs.rhino.fi/contracts/evm) · [Making a bridge](https://docs.rhino.fi/api-integration/bridge) · [Bridge status & history](https://docs.rhino.fi/api-integration/status-history) · [Smart Deposit Addresses](https://docs.rhino.fi/get-started/sda) · [Supported chains and tokens](https://docs.rhino.fi/get-started/supported-chains) · [Docs index](https://docs.rhino.fi/llms.txt).

@@ -1,7 +1,7 @@
-# deBridge DLN — Topics, Selectors, Addresses (Ethereum + Base + Arbitrum + Optimism + Polygon + BNB + Avalanche + Robinhood Chain)
+# deBridge DLN — Topics, Selectors, Addresses (Ethereum + Base + Arbitrum + Optimism + Polygon + BNB + Avalanche + Robinhood Chain + Arc)
 
-**Status:** verified on 2026-09-29 against live RPC on all eight target chains, the deBridge "Deployed Contracts" page, the verified implementation sources on Blockscout, and the `debridge-finance/dln-contracts` and `debridge-finance/abis-and-idls` repositories. Topics and selectors recomputed as `keccak256(signature)`; addresses existence-checked with `eth_getCode`; EIP-1967 slots read live.
-**Scope:** the deBridge Liquidity Network (DLN): `DlnSource` (order escrow), `DlnDestination` (fill, unlock, cancel), `DeBridgeRouter` (the swap forwarder that explorers label "Crosschain Forwarder"), `DlnExternalCallAdapter` and `ExternalCallExecutor` (hooks). DLN is live on all eight target chains: Ethereum (1), Base (8453), Arbitrum One (42161), Optimism (10), Polygon PoS (137), BNB Smart Chain (56), Avalanche C-Chain (43114) and Robinhood Chain (4663). The deBridgeGate message layer that settles DLN is in [dmp.md](dmp.md); the deBridge chain ids are in [README.md](README.md). Topics and selectors are chain-agnostic; addresses are per chain.
+**Status:** verified on 2026-09-29 against live RPC on the eight original target chains (Arc added on 2026-10-05 with the same checks), the deBridge "Deployed Contracts" page, the verified implementation sources on Blockscout, and the `debridge-finance/dln-contracts` and `debridge-finance/abis-and-idls` repositories. Topics and selectors recomputed as `keccak256(signature)`; addresses existence-checked with `eth_getCode`; EIP-1967 slots read live.
+**Scope:** the deBridge Liquidity Network (DLN): `DlnSource` (order escrow), `DlnDestination` (fill, unlock, cancel), `DeBridgeRouter` (the swap forwarder that explorers label "Crosschain Forwarder"), `DlnExternalCallAdapter` and `ExternalCallExecutor` (hooks). DLN is live on all nine target chains: Ethereum (1), Base (8453), Arbitrum One (42161), Optimism (10), Polygon PoS (137), BNB Smart Chain (56), Avalanche C-Chain (43114), Robinhood Chain (4663) and Arc (5042). The deBridgeGate message layer that settles DLN is in [dmp.md](dmp.md); the deBridge chain ids are in [README.md](README.md). Topics and selectors are chain-agnostic; addresses are per chain.
 
 DLN is an intent bridge with no pooled liquidity. A maker locks the give tokens in `DlnSource` on the source chain (`CreatedOrder`). A solver (the taker) fills the order on the destination chain from its own funds through `DlnDestination.fulfillOrder`, which moves the take tokens straight to `receiverDst` (`FulfilledOrder`). The solver is repaid later on the source chain: it calls `sendEvmUnlock` (or a batch or Solana variant) on the destination (`SentOrderUnlock`), `DlnDestination` sends a deBridge message through deBridgeGate, and the Gate `claim` on the source chain calls `DlnSource.claimUnlock`, which pays the escrow to the solver (`ClaimedUnlock`).
 
@@ -9,7 +9,7 @@ There is no on-chain expiry. The only refund path is a cancel: the order authori
 
 Three facts to know before indexing:
 
-1. **The five DLN addresses are the same literal on seven chains** (Ethereum, Base, Arbitrum, Optimism, Polygon, BNB, Avalanche). Robinhood Chain has the same `DlnSource`, `DlnDestination` and `DeBridgeRouter` addresses, but a different `DlnExternalCallAdapter` and `ExternalCallExecutor` pair, and it uses OpenZeppelin v5 proxies with EOA-owned ProxyAdmins (§8).
+1. **The five DLN addresses are the same literal on seven chains** (Ethereum, Base, Arbitrum, Optimism, Polygon, BNB, Avalanche). Robinhood Chain and Arc have the same `DlnSource`, `DlnDestination` and `DeBridgeRouter` addresses, but a different `DlnExternalCallAdapter` and `ExternalCallExecutor` pair, and they use OpenZeppelin v5 proxies with EOA-owned ProxyAdmins (§5, §6).
 2. **No DLN event parameter is indexed.** `orderId` sits in the data of every DLN event. Filter by `(emitter, topic0)` and decode the data. The join key `orderId` is on chain on both sides.
 3. **The event schema changed twice on Ethereum.** `CreatedOrder` gained `bytes metadata` at block 18,092,917, and `FulfilledOrder` gained `uint256 actualFulfillAmount` at block 24,447,763 (both through a Safe transaction that upgraded the proxies). Both legacy topics are in §1 for back-fills; the legacy topics had 0 logs in the pinned window.
 
@@ -19,14 +19,14 @@ Three facts to know before indexing:
 
 | Contract | Chains | Role | Proxy |
 |----------|--------|------|-------|
-| **DlnSource** | all 8 | Order escrow on the source chain. Pulls the give tokens, emits `CreatedOrder`, pays the solver on `claimUnlock`, refunds on `claimCancel`. Version string `1.8.0` (live `version()` read). | EIP-1967 transparent |
-| **DlnDestination** | all 8 | Fill entrypoint on the destination chain. Emits `FulfilledOrder`, sends the unlock and cancel messages through deBridgeGate. Version string `1.7.1` (live `version()` read). | EIP-1967 transparent |
-| **DeBridgeRouter** (explorer label "Crosschain Forwarder Proxy") | all 8 | Swap forwarder that the DLN API uses before `createOrder` and before `fulfillOrder`, and for same-chain swaps. Returns the surplus with `Refund`. | EIP-1967 transparent |
-| **DlnExternalCallAdapter** | all 8 (other address on Robinhood) | Holds the take tokens of an order with a hook and runs the hook through the executor. | EIP-1967 transparent |
-| **ExternalCallExecutor** | all 8 (other address on Robinhood) | The universal hook: runs the calls of the hook payload with the tokens. | not a proxy |
-| deBridgeGate + CallProxy | all 8 | Message layer that carries the unlock and cancel messages. See [dmp.md](dmp.md). | EIP-1967 transparent |
+| **DlnSource** | all 9 | Order escrow on the source chain. Pulls the give tokens, emits `CreatedOrder`, pays the solver on `claimUnlock`, refunds on `claimCancel`. Version string `1.8.0` (live `version()` read). | EIP-1967 transparent |
+| **DlnDestination** | all 9 | Fill entrypoint on the destination chain. Emits `FulfilledOrder`, sends the unlock and cancel messages through deBridgeGate. Version string `1.7.1` (live `version()` read). | EIP-1967 transparent |
+| **DeBridgeRouter** (explorer label "Crosschain Forwarder Proxy") | all 9 | Swap forwarder that the DLN API uses before `createOrder` and before `fulfillOrder`, and for same-chain swaps. Returns the surplus with `Refund`. | EIP-1967 transparent |
+| **DlnExternalCallAdapter** | all 9 (other address on Robinhood and Arc) | Holds the take tokens of an order with a hook and runs the hook through the executor. | EIP-1967 transparent |
+| **ExternalCallExecutor** | all 9 (other address on Robinhood and Arc) | The universal hook: runs the calls of the hook payload with the tokens. | not a proxy |
+| deBridgeGate + CallProxy | all 9 | Message layer that carries the unlock and cancel messages. See [dmp.md](dmp.md). | EIP-1967 transparent |
 
-The give side and the take side use deBridge chain ids (`giveChainId`, `takeChainId`), not always the EVM chain id. For the eight target chains they are equal; Solana is `7565164`. See [README.md](README.md).
+The give side and the take side use deBridge chain ids (`giveChainId`, `takeChainId`), not always the EVM chain id. For the nine target chains they are equal; Solana is `7565164`. See [README.md](README.md).
 
 ---
 
@@ -34,7 +34,7 @@ The give side and the take side use deBridge chain ids (`giveChainId`, `takeChai
 
 ### 1.1 DlnSource — source leg, escrow payout, refund
 
-Emitter: `DlnSource` `0xeF4fB24aD0916217251F553c0596F8Edc630EB66` on all eight chains.
+Emitter: `DlnSource` `0xeF4fB24aD0916217251F553c0596F8Edc630EB66` on all nine chains.
 
 | topic0 | Event | Side |
 |--------|-------|------|
@@ -56,7 +56,7 @@ Emitter: `DlnSource` `0xeF4fB24aD0916217251F553c0596F8Edc630EB66` on all eight c
 
 ### 1.2 DlnDestination — destination leg, unlock and cancel messages
 
-Emitter: `DlnDestination` `0xE7351Fd770A37282b91D153Ee690B63579D6dd7f` on all eight chains.
+Emitter: `DlnDestination` `0xE7351Fd770A37282b91D153Ee690B63579D6dd7f` on all nine chains.
 
 | topic0 | Event | Side |
 |--------|-------|------|
@@ -72,7 +72,7 @@ Emitter: `DlnDestination` `0xE7351Fd770A37282b91D153Ee690B63579D6dd7f` on all ei
 
 ### 1.3 DeBridgeRouter (Crosschain Forwarder) — swaps around DLN
 
-Emitter: `0x663DC15D3C1aC63ff12E45Ab68FeA3F0a883C251` on all eight chains.
+Emitter: `0x663DC15D3C1aC63ff12E45Ab68FeA3F0a883C251` on all nine chains.
 
 | topic0 | Event | Notes |
 |--------|-------|-------|
@@ -88,7 +88,7 @@ Emitter: `0x663DC15D3C1aC63ff12E45Ab68FeA3F0a883C251` on all eight chains.
 
 ### 1.4 DlnExternalCallAdapter — hooks
 
-Emitter: `0x61eF2e01E603aEB5Cd96F9eC9AE76cc6A68f6cF9` on seven chains; `0xE93356b0b87c71A7F4957DCEBEd05BefA8cB624a` on Robinhood Chain.
+Emitter: `0x61eF2e01E603aEB5Cd96F9eC9AE76cc6A68f6cF9` on seven chains; `0xE93356b0b87c71A7F4957DCEBEd05BefA8cB624a` on Robinhood Chain and Arc.
 
 | topic0 | Event | Notes |
 |--------|-------|-------|
@@ -301,11 +301,26 @@ Listed in the deBridge deployed-contracts table and verified with `eth_getCode` 
 | ProxyAdmin of DeBridgeRouter | `0x27014043522edcf5227b54e64be668af75169b3e` | Owner EOA `0xfd830dd9b446c9b880b32a03fb9a750aae4a68aa` (nonce 19). |
 | ProxyAdmin of the adapter | `0x0e42d9f52ef8feedf8f6792d9fb9766e0caf0b26` | Owner EOA `0xbda458dfc28021debd72060671fc350fa5cb39e5`. |
 
-The same `0xE93356b0b87c71A7F4957DCEBEd05BefA8cB624a` / `0x05bD82Dbb7c5C2Cf571112bD1ad4e7c02E10eBEA` pair is listed for Arc, Story, Cronos, HyperEVM, Injective, Monad and MegaETH (outside the eight targets).
+The same `0xE93356b0b87c71A7F4957DCEBEd05BefA8cB624a` / `0x05bD82Dbb7c5C2Cf571112bD1ad4e7c02E10eBEA` pair is listed for Arc (§6), Story, Cronos, HyperEVM, Injective, Monad and MegaETH.
+
+## 6. Addresses — Arc (chain ID 5042)
+
+Verified with `eth_getCode` on `https://rpc.mainnet.arc.io` on 2026-10-05. `getChainId()` on `DlnSource` returns 5042, and `DlnSource.deBridgeGate()` returns `0x43dE2d77BF8027e25dBD179B491e8d64f38398aA`. Same layout as Robinhood Chain: OpenZeppelin v5 transparent proxies (1,159 bytes), one ProxyAdmin per proxy, at the same ProxyAdmin addresses and with the same EOA owners. Implementations differ from Ethereum and Robinhood Chain.
+
+| Role | Address | One-liner |
+|------|---------|-----------|
+| **DlnSource** (proxy) | `0xeF4fB24aD0916217251F553c0596F8Edc630EB66` | Implementation `0xa7b88a746fa457578d5abd6234471f07d895f46b` (22,952 bytes). **Address trap:** that literal is the DLN ProxyAdmin on the seven OZ-v4 chains. |
+| **DlnDestination** (proxy) | `0xE7351Fd770A37282b91D153Ee690B63579D6dd7f` | Implementation `0x60e50145db18e09ff2bb277e88d3c264ff57b91f` (23,205 bytes). |
+| **DeBridgeRouter** (proxy) | `0x663DC15D3C1aC63ff12E45Ab68FeA3F0a883C251` | Implementation `0xf7399c83b12edd1a21aab250d30ccb4474902688` (17,691 bytes). |
+| **DlnExternalCallAdapter** (proxy) | `0xE93356b0b87c71A7F4957DCEBEd05BefA8cB624a` | Implementation `0x726f7a7d47cc4e43c9580ad8562cdb58b46014a0` (9,663 bytes). `0x61eF2e01E603aEB5Cd96F9eC9AE76cc6A68f6cF9` has no code here. |
+| **ExternalCallExecutor** | `0x05bD82Dbb7c5C2Cf571112bD1ad4e7c02E10eBEA` | 6,394 bytes, not a proxy. `0xAE0361b1C3454b297129e01046057F1D294c7974` has no code here. |
+| ProxyAdmins | DlnSource `0x1d0e490aff2d6ab6495298385cc618e4b4e43475`; DlnDestination `0x4308753b09005224188c3b2d20bdad3d2d6f6e28`; DeBridgeRouter `0x27014043522edcf5227b54e64be668af75169b3e`; adapter `0x0e42d9f52ef8feedf8f6792d9fb9766e0caf0b26` | Owners: EOA `0xbda458dfc28021debd72060671fc350fa5cb39e5` (DlnSource, DlnDestination, adapter); EOA `0xfd830dd9b446c9b880b32a03fb9a750aae4a68aa` (router). |
+
+Measured flow (`eth_getLogs`, ~40,000 Arc blocks ≈ 5.7 h to 2026-10-05): `CreatedOrder` 2 at `DlnSource`; `SentOrderUnlock` 7 and `FulfilledOrder` 1 at `DlnDestination`. The Dedaub platform has no Arc network yet.
 
 ---
 
-## 6. Cross-chain summary
+## 7. Cross-chain summary
 
 | Chain | ID | DlnSource | DlnDestination | DeBridgeRouter | DlnExternalCallAdapter | ExternalCallExecutor | Proxy flavor / upgrade owner |
 |-------|----|-----------|----------------|----------------|------------------------|----------------------|------------------------------|
@@ -317,25 +332,26 @@ The same `0xE93356b0b87c71A7F4957DCEBEd05BefA8cB624a` / `0x05bD82Dbb7c5C2Cf57111
 | BNB Smart Chain | 56 | ✓ | ✓ | ✓ | ✓ same | ✓ same | OZ v4 / Safe, 5 signatures |
 | Avalanche C-Chain | 43114 | ✓ | ✓ | ✓ | ✓ same | ✓ same | OZ v4 / Safe, 5 signatures |
 | **Robinhood Chain** | 4663 | ✓ | ✓ | ✓ | ✓ **`0xE93356b0b87c71A7F4957DCEBEd05BefA8cB624a`** | ✓ **`0x05bD82Dbb7c5C2Cf571112bD1ad4e7c02E10eBEA`** | **OZ v5 / EOA owners** |
+| **Arc** | 5042 | ✓ | ✓ | ✓ | ✓ **`0xE93356b0b87c71A7F4957DCEBEd05BefA8cB624a`** | ✓ **`0x05bD82Dbb7c5C2Cf571112bD1ad4e7c02E10eBEA`** | **OZ v5 / EOA owners** |
 
-§3 literals: `DlnSource` `0xeF4fB24aD0916217251F553c0596F8Edc630EB66`, `DlnDestination` `0xE7351Fd770A37282b91D153Ee690B63579D6dd7f`, `DeBridgeRouter` `0x663DC15D3C1aC63ff12E45Ab68FeA3F0a883C251`. DLN is present on all eight target chains. Counterparty chains outside the eight: Solana (deBridge id 7565164), TRON, Linea, Arc, Story, Cronos, HyperEVM, Injective, Monad and MegaETH (see [README.md](README.md)).
+§3 literals: `DlnSource` `0xeF4fB24aD0916217251F553c0596F8Edc630EB66`, `DlnDestination` `0xE7351Fd770A37282b91D153Ee690B63579D6dd7f`, `DeBridgeRouter` `0x663DC15D3C1aC63ff12E45Ab68FeA3F0a883C251`. DLN is present on all nine target chains. Counterparty chains outside the nine: Solana (deBridge id 7565164), TRON, Linea, Story, Cronos, HyperEVM, Injective, Monad and MegaETH (see [README.md](README.md)).
 
 ---
 
-## 7. Proxies
+## 8. Proxies
 
 | Contract | Pattern | Detection | Upgrade auth |
 |----------|---------|-----------|--------------|
 | DlnSource, DlnDestination, DlnExternalCallAdapter (7 chains) | EIP-1967 transparent (OpenZeppelin v4, 2,112-byte proxy) | Implementation slot `0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc` populated; admin slot `0xb53127684a568b3173ae13b9f8a6016e243e63b6e8ee1178d6a717850b5d6103` = ProxyAdmin `0xa7b88a746fa457578d5abd6234471f07d895f46b` | ProxyAdmin owner: a 5-threshold Safe per chain (§3–§4) |
 | DeBridgeRouter (7 chains) | EIP-1967 transparent (2,141-byte proxy; 2,733 bytes on Base and Optimism) | Admin slot = `0xc86ab72dc6da7ef91a96650f3bc23125cd997130` | Same Safe per chain |
-| All four DLN proxies on Robinhood Chain | EIP-1967 transparent (OpenZeppelin v5, 1,159 bytes; one ProxyAdmin per proxy) | Admin slot = the per-proxy ProxyAdmin of §5 | **EOA owners** (§5) |
-| ExternalCallExecutor | Not a proxy | Implementation slot empty; 6,213 bytes (6,394 on Robinhood Chain) | none |
+| All four DLN proxies on Robinhood Chain and Arc | EIP-1967 transparent (OpenZeppelin v5, 1,159 bytes; one ProxyAdmin per proxy) | Admin slot = the per-proxy ProxyAdmin of §5 / §6 (same addresses on both chains) | **EOA owners** (§5, §6) |
+| ExternalCallExecutor | Not a proxy | Implementation slot empty; 6,213 bytes (6,394 on Robinhood Chain and Arc) | none |
 
-Watch `Upgraded(address)` on the four proxies and `AdminChanged(address,address)` on each chain. The implementations in §3–§5 are point-in-time values: read the slot live.
+Watch `Upgraded(address)` on the four proxies and `AdminChanged(address,address)` on each chain. The implementations in §3–§6 are point-in-time values: read the slot live.
 
 ---
 
-## 8. Detection invariants & gotchas
+## 9. Detection invariants & gotchas
 
 1. **Link key = `orderId` (bytes32), in the data of every DLN event.** `CreatedOrder` (data word 1, after the offset of the order tuple), `FulfilledOrder` (data word 1), `SentOrderUnlock` (word 0), `ClaimedUnlock` (word 0), `SentOrderCancel` (word 1), `ClaimedOrderCancel` (word 0). It is on chain on both sides. Worked example: order `0x400643333a540ebce4b6915960dff3ea25198a21b198d78ce89e740ee5aedd69` was created on Ethereum at block 26,072,229, filled on Base at block 51,882,185, unlocked on Base at block 51,882,189, and paid out to the solver on Ethereum at block 26,072,236 (0.434826 ETH), all in the pinned window.
 2. **The second link key is the Gate `submissionId`.** `SentOrderUnlock.submissionId` and `SentOrderCancel.submissionId` equal the `Sent.submissionId` of the Gate in the same transaction, and the Gate `Claimed.submissionId` on the source chain (see [dmp.md](dmp.md)). One unlock message can carry many orders (`sendBatchEvmUnlock`, `sendBatchSolanaUnlock`): 7 `SentOrderUnlock` logs shared one `submissionId` in the sampled Ethereum batch.
@@ -348,13 +364,13 @@ Watch `Upgraded(address)` on the four proxies and `AdminChanged(address,address)
 9. **Use both schemas for history.** `CreatedOrder` without `metadata` (legacy topic) before Ethereum block 18,092,917; `FulfilledOrder` without `actualFulfillAmount` (legacy topic) before Ethereum block 24,447,763. The upgrade blocks on the other chains were not measured; watch both topics when back-filling there.
 10. **`DeBridgeRouter` is mostly same-chain swaps.** In the window, Base had 7,905 `SameChainSwapExecuted` logs against 95 `FulfilledOrder` logs. Do not count router swaps as bridge transfers. Router `Refund` is surplus return; it is not a DLN refund.
 11. **Two different `AffiliateFeePaid` events.** `DlnSource` (`bytes32,address,uint256,address`) and `DeBridgeRouter` (`address,uint256,address,uint32`) have different topic0 values; key on the emitter.
-12. **Robinhood Chain diverges.** Hooks use `0xE93356b0b87c71A7F4957DCEBEd05BefA8cB624a` and `0x05bD82Dbb7c5C2Cf571112bD1ad4e7c02E10eBEA`; the proxies are OpenZeppelin v5 with EOA-owned ProxyAdmins. A monitor on upgrades there should watch `Upgraded` and `OwnershipTransferred` at the five ProxyAdmins.
-13. **Shared literal, other role.** `0xc1656B63D9EEBa6d114f6bE19565177893e5bCBF` is the Gate on Base but a DeBridgeToken implementation on the other chains; `0x43dE2d77BF8027e25dBD179B491e8d64f38398aA` is the Gate on seven chains but a ProxyAdmin on Base (see [dmp.md](dmp.md)). Key every address on `(chain, address)`.
+12. **Robinhood Chain and Arc diverge.** Hooks use `0xE93356b0b87c71A7F4957DCEBEd05BefA8cB624a` and `0x05bD82Dbb7c5C2Cf571112bD1ad4e7c02E10eBEA`; the proxies are OpenZeppelin v5 with EOA-owned ProxyAdmins. A monitor on upgrades there should watch `Upgraded` and `OwnershipTransferred` at the five ProxyAdmins.
+13. **Shared literal, other role.** `0xc1656B63D9EEBa6d114f6bE19565177893e5bCBF` is the Gate on Base but a DeBridgeToken implementation on the other chains; `0x43dE2d77BF8027e25dBD179B491e8d64f38398aA` is the Gate on eight chains but a ProxyAdmin on Base (see [dmp.md](dmp.md)). Key every address on `(chain, address)`.
 14. **Monitor triggers.** Large transfers: `CreatedOrder.order.giveAmount` and `FulfilledOrder.actualFulfillAmount` priced per token. Drains: `ClaimedUnlock` or `ClaimedOrderCancel` without a matching order, and `CriticalMismatchChainId`. Admin: `Upgraded`, `AdminChanged`, `RoleGranted` / `RoleRevoked`, `Paused` / `Unpaused`, `SetDlnDestinationAddress`, `SetDlnSourceAddress`, `ExternalCallAdapterUpdated`, `ExecutorUpdated`, router `rescueFunds` calls.
 
 ---
 
-## 9. Quick-copy detection constants (bytea-ready for PG)
+## 10. Quick-copy detection constants (bytea-ready for PG)
 
 ```
 -- ===== DlnSource topics =====
@@ -439,6 +455,7 @@ POLY_DLN_SOURCE                    = '\xef4fb24ad0916217251f553c0596f8edc630eb66
 BNB_DLN_SOURCE                     = '\xef4fb24ad0916217251f553c0596f8edc630eb66'
 AVAX_DLN_SOURCE                    = '\xef4fb24ad0916217251f553c0596f8edc630eb66'
 RH_DLN_SOURCE                      = '\xef4fb24ad0916217251f553c0596f8edc630eb66'
+ARC_DLN_SOURCE                     = '\xef4fb24ad0916217251f553c0596f8edc630eb66'
 ETH_DLN_DESTINATION                = '\xe7351fd770a37282b91d153ee690b63579d6dd7f'
 BASE_DLN_DESTINATION               = '\xe7351fd770a37282b91d153ee690b63579d6dd7f'
 ARB_DLN_DESTINATION                = '\xe7351fd770a37282b91d153ee690b63579d6dd7f'
@@ -447,6 +464,7 @@ POLY_DLN_DESTINATION               = '\xe7351fd770a37282b91d153ee690b63579d6dd7f
 BNB_DLN_DESTINATION                = '\xe7351fd770a37282b91d153ee690b63579d6dd7f'
 AVAX_DLN_DESTINATION               = '\xe7351fd770a37282b91d153ee690b63579d6dd7f'
 RH_DLN_DESTINATION                 = '\xe7351fd770a37282b91d153ee690b63579d6dd7f'
+ARC_DLN_DESTINATION                = '\xe7351fd770a37282b91d153ee690b63579d6dd7f'
 ETH_DBR_ROUTER                     = '\x663dc15d3c1ac63ff12e45ab68fea3f0a883c251'
 BASE_DBR_ROUTER                    = '\x663dc15d3c1ac63ff12e45ab68fea3f0a883c251'
 ARB_DBR_ROUTER                     = '\x663dc15d3c1ac63ff12e45ab68fea3f0a883c251'
@@ -455,6 +473,7 @@ POLY_DBR_ROUTER                    = '\x663dc15d3c1ac63ff12e45ab68fea3f0a883c251
 BNB_DBR_ROUTER                     = '\x663dc15d3c1ac63ff12e45ab68fea3f0a883c251'
 AVAX_DBR_ROUTER                    = '\x663dc15d3c1ac63ff12e45ab68fea3f0a883c251'
 RH_DBR_ROUTER                      = '\x663dc15d3c1ac63ff12e45ab68fea3f0a883c251'
+ARC_DBR_ROUTER                     = '\x663dc15d3c1ac63ff12e45ab68fea3f0a883c251'
 ETH_DLN_EXT_CALL_ADAPTER           = '\x61ef2e01e603aeb5cd96f9ec9ae76cc6a68f6cf9'
 BASE_DLN_EXT_CALL_ADAPTER          = '\x61ef2e01e603aeb5cd96f9ec9ae76cc6a68f6cf9'
 ARB_DLN_EXT_CALL_ADAPTER           = '\x61ef2e01e603aeb5cd96f9ec9ae76cc6a68f6cf9'
@@ -463,6 +482,7 @@ POLY_DLN_EXT_CALL_ADAPTER          = '\x61ef2e01e603aeb5cd96f9ec9ae76cc6a68f6cf9
 BNB_DLN_EXT_CALL_ADAPTER           = '\x61ef2e01e603aeb5cd96f9ec9ae76cc6a68f6cf9'
 AVAX_DLN_EXT_CALL_ADAPTER          = '\x61ef2e01e603aeb5cd96f9ec9ae76cc6a68f6cf9'
 RH_DLN_EXT_CALL_ADAPTER            = '\xe93356b0b87c71a7f4957dcebed05befa8cb624a'
+ARC_DLN_EXT_CALL_ADAPTER           = '\xe93356b0b87c71a7f4957dcebed05befa8cb624a'
 ETH_DLN_EXT_CALL_EXECUTOR          = '\xae0361b1c3454b297129e01046057f1d294c7974'
 BASE_DLN_EXT_CALL_EXECUTOR         = '\xae0361b1c3454b297129e01046057f1d294c7974'
 ARB_DLN_EXT_CALL_EXECUTOR          = '\xae0361b1c3454b297129e01046057f1d294c7974'
@@ -471,6 +491,7 @@ POLY_DLN_EXT_CALL_EXECUTOR         = '\xae0361b1c3454b297129e01046057f1d294c7974
 BNB_DLN_EXT_CALL_EXECUTOR          = '\xae0361b1c3454b297129e01046057f1d294c7974'
 AVAX_DLN_EXT_CALL_EXECUTOR         = '\xae0361b1c3454b297129e01046057f1d294c7974'
 RH_DLN_EXT_CALL_EXECUTOR           = '\x05bd82dbb7c5c2cf571112bd1ad4e7c02e10ebea'
+ARC_DLN_EXT_CALL_EXECUTOR          = '\x05bd82dbb7c5c2cf571112bd1ad4e7c02e10ebea'
 -- ProxyAdmins and upgrade owners
 ETH_DLN_PROXY_ADMIN                = '\xa7b88a746fa457578d5abd6234471f07d895f46b'
 ETH_DBR_ROUTER_PROXY_ADMIN         = '\xc86ab72dc6da7ef91a96650f3bc23125cd997130'
@@ -484,12 +505,13 @@ RH_DBR_ROUTER_PROXY_ADMIN          = '\x27014043522edcf5227b54e64be668af75169b3e
 RH_DLN_ADAPTER_PROXY_ADMIN         = '\x0e42d9f52ef8feedf8f6792d9fb9766e0caf0b26'
 RH_DLN_UPGRADE_OWNER_EOA           = '\xbda458dfc28021debd72060671fc350fa5cb39e5'
 RH_DBR_ROUTER_UPGRADE_OWNER_EOA    = '\xfd830dd9b446c9b880b32a03fb9a750aae4a68aa'
+-- Arc: the four ProxyAdmins and both owner EOAs are the RH_ values above.
 ETH_DLN_DELEGATED_CANCEL_EOA       = '\x0746e7e4d15f30885616b4ac3d274393354e80c0'
 ```
 
 ---
 
-## 10. Verification & sources
+## 11. Verification & sources
 
 How the constants were verified (2026-09-29):
 

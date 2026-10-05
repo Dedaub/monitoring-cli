@@ -1,18 +1,19 @@
-# Tessera ("Tessera V") — Topics, Selectors, Addresses (EVM: Base + BNB Chain)
+# Tessera ("Tessera V") — Topics, Selectors, Addresses (EVM: Base + BNB Chain + Robinhood Chain)
 
-**Status:** verified against live RPC (publicnode), the **verified Blockscout source** of `TesseraSwap` on Base, locally-recomputed keccak topic0/selectors, and DefiLlama's own volume adapter, on **2026-06-05**.
-**Scope:** Tessera is a Wintermute-operated **proprietary / "dark" oracle-priced AMM**. Its primary venue is **Solana** (program `TessVdML9pBGgG9yGks7o4HewRaXVAMuoVj4x83GLQH`, branded "Tessera V", live on Jupiter since 2025‑06). On **EVM** it is deployed as a single immutable settlement contract, `TesseraSwap`, on exactly **two** chains:
+**Status:** verified against live RPC (publicnode), the **verified Blockscout source** of `TesseraSwap` on Base, locally-recomputed keccak topic0/selectors, and DefiLlama's own volume adapter, on **2026-06-05**. Robinhood Chain (4663) and Arc (5042) checked on-chain 2026-10-05.
+**Scope:** Tessera is a Wintermute-operated **proprietary / "dark" oracle-priced AMM**. Its primary venue is **Solana** (program `TessVdML9pBGgG9yGks7o4HewRaXVAMuoVj4x83GLQH`, branded "Tessera V", live on Jupiter since 2025‑06). On **EVM** it is deployed as a single immutable settlement contract, `TesseraSwap`, on **three** chains (Robinhood Chain added 2026-09-03):
 
 | Chain | Chain ID | TesseraSwap | Live since | Verified |
 |-------|----------|-------------|-----------|----------|
 | **Base** | 8453 | `0x55555522005BcAE1c2424D474BfD5ed477749E3e` | block 37,518,648 · **2025‑10‑30** | yes (Blockscout, "TesseraSwap") |
 | **BNB Smart Chain** | 56 | `0x55555522005BcAE1c2424D474BfD5ed477749E3e` | **≈2025‑11‑13** (DefiLlama adapter start) | bytecode byte‑identical to Base |
+| **Robinhood Chain** | 4663 | `0x55555522005BcAE1c2424D474BfD5ed477749E3e` | block 53,706,462 · **2026‑09‑03** | same 4,265 B code as Base except the solc metadata (0.8.36 vs 0.8.30) |
 
-> **Not deployed (verified `eth_getCode → 0x`) on the other 5 requested chains** — Ethereum (1), Avalanche C‑Chain (43114), Arbitrum One (42161), Optimism (10), Polygon PoS (137) — **nor on 20 other EVM chains swept**: Unichain, Berachain, Mantle, Linea, Scroll, Blast, Sei, Sonic, opBNB, Gnosis, Celo, Mode, Polygon zkEVM, Fantom, Ink, HyperEVM, Katana, Plume, Abstract, Worldchain. The vanity address `0x5555…9E3e` has **no code** on any of them. It is a **CREATE2-mined vanity address** (a non-vanity deployer EOA cannot produce a `0x55555522…` address via plain `CREATE`), so a future expansion will almost certainly reuse the **same address** on the new chain — a cheap `eth_getCode` poll at `0x5555…9E3e` is the early-warning tripwire.
+> **Not deployed (verified `eth_getCode → 0x`) on the other requested chains** — Ethereum (1), Avalanche C‑Chain (43114), Arbitrum One (42161), Optimism (10), Polygon PoS (137), Arc (5042, checked 2026-10-05) — **nor on 20 other EVM chains swept**: Unichain, Berachain, Mantle, Linea, Scroll, Blast, Sei, Sonic, opBNB, Gnosis, Celo, Mode, Polygon zkEVM, Fantom, Ink, HyperEVM, Katana, Plume, Abstract, Worldchain. The vanity address `0x5555…9E3e` has **no code** on any of them. It is a **CREATE2-mined vanity address** (a non-vanity deployer EOA cannot produce a `0x55555522…` address via plain `CREATE`), so a future expansion will almost certainly reuse the **same address** on the new chain (Robinhood Chain did, 2026-09-03) — a cheap `eth_getCode` poll at `0x5555…9E3e` is the early-warning tripwire.
 
 This is **not** a Uniswap-style multi-contract, multi-version system. The entire EVM surface is:
 
-1. **`TesseraSwap`** — a ~4.3 KB immutable, non-proxy settlement shell (the only thing that emits events). Same address + byte-identical bytecode on Base and BSC.
+1. **`TesseraSwap`** — a ~4.3 KB immutable, non-proxy settlement shell (the only thing that emits events). Same address + byte-identical bytecode on Base and BSC; same address and logic on Robinhood Chain (only the solc metadata differs).
 2. **`TesseraEngine`** (`ITesseraEngine`) — an **unverified** ~15.6 KB pricing brain that `TesseraSwap` delegates all quoting to. Hot-swappable via `changeTesseraEngine`. Emits **no events** (price updates are pure storage writes — fully "dark").
 3. **`tesseraTreasury`** — the market-maker inventory account that funds every fill (grants ~infinite ERC-20 allowance to `TesseraSwap`).
 4. **`tesseraOwner`** — a **Gnosis Safe** multisig (per chain) that owns both the swap and the engine.
@@ -113,18 +114,29 @@ All verified via `eth_getCode` on `https://bsc-rpc.publicnode.com`. **TesseraSwa
 | **tesseraTreasury** | `0x3DbE077E7986657E95e1CC50089F17a5a4Af0aaE` | Same as Base (slot1 identical on-chain). |
 | **tesseraOwner / multiSigOwner** (admin) | `0xae3C0084CA8cD758E220a61152ea80c1Ac2BfF74` | **Per-chain** Gnosis Safe (`SafeProxy`, 171 B). Differs from Base. |
 
+## 4a. Addresses — Robinhood Chain (chain ID 4663)
+
+Verified via `eth_getCode` on `https://robinhood-rpc.publicnode.com` and storage slots 0/1/2 read live (2026-10-05). Deployed by the same EOA as on Base (`0xbf2cCF4f…`), block 53,706,462 (2026-09-03). Live: 45,922 `TesseraTrade` logs in the 24 h to 2026-10-05 10:32 UTC. **Engine shares the Base/BSC address; treasury and owner Safe are chain-specific.**
+
+| Role | Address | One-liner |
+|------|---------|-----------|
+| **TesseraSwap** | `0x55555522005BcAE1c2424D474BfD5ed477749E3e` | 4,265 B; logic identical to Base (CBOR metadata differs). Emits `TesseraTrade`. |
+| **TesseraEngine** | `0x31e99e05Fee3DcE580Af777c3Fd63ee1B3B40c17` | 15,609 B; slot0 of TesseraSwap; `isActive()` = true; deployed block 53,706,502. |
+| **tesseraTreasury** | `0x907d1D174569b11624bdcEfD20dcEF27600237f8` | 3,981 B; slot1 of TesseraSwap. **Differs from Base/BSC.** |
+| **tesseraOwner / multiSigOwner** (admin) | `0xAbA438f6A3772c31BA5816f353323023c4B0b8C6` | Gnosis Safe (`SafeProxy`, 171 B); slot2 = engine `multiSigOwner()`. **Differs from Base/BSC.** |
+
 ---
 
 ## 5. Cross-chain summary & "versions"
 
-| | Solana (primary) | Base (8453) | BNB Chain (56) | ETH / Avax / Arb / OP / Polygon |
-|---|---|---|---|---|
-| Present | **yes** (program `TessVdML…3GLQH`) | yes | yes | **no** (verified `0x`) |
-| Live since | 2025‑06‑11 (Jupiter) | 2025‑10‑30 | ≈2025‑11‑13 | — |
-| Settlement contract | Solana program | `TesseraSwap 0x5555…9E3e` | `TesseraSwap 0x5555…9E3e` | — |
-| Engine | (program logic) | `0x31e9…0c17` | `0x31e9…0c17` (same) | — |
-| Treasury | — | `0x3DbE…0aaE` | `0x3DbE…0aaE` (same) | — |
-| Owner Safe | — | `0xdbd3…b5C6` | `0xae3C…fF74` (different) | — |
+| | Solana (primary) | Base (8453) | BNB Chain (56) | Robinhood (4663) | ETH / Avax / Arb / OP / Polygon / Arc |
+|---|---|---|---|---|---|
+| Present | **yes** (program `TessVdML…3GLQH`) | yes | yes | yes | **no** (verified `0x`) |
+| Live since | 2025‑06‑11 (Jupiter) | 2025‑10‑30 | ≈2025‑11‑13 | 2026‑09‑03 | — |
+| Settlement contract | Solana program | `TesseraSwap 0x5555…9E3e` | `TesseraSwap 0x5555…9E3e` | `TesseraSwap 0x5555…9E3e` | — |
+| Engine | (program logic) | `0x31e9…0c17` | `0x31e9…0c17` (same) | `0x31e9…0c17` (same) | — |
+| Treasury | — | `0x3DbE…0aaE` | `0x3DbE…0aaE` (same) | `0x907d…37f8` (different) | — |
+| Owner Safe | — | `0xdbd3…b5C6` | `0xae3C…fF74` (different) | `0xAbA4…b8C6` (different) | — |
 
 **On "versions":** the Solana brand is "Tessera **V**". On EVM the contract is plainly `TesseraSwap` with **no on-chain version suffix**, and there is currently **one live version** per chain. Upgrades happen two ways, neither of which is a proxy upgrade:
 - **Engine rotation** — `changeTesseraEngine` repoints `TesseraSwap` to a new `ITesseraEngine` without redeploying the swap (the engine is where pricing "versions" live).
@@ -146,7 +158,7 @@ Mutability is achieved by **pointer swaps in storage** (`changeTesseraEngine`, `
 
 ## 7. Detection invariants & gotchas (monitoring-grade)
 
-- **One event, two chains, one address.** Watch `topic0 0x97ba0cd8…bad6a` at `0x55555522005BcAE1c2424D474BfD5ed477749E3e` on Base (8453) **and** BSC (56). That captures 100% of EVM trade flow.
+- **One event, three chains, one address.** Watch `topic0 0x97ba0cd8…bad6a` at `0x55555522005BcAE1c2424D474BfD5ed477749E3e` on Base (8453), BSC (56) **and** Robinhood Chain (4663). That captures 100% of EVM trade flow.
 - **Decode `data`, not topics** — all 5 fields are non-indexed. Layout: `[tokenIn][tokenOut][amountIn][amountOut][recipient]`, each a 32-byte word; addresses in the low 20 bytes.
 - **The treasury is the counterparty.** `tokenOut` leaves `tesseraTreasury`; `tokenIn` arrives at it. For drain/inventory alerts, watch the treasury's balances and its allowance to `TesseraSwap` (currently ~`MaxUint256`). A sudden allowance revoke or treasury balance collapse is the meaningful signal — not the swap contract's own balance (it holds ~nothing between calls).
 - **Trades usually arrive via aggregators**, so `tx.to` is typically a 1inch/0x/Bebop/router contract, with Tessera as one inner leg (`TesseraTrade` is one of many logs in the receipt). Don't expect `tx.to == TesseraSwap`. The callback variant (`0x15b8527c`) lets integrators repay flash-style.
@@ -154,7 +166,7 @@ Mutability is achieved by **pointer swaps in storage** (`changeTesseraEngine`, `
 - **The engine is dark and eventless.** Price/oracle updates happen as silent storage writes; `isActive()` and `killContract()`/`unkillContract()` (pause) flip with **no log**. Poll `isActive()` (selector `0x22f3e2d4`) on `0x31e9…0c17`, or watch Safe→engine transactions, to detect a pause/kill.
 - **Priority-fee gate:** `globalPrioFeeThresholddd1337()` = 2 gwei — Tessera swaps are engineered to be top-of-block; low-priority-fee fills may revert.
 - **`getAllTesseraPools()` returns zero-code addresses** — internal pricing buckets, not deployable contracts. Don't treat them as monitored targets.
-- **No deployment on ETH / Avalanche / Arbitrum / Optimism / Polygon** as of 2026‑06‑05. Any future appearance should reuse `0x5555…9E3e` (deterministic) — a cheap `eth_getCode` poll on those chains is the early-warning tripwire.
+- **No deployment on ETH / Avalanche / Arbitrum / Optimism / Polygon** as of 2026‑06‑05, nor on Arc as of 2026-10-05. Any future appearance should reuse `0x5555…9E3e` (deterministic) — a cheap `eth_getCode` poll on those chains is the early-warning tripwire.
 
 ---
 
@@ -164,14 +176,16 @@ Mutability is achieved by **pointer swaps in storage** (`changeTesseraEngine`, `
 -- topic0 (the only Tessera event)
 TesseraTrade            = '\x97ba0cd8ff13f074b3b1aeace7fa3bf7fe54bdf2d728b6a097e901073b2bad6a'
 
--- addresses (lowercase, no 0x) — Base (8453) AND BNB Chain (56) unless noted
-TesseraSwap             = '\x55555522005bcae1c2424d474bfd5ed477749e3e'   -- both chains, identical bytecode
-TesseraEngine           = '\x31e99e05fee3dce580af777c3fd63ee1b3b40c17'   -- both chains
+-- addresses (lowercase, no 0x) — Base (8453) AND BNB Chain (56) unless noted; Robinhood (4663) shares swap + engine only
+TesseraSwap             = '\x55555522005bcae1c2424d474bfd5ed477749e3e'   -- Base, BSC, Robinhood
+TesseraEngine           = '\x31e99e05fee3dce580af777c3fd63ee1b3b40c17'   -- Base, BSC, Robinhood
 tesseraTreasury         = '\x3dbe077e7986657e95e1cc50089f17a5a4af0aae'   -- both chains (current)
 tesseraTreasury_orig    = '\xc2ca2485618af14135e79487492c3a4f2a062ed5'   -- Base deploy-time (rotated out)
 tesseraOwner_base_safe  = '\xdbd31ea3de20a2b36a5bd36c7167699f2450b5c6'   -- Base Gnosis Safe (admin)
 tesseraOwner_bsc_safe   = '\xae3c0084ca8cd758e220a61152ea80c1ac2bff74'   -- BSC  Gnosis Safe (admin)
-deployer_base           = '\xbf2ccf4f2fb47e2159c9f86cb4d4956aa53b64cf'   -- Base deployer EOA
+deployer_base           = '\xbf2ccf4f2fb47e2159c9f86cb4d4956aa53b64cf'   -- Base deployer EOA (also deployed the Robinhood swap + engine)
+tesseraTreasury_rh      = '\x907d1d174569b11624bdcefd20dcef27600237f8'   -- Robinhood treasury
+tesseraOwner_rh_safe    = '\xaba438f6a3772c31ba5816f353323023c4b0b8c6'   -- Robinhood Gnosis Safe (admin)
 
 -- TesseraSwap function selectors
 tesseraSwapWithAllowances = '\x3ae8b298'
@@ -211,4 +225,4 @@ engine_multiSigOwner      = '\x0329dd62'
 **Caveats:**
 - `TesseraEngine`, `tesseraTreasury`, and the deeper pricing logic are **unverified by design** ("dark"). Selector names beyond the resolved set are best-effort (openchain + keccak recomputation); ~30 engine selectors remain unnamed custom logic.
 - BSC deploy date (≈2025‑11‑13) is from the DefiLlama adapter `start`; a free BscScan/Blockscout creation-tx lookup was not available without an API key, but the byte-identical bytecode and identical engine/treasury confirm it is the same deployment.
-- This is a fast-moving 2025‑Q4 deployment; re-poll `eth_getCode` on the 5 absent chains and re-read storage slots 0/1 (engine/treasury) periodically.
+- This is a fast-moving deployment (Robinhood Chain added 2026-09-03); re-poll `eth_getCode` on the absent chains and re-read storage slots 0/1 (engine/treasury) periodically.

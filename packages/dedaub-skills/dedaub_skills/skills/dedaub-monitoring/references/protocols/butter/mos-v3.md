@@ -1,6 +1,6 @@
-# Butter Network — MAP Omnichain Service V3 (MOS V3) — Topics, Selectors, Addresses (Ethereum, Base, BNB, Avalanche, Arbitrum, Optimism, Polygon, Robinhood Chain + MAP relay)
+# Butter Network — MAP Omnichain Service V3 (MOS V3) — Topics, Selectors, Addresses (Ethereum, Base, BNB, Avalanche, Arbitrum, Optimism, Polygon, Robinhood Chain, Arc + MAP relay)
 
-**Status:** verified against live RPC on Ethereum (1), Base (8453), BNB (56), Avalanche (43114), Arbitrum One (42161), Optimism (10), Polygon PoS (137), the MAP relay chain (MAPO, 22776), and the canonical `butternetwork/butter-mos-contracts` (`evmv3/`) repo on 2026-06-09. Extended on 2026-09-29: Robinhood Chain (4663), the current bridge implementations on all eight chains, and the deprecated **OmniService v3.0** `0x000030fB6c4701389B05F124F6fFd4C862CF1eF9` (canonical `butternetwork/omniservice-contracts` repo).
+**Status:** verified against live RPC on Ethereum (1), Base (8453), BNB (56), Avalanche (43114), Arbitrum One (42161), Optimism (10), Polygon PoS (137), the MAP relay chain (MAPO, 22776), and the canonical `butternetwork/butter-mos-contracts` (`evmv3/`) repo on 2026-06-09. Extended on 2026-09-29: Robinhood Chain (4663), the current bridge implementations on all eight chains, and the deprecated **OmniService v3.0** `0x000030fB6c4701389B05F124F6fFd4C862CF1eF9` (canonical `butternetwork/omniservice-contracts` repo). Extended on 2026-10-05 with Arc (5042).
 **Scope:** the **current** MAP Omnichain Service bridge (v3.1) — `Bridge` on spoke chains, `BridgeAndRelay` on the MAP relay, plus `FeeService`, `AuthorityManager`, and the relay-only `TokenRegisterV3` / `VaultTokenV3` — and its deprecated message-only predecessor, OmniService v3.0 (§1.7, §2.5). Topics + selectors are **chain-agnostic**; addresses are network-specific (and largely **identical across chains** by deterministic deploy — always key on `(chainId, address)`). The legacy MOS V2 bridge is documented separately in [mos-v2.md](mos-v2.md); the user-facing router layer in [router.md](router.md).
 
 MOS V3 is the **value-transport core** of Butter Network. It is a hub-and-spoke design: every cross-chain transfer routes through the **MAP relay chain (MAPO, EVM chainId 22776)**. On a **spoke** chain the deployed implementation is `Bridge`; on the **relay** it is `BridgeAndRelay` (which additionally holds the token vaults, fee distribution, and light-client proof verification). Both inherit the same `BridgeAbstract` base, so the **core cross-chain events (`MessageOut`, `MessageIn`, `MessageRelay`) and the `swapOutToken` entrypoint are identical on every chain**.
@@ -21,7 +21,7 @@ dest spoke:    light-client verify  → Bridge.messageIn        → emit Message
 
 | Contract | Role | Where | Proxy? |
 |----------|------|-------|--------|
-| **Bridge** (`Bridge.sol`) | Spoke-chain MOS endpoint. `swapOutToken` (lock/burn out), `messageIn` (verify+release). Emits `MessageOut`/`MessageIn`. | every spoke (all 8 targets, Robinhood Chain included) | UUPS proxy `0x0000317Bec33Af037b5fAb2028f52d14658F6A56` |
+| **Bridge** (`Bridge.sol`) | Spoke-chain MOS endpoint. `swapOutToken` (lock/burn out), `messageIn` (verify+release). Emits `MessageOut`/`MessageIn`. | every spoke (all 8 targets, Robinhood Chain included, plus Arc 5042) | UUPS proxy `0x0000317Bec33Af037b5fAb2028f52d14658F6A56` |
 | **OmniService v3.0** (`OmniService.sol`, `butternetwork/omniservice-contracts`) | **Deprecated** message-only predecessor ("v3.0 (deprecated)" in the official list). `messageOut`/`transferOut` (source), `transferInWithIndex` (destination). Emits its own `MessageOut`/`MessageIn` shapes (§1.7). | Ethereum, BNB, Polygon of the 8 targets (the repo's `evm/deployments/deployments.json` also lists MAPO, Merlin and a zkSync literal) | UUPS proxy `0x000030fB6c4701389B05F124F6fFd4C862CF1eF9` |
 | **BridgeAndRelay** (`BridgeAndRelay.sol`) | MAP-relay MOS endpoint. Adds vault settlement, fee split (`CollectFee`), chain registry, `relayExecute`, `messageIn`+`MessageRelay`. | MAP relay (22776) only | UUPS proxy `0x0000317Bec…` (same addr, different impl) |
 | **FeeService** (`FeeService.sol`) | Per-destination-chain message/gas fee quoting (`getNativeFee`). | all chains | non-proxy (3.2 KB) |
@@ -33,6 +33,8 @@ dest spoke:    light-client verify  → Bridge.messageIn        → emit Message
 > **Avalanche note:** MOS V3 is **fully deployed** on Avalanche (bridge + authority + feeService all present), even though the *router* layer is only partially deployed there (see router.md).
 >
 > **Robinhood Chain note:** MOS V3 is **fully deployed** on Robinhood Chain (4663) at the same three literals (§4.1), and the official v3.1 list names it. The Robinhood bridge carried 9 `MessageOut` and 22 `MessageIn` in the pinned 12-hour window 2026-09-28 00:00–12:00 UTC.
+>
+> **Arc note:** MOS V3 is **fully deployed** on Arc (5042) at the same three literals (§4.2), with its own bridge impl. It carried 4 `MessageOut` and 10 `MessageIn` in the window 2026-10-04 11:50 – 2026-10-05 10:23 UTC.
 
 ---
 
@@ -166,11 +168,11 @@ All verified via `eth_getCode` returning non-empty bytecode on `https://ethereum
 
 **Not deployed on Ethereum:** `BridgeAndRelay`, `TokenRegisterV3`, `VaultTokenV3`, `DepositWhitelist`, `ProtocolFee` — these are **MAP-relay-only** (§7). The Ethereum bridge runs the spoke `Bridge` impl, not `BridgeAndRelay`.
 
-## 4. Addresses — Base (8453), BNB (56), Avalanche (43114), Arbitrum (42161), Optimism (10), Polygon (137), Robinhood Chain (4663)
+## 4. Addresses — Base (8453), BNB (56), Avalanche (43114), Arbitrum (42161), Optimism (10), Polygon (137), Robinhood Chain (4663), Arc (5042)
 
 Verified via `eth_getCode` on each chain's publicnode RPC (Robinhood Chain: `https://rpc.mainnet.chain.robinhood.com`; all eight chains re-checked on 2026-09-29). **Bridge, AuthorityManager, FeeService share the exact Ethereum literals on all seven** — shown once:
 
-| Role | Address (identical on all 8 targets) |
+| Role | Address (identical on all 8 targets and Arc) |
 |------|--------------------------------------|
 | Bridge (proxy) | `0x0000317Bec33Af037b5fAb2028f52d14658F6A56` |
 | AuthorityManager | `0xACC31A6756B60304C03d6626fc98c062E4539CCA` |
@@ -188,8 +190,9 @@ Per-chain **divergence is only the bridge implementation** (read live from the E
 | Optimism | 10 | `0xa11293e174f33ef794f03d70daf5cc7b2c2e96b9` (was `0x7912e89440e57352302d30730849268eb863ece4` on 2026-06-09) | 16436 B | 3217 B |
 | Polygon | 137 | `0x774444afb39a9555e9a70e60d7eb20b73f822716` | 16436 B | 3197 B |
 | Robinhood Chain | 4663 | `0xf1d15f0e7a7d56168010cd454bd4541603bbeed4` (same literal as Avalanche, different bytecode) | 16436 B | 3217 B |
+| Arc | 5042 | `0x630105189c7114667a7179aa57f07647a5f42b7f` (read 2026-10-05) | 16436 B | 3217 B |
 
-All seven run the spoke `Bridge` impl (not `BridgeAndRelay`). **No relay-only contracts** (`BridgeAndRelay`, `TokenRegisterV3`, `VaultTokenV3`) on any of the eight targets — those live exclusively on MAPO.
+All of them run the spoke `Bridge` impl (not `BridgeAndRelay`). **No relay-only contracts** (`BridgeAndRelay`, `TokenRegisterV3`, `VaultTokenV3`) on any of the eight targets or Arc — those live exclusively on MAPO.
 
 ### 4.1 Robinhood Chain (chain ID 4663)
 
@@ -203,7 +206,19 @@ Listed in the official "Deployed Contracts" v3.1 table of the Butter Omnichain S
 
 **Not deployed on Robinhood Chain:** OmniService v3.0 `0x000030fB6c4701389B05F124F6fFd4C862CF1eF9` and the MOS V2 contracts (`eth_getCode` = `0x`, nonce 0). The router layer on Robinhood Chain is in [router.md](router.md) §4.1. MOS identifies Robinhood Chain by its EVM chain id 4663 inside `chainAndGasLimit` (a sampled `MessageOut` packs `fromChain` 4663, `toChain` 56).
 
-### 4.2 OmniService v3.0 (deprecated) — per-chain presence
+### 4.2 Arc (chain ID 5042)
+
+Verified with `eth_getCode` on `https://rpc.mainnet.arc.io` on 2026-10-05. The three MOS V3 literals have the same code hashes as on Robinhood Chain.
+
+| Role | Address | One-liner |
+|------|---------|-----------|
+| **Bridge** (UUPS proxy, 133 B) | `0x0000317Bec33Af037b5fAb2028f52d14658F6A56` | Spoke MOS endpoint. Impl `0x630105189c7114667a7179aa57f07647a5f42b7f` (16436 B); admin slot `0x0`; `authority()` = `0xACC31A6756B60304C03d6626fc98c062E4539CCA`. 4 `MessageOut` / 10 `MessageIn` in the window 2026-10-04 11:50 – 2026-10-05 10:23 UTC (`eth_getLogs`). |
+| **AuthorityManager** (9905 B) | `0xACC31A6756B60304C03d6626fc98c062E4539CCA` | OZ AccessManager. |
+| **FeeService** (3217 B) | `0xfeE31a1FD7FcA0E05428ff751242e46F6D5769a6` | Fee quoting. |
+
+**Not deployed on Arc** (`eth_getCode` = `0x`): OmniService v3.0 `0x000030fB6c4701389B05F124F6fFd4C862CF1eF9` and the MOS V2 proxy `0xfeB2b97e4Efce787c08086dC16Ab69E063911380`. The router layer on Arc is in [router.md](router.md) §4.2.
+
+### 4.3 OmniService v3.0 (deprecated) — per-chain presence
 
 | Chain | `0x000030fB6c4701389B05F124F6fFd4C862CF1eF9` | Impl (EIP-1967) |
 |---|---|---|
@@ -211,6 +226,7 @@ Listed in the official "Deployed Contracts" v3.1 table of the Butter Omnichain S
 | BNB | ✓ 177 B proxy | `0xae5369a8bcf205aefb315cea35c9f7fd8d512bf3` (20664 B, different code hash from Ethereum) |
 | Polygon | ✓ 177 B proxy | `0x163139e57245c4327ea97cc309355d4e91eff740` (20664 B) |
 | Base, Arbitrum, Optimism, Avalanche, Robinhood Chain | ✗ `eth_getCode` = `0x`, nonce 0 | — |
+| Arc | ✗ `eth_getCode` = `0x` | — |
 
 The official omnichain "Deployed Contracts" page lists v3.0 on Base, Optimism and Arbitrum too, but no code exists at that literal on those three chains; the repo's `deployments.json` lists this literal for Ethereum, BNB, Polygon, Merlin and MAPO (and a different literal for zkSync), which matches the chain state on the eight targets.
 
@@ -226,6 +242,7 @@ The official omnichain "Deployed Contracts" page lists v3.0 on Base, Optimism an
 | Optimism | 10 | ✓ | ✓ | ✓ | ✗ (listed in docs, no code) | — |
 | Polygon | 137 | ✓ | ✓ | ✓ | ✓ (deprecated) | — |
 | **Robinhood Chain** | **4663** | ✓ (spoke `Bridge`, impl `0xf1d15f0e7a7d56168010cd454bd4541603bbeed4`) | ✓ | ✓ | ✗ | — |
+| **Arc** | **5042** | ✓ (spoke `Bridge`, impl `0x630105189c7114667a7179aa57f07647a5f42b7f`) | ✓ | ✓ | ✗ | — |
 | **MAP relay (MAPO)** | **22776** | ✓ (`BridgeAndRelay`) | ✓ | ✓ | listed (not checked) | TokenRegisterV3, VaultTokenV3 (×many), DepositWhitelist, ProtocolFee |
 
 **Vanity-address tell:** the bridge `0x0000317Bec33Af037b5fAb2028f52d14658F6A56` has six leading hex zeros — distinctive in any tx/log scan. Same literal everywhere ⇒ **always key on `(chainId, address)`**.
@@ -274,7 +291,7 @@ Live impls per chain are in §4. **Read the EIP-1967 slot live — never hard-co
 
 1. **`MessageOut` (source) and `MessageIn` (destination) are the bridge's two halves**, joined by `orderId` (bytes32, indexed topic1). A complete transfer = `MessageOut` on chain A → `MessageRelay` on MAPO → `MessageIn` on chain B. Index all three by `orderId`.
 2. **`chainAndGasLimit` (indexed topic2 on MessageOut/In/Relay) is a packed uint256**, not a chain id: `fromChain<<192 | toChain<<128 | reserved<<64 | gasLimit`. Decode before using.
-3. **The bridge address is the SAME literal `0x0000317Bec33Af037b5fAb2028f52d14658F6A56` on all 8 targets + MAPO** but a different deployment each — key on `(chainId, address)`. Its leading zeros are a reliable scan tell.
+3. **The bridge address is the SAME literal `0x0000317Bec33Af037b5fAb2028f52d14658F6A56` on all 8 targets + Arc + MAPO** but a different deployment each — key on `(chainId, address)`. Its leading zeros are a reliable scan tell.
 4. **Per-chain implementation behind one proxy address.** Don't assume the impl is constant; spokes run `Bridge`, MAPO runs `BridgeAndRelay`. Reading code at the proxy is fine; reading the *impl* requires the EIP-1967 slot per chain.
 5. **The real user is `initiator`/`from`, not `msg.sender`.** `swapOutToken` is called by a Router; `messageIn` is called by a relayer/keeper. Attribute by the event fields (`MessageIn.to`, `MessageIn.from`, `MessageTransfer.initiator`), never `tx.from`.
 6. **`MessageIn.result` (bool) + `reason` (bytes)** tell you whether the destination execution succeeded. A `MessageIn` with `result=false` is a *failed* delivery (funds may be parked in the Receiver's failed-store) — treat as an alert, not a success.
@@ -285,7 +302,7 @@ Live impls per chain are in §4. **Read the EIP-1967 slot live — never hard-co
 11. **Avalanche carries the full MOS V3** (bridge + authority + feeService) despite a *partial router* footprint there — do not infer "Butter absent on Avax" from the router layer.
 12. **`Withdraw` event misspells `receiver` as `reicerver`** in the source — cosmetic; the topic0 `0xf341246a…` is computed from the types, unaffected.
 13. **Value movement on the spokes is lock and release.** In the source tx the bridged token moves from the router to `0x0000317Bec33Af037b5fAb2028f52d14658F6A56` (e.g. USDT in Ethereum tx `0x7beb518ebcd3b87e6ac6a0f74f862dbc908e98e7f05fb30ef713e229af168b9c`), next to `MessageOut`. In the destination tx the bridge sends the token to `MessageIn.to` (a user, or the router-layer receiver that then swaps). `MessageIn.token` = `0x0000000000000000000000000000000000000000` means a native payout, which leaves no `Transfer` log: on Robinhood Chain the bridge burns WETH `0x0bd7d308f8e1639fab988df18a8011f41eacad73` (a `Transfer` to `0x0`) and sends ETH.
-14. **Robinhood Chain carries the full MOS V3** (bridge + authority + feeService) with the same event set; MOS uses the EVM chain id 4663 in `chainAndGasLimit`. The Robinhood bridge impl literal equals the Avalanche one, but the bytecode differs.
+14. **Robinhood Chain carries the full MOS V3** (bridge + authority + feeService) with the same event set; MOS uses the EVM chain id 4663 in `chainAndGasLimit`. The Robinhood bridge impl literal equals the Avalanche one, but the bytecode differs. **Arc (5042) also carries the full MOS V3** at the same literals (§4.2).
 15. **Two generations share names but not topics.** OmniService v3.0 `MessageOut`/`MessageIn` (`0x66e2de40f0c0fe334b556647c99aae36be85f9975cda26f72954d14f728e7dc9` / `0x5743fd96027a287fc1a99d67aa4269d509968bb2a86993992534af28d650f551`) index `fromChain`/`toChain` and put `orderId` in `data`; the v3.1 bridge events (`0x469059a9fd182ad3741bdd67b925e15056d35262609ea83393db7e8fb5a05ab1` / `0x13d3a5b2d6aaada5c31b5654f99c2ab9587cf9a53ee4b2e25b6c68a8dfaa4472`) index `orderId`. `MessageTransfer` has one topic0 for both, with 4 topics on v3.0 and 1 topic on v3.1. The v3.0 service emitted 0 logs on all eight chains in the pinned window.
 16. **`messageIn` is sent by a relayer, not by the user.** The sampled `messageIn` transactions on Ethereum, Base and Robinhood Chain all came from EOA `0xdb61db256a30f3ef46110b8e2520aaec0db08153`. Attribute the payout to `MessageIn.to`.
 
@@ -341,7 +358,7 @@ SEL_V30_TRANSFER_IN_VERIFIED = '\x58f8106f'
 EIP1967_IMPL_SLOT          = '\x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc'
 EIP1967_ADMIN_SLOT         = '\xb53127684a568b3173ae13b9f8a6016e243e63b6e8ee1178d6a717850b5d6103'
 
--- ===== Addresses (IDENTICAL literal on all 8 targets + MAPO; key on (chainId,addr)) =====
+-- ===== Addresses (IDENTICAL literal on all 8 targets + Arc + MAPO; key on (chainId,addr)) =====
 BUTTER_MOSV3_BRIDGE        = '\x0000317bec33af037b5fab2028f52d14658f6a56'   -- vanity leading-zero
 BUTTER_MOSV3_AUTHORITY     = '\xacc31a6756b60304c03d6626fc98c062e4539cca'
 BUTTER_MOSV3_FEESERVICE    = '\xfee31a1fd7fca0e05428ff751242e46f6d5769a6'
@@ -353,6 +370,11 @@ RH_MOSV3_BRIDGE            = '\x0000317bec33af037b5fab2028f52d14658f6a56'
 RH_MOSV3_AUTHORITY         = '\xacc31a6756b60304c03d6626fc98c062e4539cca'
 RH_MOSV3_FEESERVICE        = '\xfee31a1fd7fca0e05428ff751242e46f6d5769a6'
 
+-- ===== Arc (chain ID 5042) =====
+ARC_MOSV3_BRIDGE           = '\x0000317bec33af037b5fab2028f52d14658f6a56'
+ARC_MOSV3_AUTHORITY        = '\xacc31a6756b60304c03d6626fc98c062e4539cca'
+ARC_MOSV3_FEESERVICE       = '\xfee31a1fd7fca0e05428ff751242e46f6d5769a6'
+
 -- ===== Per-chain Bridge implementations (live 2026-06-09; re-read 2026-09-29) =====
 ETH_MOSV3_BRIDGE_IMPL      = '\x12bfb3b58ad02a0df40ee7186d26266c52d0109c'
 BASE_MOSV3_BRIDGE_IMPL     = '\x862761d6d52e9e812a8c22e6e6a39e186e59a33d'
@@ -363,6 +385,7 @@ OP_MOSV3_BRIDGE_IMPL       = '\xa11293e174f33ef794f03d70daf5cc7b2c2e96b9'   -- c
 OP_MOSV3_BRIDGE_IMPL_PREV  = '\x7912e89440e57352302d30730849268eb863ece4'   -- impl on 2026-06-09
 POLY_MOSV3_BRIDGE_IMPL     = '\x774444afb39a9555e9a70e60d7eb20b73f822716'
 RH_MOSV3_BRIDGE_IMPL       = '\xf1d15f0e7a7d56168010cd454bd4541603bbeed4'   -- same literal as Avalanche, different bytecode
+ARC_MOSV3_BRIDGE_IMPL      = '\x630105189c7114667a7179aa57f07647a5f42b7f'   -- read 2026-10-05
 
 -- ===== OmniService v3.0 implementations (deprecated) =====
 ETH_OMNISERVICE_V30_IMPL   = '\xae5369a8bcf205aefb315cea35c9f7fd8d512bf3'
@@ -388,9 +411,10 @@ Extension of 2026-09-29:
 
 - **Robinhood Chain:** the bridge, AuthorityManager and FeeService literals existence-checked with `eth_getCode` (same proxy code hash, same AuthorityManager code hash, same FeeService code hash as Ethereum); the EIP-1967 impl and admin slots and `authority()` read live; the impl bytecode scanned for the `MessageOut`/`MessageIn`/`Upgraded` topic0s and the `swapOutToken`/`messageIn`/`upgradeToAndCall` selectors. The official v3.1 table of the omnichain "Deployed Contracts" page lists Robinhood (4663) at `0x0000317Bec33Af037b5fAb2028f52d14658F6A56`.
 - **Implementations:** the EIP-1967 slot re-read on all eight chains; only Optimism changed since 2026-06-09 (§7).
-- **OmniService v3.0:** signatures from `butternetwork/omniservice-contracts` (`evm/contracts/interface/IMOSV3.sol`, `evm/contracts/abstract/OmniServiceCore.sol`, `evm/contracts/OmniService.sol`), hashed as `keccak256(sig)` and found as constants in the live implementation bytecode on Ethereum and Polygon; the Blockscout log list of the Ethereum proxy decodes `MessageOut`, `MessageIn` and `MessageTransfer` with the same field names. Presence checked with `eth_getCode` on all eight chains (§4.2).
+- **OmniService v3.0:** signatures from `butternetwork/omniservice-contracts` (`evm/contracts/interface/IMOSV3.sol`, `evm/contracts/abstract/OmniServiceCore.sol`, `evm/contracts/OmniService.sol`), hashed as `keccak256(sig)` and found as constants in the live implementation bytecode on Ethereum and Polygon; the Blockscout log list of the Ethereum proxy decodes `MessageOut`, `MessageIn` and `MessageTransfer` with the same field names. Presence checked with `eth_getCode` on all eight chains (§4.3).
 - **Activity** (`eth_getLogs`, pinned 12-hour window 2026-09-28 00:00–12:00 UTC, emitter `0x0000317Bec33Af037b5fAb2028f52d14658F6A56` on every chain): `MessageOut` — Ethereum 48, Base 26, Arbitrum 23, Optimism 0, Polygon 77, BNB 153, Avalanche 0, Robinhood 9. `MessageIn` — Ethereum 21, Base 8, Arbitrum 12, Optimism 0, Polygon 57, BNB 211, Avalanche 0, Robinhood 22. OmniService v3.0 `MessageOut`/`MessageIn`: 0 on all eight chains. These are 12-hour counts; a 0 does not show that a chain is unused.
 - **Sample transactions** (`eth_getTransactionReceipt`, `MessageIn` data decoded): Ethereum `0x5a53219d119559d174a02e3f3b24466688d8cde9e588e17b3a35c4b12f10e066` (`messageIn` by the relayer; USDC `Transfer` bridge → `MessageIn.to`; `fromChain` 22776, `toChain` 1); Robinhood `0x7fc7503851e04f57fcf2bec0b4bfca3820b21848a7415be39ac684d904875261` (`MessageOut`, `fromChain` 4663 → `toChain` 56) and `0x048dd79a5812c456d87fb53cf0c172aa1e3e3238693677c7fce6a65072d89f91` (`MessageIn` from X Layer 196, `token` = zero address, WETH burned at the bridge).
+- **Arc (2026-10-05):** the bridge, AuthorityManager and FeeService existence-checked with `eth_getCode` on `https://rpc.mainnet.arc.io` (same code hashes as Robinhood Chain); EIP-1967 impl and admin slots and `authority()` read live; activity counted with `eth_getLogs` over blocks ending 2026-10-05 10:23 UTC.
 - **Source disagreements:** the bridge-integration "Deployed Contracts" page and `evmv3/deployments/deploy.json` do not list Robinhood Chain, while the omnichain page does and the chain state confirms it. The omnichain page lists OmniService v3.0 on Base, Optimism and Arbitrum, where `eth_getCode` returns `0x`. The v3.1 omnichain table omits Avalanche, where the bridge has code and the bridge-integration page lists it.
 
 **Authoritative sources:**

@@ -1,7 +1,7 @@
 # EigenLayer Core (restaking) — Topics, Selectors, Addresses (Ethereum mainnet)
 
-**Status:** verified 2026-06-09 against Ethereum mainnet via `eth_getLogs` / `eth_getCode` / `eth_getStorageAt` / `eth_call` on `https://ethereum-rpc.publicnode.com`, the canonical `Layr-Labs/eigenlayer-contracts` source (`src/contracts/interfaces/*` on `main`) + its `script/configs/mainnet/mainnet-addresses.config.json` (lastUpdated `v1.4.1-mainnet-prooftra`, semver `v1.4.1`), and keccak-256 computed locally + cross-checked against live logs.
-**Scope:** **EigenLayer's restaking core is deployed only on Ethereum mainnet (chain ID 1).** All of DelegationManager, StrategyManager, EigenPodManager, AVSDirectory, RewardsCoordinator, AllocationManager, PermissionController, the strategies and the EIGEN/bEIGEN tokens are Ethereum-only — **none of these contracts has any code on Base, BNB, Avalanche, Arbitrum, Optimism or Polygon** (all `eth_getCode → 0x`, verified §6). Event `topic0` and function `selector` values are **chain-agnostic** (the same wherever a contract were deployed); addresses below are Ethereum-specific.
+**Status:** verified 2026-06-09 against Ethereum mainnet via `eth_getLogs` / `eth_getCode` / `eth_getStorageAt` / `eth_call` on `https://ethereum-rpc.publicnode.com`, the canonical `Layr-Labs/eigenlayer-contracts` source (`src/contracts/interfaces/*` on `main`) + its `script/configs/mainnet/mainnet-addresses.config.json` (lastUpdated `v1.4.1-mainnet-prooftra`, semver `v1.4.1`), and keccak-256 computed locally + cross-checked against live logs. **Re-checked 2026-10-05:** live EIP-1967 impl slots re-read (DelegationManager, StrategyManager and StrategyFactory upgraded since — §3.1, §3.4; `DelegationManager.version()` = `1.13.1`, `StrategyManager.version()` = `1.13.0`, i.e. the `v1.13.0` "Slash Resolution Delay" release of 2026-06-25 sits on top of `v1.12.0` of 2026-03-24); the events of the `v1.13.0` interfaces diffed against this doc and the live ones added (§1.2, §1.7, §3.4). The repository `mainnet-addresses.config.json` still says `v1.4.1`, so its `*Implementation` fields are stale.
+**Scope:** **EigenLayer's restaking core is deployed only on Ethereum mainnet (chain ID 1).** All of DelegationManager, StrategyManager, EigenPodManager, AVSDirectory, RewardsCoordinator, AllocationManager, PermissionController, the strategies and the EIGEN/bEIGEN tokens are Ethereum-only — **none of these contracts has any code on Base, BNB, Avalanche, Arbitrum, Optimism, Polygon, Robinhood Chain (4663) or Arc (5042)** (all `eth_getCode → 0x`; Robinhood Chain and Arc checked 2026-10-05). Event `topic0` and function `selector` values are **chain-agnostic** (the same wherever a contract were deployed); addresses below are Ethereum-specific.
 
 **What EigenLayer is.** A restaking layer. Stakers deposit either (a) LSTs into per-collateral **Strategy** contracts via **StrategyManager**, or (b) native ETH by pointing validator withdrawal credentials at an **EigenPod** tracked by **EigenPodManager**. Stakers then **delegate** their restaked shares to an **operator** (DelegationManager). Operators opt into **AVSs** (Actively Validated Services) and, since the 2025 slashing release ("ELIP-002"), allocate slashable magnitude to **operator sets** via **AllocationManager**; misbehaving operators are slashed (`OperatorSlashed`). **RewardsCoordinator** distributes AVS rewards via weekly Merkle roots. **PermissionController** is the new account-abstraction-style admin/appointee layer.
 
@@ -65,6 +65,7 @@
 | `0x5f5209798bbac45a16d2dc3bc67319fab26ee00153916d6f07b69f8a134a1e8b` | `BurnOrRedistributableSharesIncreased((address,uint32) operatorSet, uint256 slashId, address strategy, uint256 shares)` | src |
 | `0xe6413aa0c789e437b0a06bf64b20926584f066c79a2d8b80a759c85472f7b0af` | `BurnOrRedistributableSharesDecreased((address,uint32) operatorSet, uint256 slashId, address strategy, uint256 shares)` | src |
 | `0xd9d082c3ec4f3a3ffa55c324939a06407f5fbcb87d5e0ce3b9508c92c84ed839` | `BurnableSharesDecreased(address strategy, uint256 shares)` (pre-redistribution slash path) | src |
+| `0xa8fd1473d1b9b7b4c9033ecb92a0f6e43f107aec7720ede3709521d122f89fa5` | `SlashResolutionBlockSet((address,uint32) operatorSet, uint256 slashId, uint32 resolutionBlock)` — `v1.13.0` slash-resolution delay: block after which the slashed shares can be burned or redistributed (0 logs to 2026-10-05) | src |
 
 > **`Deposit` = the LST stake.** topic0 `0x5548c837…` is shared with `Deposit(address,address,uint256)` emitted by ve(3,3) gauges (Velodrome/Aerodrome/Topaz) — **disambiguate by the StrategyManager emitter**. The 4-arg `Deposit(address,address,address,uint256)` (`0x7cfff908…`) is the **old** form and returns 0 live.
 
@@ -143,6 +144,16 @@
 | `0xbab947934d42e0ad206f25c9cab18b5bb6ae144acfb00f40b4e3aa59590ca312` | `ClaimerForSet(address indexed earner, address indexed oldClaimer, address indexed claimer)` | src |
 | `0xaf557c6c02c208794817a705609cfa935f827312a1adfdd26494b6b95dd2b4b3` | `ActivationDelaySet(uint32 oldActivationDelay, uint32 newActivationDelay)` | src |
 | `0x237b82f438d75fc568ebab484b75b01d9287b9e98b490b7c23221623b6705dbb` | `RewardsUpdaterSet(address indexed oldRewardsUpdater, address indexed newRewardsUpdater)` | src |
+| `0xfff0759ccb371dfb5691798724e70b4fa61cb3bfe730a33ac19fb86a48efc756` | `OperatorDirectedOperatorSetRewardsSubmissionCreated(address indexed caller, bytes32 indexed operatorDirectedRewardsSubmissionHash, (address,uint32) operatorSet, uint256 submissionNonce, OperatorDirectedRewardsSubmission submission)` | ✓ |
+| `0xb3337dc034abe0f5e3694e1f115f3d6ec9fcee74e7835ea68f6e2d29bbc1b0aa` | `UniqueStakeRewardsSubmissionCreated(address indexed caller, bytes32 indexed rewardsSubmissionHash, (address,uint32) operatorSet, uint256 submissionNonce, RewardsSubmission rewardsSubmission)` (`v1.12.0`; 0 logs to 2026-10-05) | src |
+| `0x71836f06ac5c96075d4c5b5699a92b18e9c6d91579a382e9e55a1adf097f64df` | `TotalStakeRewardsSubmissionCreated(address indexed caller, bytes32 indexed rewardsSubmissionHash, (address,uint32) operatorSet, uint256 submissionNonce, RewardsSubmission rewardsSubmission)` (`v1.12.0`; 0 logs to 2026-10-05) | src |
+| `0x48e198b6ae357e529204ee53a8e514c470ff77d9cc8e4f7207f8b5d490ae6934` | `OperatorAVSSplitBipsSet(address indexed caller, address indexed operator, address indexed avs, uint32 activatedAt, uint16 oldOperatorAVSSplitBips, uint16 newOperatorAVSSplitBips)` | ✓ |
+| `0xd1e028bd664486a46ad26040e999cd2d22e1e9a094ee6afe19fcf64678f16f74` | `OperatorPISplitBipsSet(address indexed caller, address indexed operator, uint32 activatedAt, uint16 oldOperatorPISplitBips, uint16 newOperatorPISplitBips)` | ✓ |
+| `0x14918b3834ab6752eb2e1b489b6663a67810efb5f56f3944a97ede8ecf1fd9f1` | `OperatorSetSplitBipsSet(address indexed caller, address indexed operator, (address,uint32) operatorSet, uint32 activatedAt, uint16 oldOperatorSetSplitBips, uint16 newOperatorSetSplitBips)` | ✓ |
+| `0xe6cd4edfdcc1f6d130ab35f73d72378f3a642944fb4ee5bd84b7807a81ea1c4e` | `DefaultOperatorSplitBipsSet(uint16 oldDefaultOperatorSplitBips, uint16 newDefaultOperatorSplitBips)` — admin | ✓ |
+| `0x4de6293e668df1398422e1def12118052c1539a03cbfedc145895d48d7685f1c` | `RewardsForAllSubmitterSet(address indexed rewardsForAllSubmitter, bool indexed oldValue, bool indexed newValue)` — admin | ✓ |
+| `0x15d80a013f22151bc7246e3bc132e12828cde19de98870475e3fa70840152721` | `FeeRecipientSet(address indexed oldFeeRecipient, address indexed newFeeRecipient)` — admin (protocol fee) | ✓ |
+| `0xbb020e17dc9a72ff25958029a3ddf0c05cebaac105769b31b6238aaca3910cd2` | `OptInForProtocolFeeSet(address indexed submitter, bool indexed oldValue, bool indexed newValue)` | src |
 
 `OperatorDirectedRewardsSubmission` tuple = `((address,uint96)[] strategiesAndMultipliers, address token, (address operator,uint256 amount)[] operatorRewards, uint32 startTimestamp, uint32 duration, string description)`.
 
@@ -264,13 +275,13 @@
 
 ## 3. Addresses — Ethereum mainnet (chain ID 1)
 
-All addresses below hold code (verified `eth_getCode`). Source = `Layr-Labs/eigenlayer-contracts` `script/configs/mainnet/mainnet-addresses.config.json` (`v1.4.1`), each cross-checked on-chain. Deployment block of core = `22434239`. **Proxy legend:** `TUP` = TransparentUpgradeableProxy (EIP-1967 impl + `eigenLayerProxyAdmin`); `Beacon` = UpgradeableBeacon target; `BeaconProxy` = per-instance beacon proxy; `—` = non-proxy.
+All addresses below hold code (verified `eth_getCode`). Live impls re-read 2026-10-05. Source = `Layr-Labs/eigenlayer-contracts` `script/configs/mainnet/mainnet-addresses.config.json` (`v1.4.1`), each cross-checked on-chain. Deployment block of core = `22434239`. **Proxy legend:** `TUP` = TransparentUpgradeableProxy (EIP-1967 impl + `eigenLayerProxyAdmin`); `Beacon` = UpgradeableBeacon target; `BeaconProxy` = per-instance beacon proxy; `—` = non-proxy.
 
 ### 3.1 Core managers (all TransparentUpgradeableProxy → `eigenLayerProxyAdmin 0x8b95…2444`)
 | Role | Proxy | Live impl | One-liner |
 |------|-------|-----------|-----------|
-| **DelegationManager** | `0x39053D51B77DC0d36036Fc1fCc8Cb819df8Ef37A` | `0xe7022a128acd4c6cad7aff6fa874d61f984bce75` | Delegation + operators + slashing-era withdrawals; §1.1 |
-| **StrategyManager** | `0x858646372CC42E1A627fcE94aa7A7033e7CF075A` | `0x88582996b70fdd7c4f16e3fde7b53858fce0d394` | LST deposits → shares; §1.2 |
+| **DelegationManager** | `0x39053D51B77DC0d36036Fc1fCc8Cb819df8Ef37A` | `0x6a8bed4062c895130e2d09ba442d3ecead5df6c2` (`version()` 1.13.1; `Upgraded` at block 25,849,689, 2026-08-27; before: `0xe7022a128acd4c6cad7aff6fa874d61f984bce75`) | Delegation + operators + slashing-era withdrawals; §1.1 |
+| **StrategyManager** | `0x858646372CC42E1A627fcE94aa7A7033e7CF075A` | `0xa7536c85898dc424c6bfe8592f983661f830656a` (`version()` 1.13.0; `Upgraded` at block 25,325,539, 2026-06-15; before: `0x88582996b70fdd7c4f16e3fde7b53858fce0d394`) | LST deposits → shares; §1.2 |
 | **EigenPodManager** | `0x91E677b07F7AF907ec9a428aafA9fc14a0d3A338` | `0xd22dd829779adbf3869fb224f703452f7f95e9db` | Native-ETH restaking shares; deploys EigenPods; §1.3 |
 | **AVSDirectory** | `0x135DDa560e946695d6f155dACaFC6f1F25C1F5AF` | `0xcd35cef328b496fa9d70a8d7c34ef3434614862b` | Legacy M2 AVS registration; §1.5 |
 | **AllocationManager** | `0x948a420b8CC1d6BFd0B6087C2E7c344a2CD0bc39` | `0xda2a68d318a571dd550f2ecbcb09bf50497e97c4` | Operator sets + magnitude + slashing (ELIP-002); §1.6 |
@@ -311,11 +322,19 @@ All addresses below hold code (verified `eth_getCode`). Source = `Layr-Labs/eige
 ### 3.4 Strategy factory (permissionless new strategies use beacon proxies)
 | Role | Address | Pattern |
 |------|---------|---------|
-| StrategyFactory | `0x5e4C39Ad7A3E881585e383dB9827EB4811f6F647` | TUP → impl `0x315bcd0f31ef8b1124382f3acab3913f791c09e7` |
+| StrategyFactory | `0x5e4C39Ad7A3E881585e383dB9827EB4811f6F647` | TUP → impl `0xbbc4124c74c567396181fbfbae746b80619d2b76` (`Upgraded` at block 25,325,539, 2026-06-15; before: `0x315bcd0f31ef8b1124382f3acab3913f791c09e7`) |
 | strategyFactoryBeacon | `0x0ed6703C298d28aE0878d1b28e88cA87F9662fE9` | UpgradeableBeacon; `implementation()` → `0x8f6be4a906376bb4481e78cbf6fc783cc0f8d1ce` (live) |
 | strategyFactoryBeaconImplementation | `0x0EC17ef9c00F360DB28CA8008684a4796b11E456` | StrategyBase logic (= `baseStrategyImplementation`) |
 
 > Strategies created via the factory are **BeaconProxy** (→ strategyFactoryBeacon). The 12 pre-deployed LST strategies above are instead **TUP** under `eigenLayerProxyAdmin`.
+
+StrategyFactory events (from `IStrategyFactory` at `v1.13.0`):
+
+| topic0 | Event | ✓ |
+|--------|-------|---|
+| `0x6852a55230ef089d785bce7ffbf757985de34026df90a87d7b4a6e56f95d251f` | `StrategySetForToken(address token, address strategy)` — a new permissionless strategy | ✓ |
+| `0x6c9e2cbc6fcd0f5b21ee2edb38f3421d7538cd98b8ff00803f81879345568504` | `DurationVaultDeployed(address indexed vault, address indexed underlyingToken, address indexed vaultAdmin, uint32 duration, uint256 maxPerDeposit, uint256 stakeCap, string metadataURI, address operatorSetAVS, uint32 operatorSetId)` — `v1.12.0` duration vault (a time-locked strategy) | ✓ |
+| `0x75519c51f39873ec0e27dd3bbc09549e4865a113f505393fb9eab5898f6418b3` | `TokenBlacklisted(address token)` — admin | src |
 
 ### 3.5 Tokens
 | Role | Proxy | Live impl | Proxy admin |
@@ -342,7 +361,7 @@ All addresses below hold code (verified `eth_getCode`). Source = `Layr-Labs/eige
 
 ## 4. Cross-chain summary
 
-EigenLayer restaking core is **Ethereum-mainnet-only**. Every key contract is **absent** on all six other targets (verified `eth_getCode → 0x`, §6).
+EigenLayer restaking core is **Ethereum-mainnet-only**. Every key contract is **absent** on all other targets, Robinhood Chain and Arc included (verified `eth_getCode → 0x`).
 
 | Chain (ID) | DelegationManager | StrategyManager | EigenPodManager | AllocationManager | EIGEN (`0xec53…`) | bEIGEN (`0x83E9…`) |
 |------------|:-----------------:|:---------------:|:---------------:|:-----------------:|:-----------------:|:------------------:|
@@ -353,6 +372,8 @@ EigenLayer restaking core is **Ethereum-mainnet-only**. Every key contract is **
 | Arbitrum (42161) | — | — | — | — | —¹ | — |
 | Optimism (10) | — | — | — | — | — | — |
 | Polygon (137) | — | — | — | — | — | — |
+| Robinhood Chain (4663) | — | — | — | — | — | — |
+| Arc (5042) | — | — | — | — | — | — |
 
 ¹ **Arbitrum decoy:** `0x9fcc9b73b0614c33c26038f5850c29e89728dc47` is a **45-byte EIP-1167 clone** with **symbol `EIGEN`** but **name "EigenLayer World Builders"** (an unrelated game/airdrop token) — it is **NOT** the canonical restaking EIGEN (`name() = "Eigen"`). Do not treat symbol collisions as the EigenLayer token; key on the canonical Ethereum address.
 
@@ -386,9 +407,9 @@ EigenLayer restaking core is **Ethereum-mainnet-only**. Every key contract is **
 7. **Slashing is on AllocationManager, not Slasher.** `Slasher` (`0xD921…`) is deployed but inert. The real slash event is `AllocationManager.OperatorSlashed` (`0x8096…`, live-confirmed, rare). `OperatorSharesSlashed` on DelegationManager mirrors the share reduction.
 8. **AVS opt-in has two surfaces:** legacy M2 `AVSDirectory.OperatorAVSRegistrationStatusUpdated` (live) and the new operator-set model on `AllocationManager` (`OperatorSetCreated`, `OperatorAddedToOperatorSet`, `AllocationUpdated`). Both are active.
 9. **`RewardsClaimed` is the 6-arg form (`0x9543dbd5…`)**; `DistributionRootSubmitted` (`0xecd866c3…`) fires ~weekly. The reward token is in the event, not always EIGEN.
-10. **Two ProxyAdmins + live-impl drift.** Only **bEIGEN** uses `tokenProxyAdmin 0x3f5A…`; **EIGEN** and everything else use `eigenLayerProxyAdmin 0x8b95…` (read each proxy's admin slot — don't assume tokens share an admin). Never trust the config's `*Implementation` fields for the live impl (EIGEN, AllocationManager, PermissionController, StrategyFactory have all drifted) — **read the EIP-1967 impl slot live**. Watch `Upgraded(address)` `0xbc7cd75a…` on all proxies.
+10. **Two ProxyAdmins + live-impl drift.** Only **bEIGEN** uses `tokenProxyAdmin 0x3f5A…`; **EIGEN** and everything else use `eigenLayerProxyAdmin 0x8b95…` (read each proxy's admin slot — don't assume tokens share an admin). Never trust the config's `*Implementation` fields for the live impl (EIGEN, AllocationManager, PermissionController, StrategyFactory, DelegationManager and StrategyManager have all drifted) — **read the EIP-1967 impl slot live**. Watch `Upgraded(address)` `0xbc7cd75a…` on all proxies.
 11. **EIGEN ≠ bEIGEN.** EIGEN (`0xec53…`) is a wrapper over bEIGEN (`0x83E9…`); `EIGEN.wrap`/`unwrap` (`0xea598cb0`/`0xde0e9a3e` — same selectors as Lido wstETH) move bEIGEN. The eigenStrategy's underlying is **bEIGEN**, not EIGEN.
-12. **Ethereum-only.** Any "EigenLayer" contract claimed on Base/BNB/Avalanche/Arbitrum/Optimism/Polygon is **not the protocol** (all `eth_getCode → 0x`). The Arbitrum `EIGEN`-symbol token is a decoy (§4 note 1).
+12. **Ethereum-only.** Any "EigenLayer" contract claimed on Base/BNB/Avalanche/Arbitrum/Optimism/Polygon/Robinhood Chain/Arc is **not the protocol** (all `eth_getCode → 0x`). The Arbitrum `EIGEN`-symbol token is a decoy (§4 note 1).
 
 ---
 
@@ -408,6 +429,10 @@ TOPIC_OPERATOR_SHARES_SLASHED   = '\xdd611f4ef63f4385f1756c86ce1f1f389a9013ba6fa
 -- StrategyManager
 TOPIC_DEPOSIT_3ARG             = '\x5548c837ab068cf56a2c2479df0882a4922fd203edb7517321831d95078c5f62'  -- COLLIDES w/ ve(3,3) gauge Deposit; key on StrategyManager
 TOPIC_STRAT_ADDED_WHITELIST    = '\x0c35b17d91c96eb2751cd456e1252f42a386e524ef9ff26ecc9950859fdc04fe'
+TOPIC_SLASH_RESOLUTION_BLOCK_SET = '\xa8fd1473d1b9b7b4c9033ecb92a0f6e43f107aec7720ede3709521d122f89fa5'  -- v1.13.0
+-- StrategyFactory
+TOPIC_STRATEGY_SET_FOR_TOKEN   = '\x6852a55230ef089d785bce7ffbf757985de34026df90a87d7b4a6e56f95d251f'
+TOPIC_DURATION_VAULT_DEPLOYED  = '\x6c9e2cbc6fcd0f5b21ee2edb38f3421d7538cd98b8ff00803f81879345568504'  -- v1.12.0
 -- EigenPodManager / EigenPod
 TOPIC_POD_DEPLOYED             = '\x21c99d0db02213c32fff5b05cf0a718ab5f858802b91498f80d82270289d856a'
 TOPIC_POD_SHARES_UPDATED       = '\x4e2b791dedccd9fb30141b088cabf5c14a8912b52f59375c95c010700b8c6193'
@@ -424,6 +449,9 @@ TOPIC_OPERATOR_SLASHED         = '\x80969ad29428d6797ee7aad084f9e4a42a82fc506dcd
 -- RewardsCoordinator
 TOPIC_AVS_REWARDS_SUBMISSION   = '\x450a367a380c4e339e5ae7340c8464ef27af7781ad9945cfe8abd828f89e6281'
 TOPIC_OP_DIRECTED_AVS_REWARDS  = '\xfc8888bffd711da60bc5092b33f677d81896fe80ecc677b84cfab8184462b6e0'
+TOPIC_OP_DIRECTED_OPSET_REWARDS= '\xfff0759ccb371dfb5691798724e70b4fa61cb3bfe730a33ac19fb86a48efc756'
+TOPIC_UNIQUE_STAKE_REWARDS     = '\xb3337dc034abe0f5e3694e1f115f3d6ec9fcee74e7835ea68f6e2d29bbc1b0aa'  -- v1.12.0
+TOPIC_TOTAL_STAKE_REWARDS      = '\x71836f06ac5c96075d4c5b5699a92b18e9c6d91579a382e9e55a1adf097f64df'  -- v1.12.0
 TOPIC_DISTRIBUTION_ROOT        = '\xecd866c3c158fa00bf34d803d5f6023000b57080bcb48af004c2b4b46b3afd08'
 TOPIC_REWARDS_CLAIMED          = '\x9543dbd55580842586a951f0386e24d68a5df99ae29e3b216588b45fd684ce31'
 -- Tokens / proxy lifecycle
@@ -477,10 +505,12 @@ EIP1967_BEACON_SLOT            = '\xa3f0ad74e5423aebfd80d3ef4346578335a9a72aeaee
 - **Topics (✓):** observed verbatim in live `eth_getLogs` over recent block windows on `https://ethereum-rpc.publicnode.com`. Confirmed counts: `StakerDelegated`, `OperatorRegistered`, `OperatorSharesIncreased/Decreased`, `DepositScalingFactorUpdated`, `SlashingWithdrawalQueued/Completed`, `Deposit` (3-arg), `PodDeployed`, `PodSharesUpdated`, `DistributionRootSubmitted` (weekly), `RewardsClaimed`, `AVSRewardsSubmissionCreated`, `OperatorDirectedAVSRewardsSubmissionCreated`, `OperatorAVSRegistrationStatusUpdated`, `OperatorSetCreated`, `OperatorAddedToOperatorSet`, `AllocationUpdated`, `EncumberedMagnitudeUpdated`, and **`OperatorSlashed`** (found 7 in a ~270k-block-old window). Legacy `WithdrawalQueued`/`WithdrawalCompleted` and 4-arg `Deposit` confirmed **0 live**. Admin/rare events marked `src` (keccak of the verbatim canonical signature).
 - **Selectors (bytecode):** PUSH4-presence scan of each live implementation (proxies resolved via EIP-1967 impl slot read). `createOperatorSets` and `processClaim` corrected after the first struct guesses were absent — the live forms (`0x261f84e0`, `0x3ccc861d`) confirmed present.
 - **Addresses:** `Layr-Labs/eigenlayer-contracts` `script/configs/mainnet/mainnet-addresses.config.json` (`v1.4.1`), every entry existence-checked via `eth_getCode` and proxy slots read live (impl `0x3608…2bbc`, admin `0xb531…6103`, beacon `0xa3f0…133d50`). `EIGEN.bEIGEN()` and strategy `underlyingToken()`/`symbol()` confirmed via `eth_call`. **EIGEN live impl differs from the config snapshot** (read live).
-- **Cross-chain:** `eth_getCode` for DelegationManager / StrategyManager / EigenPodManager / EIGEN / bEIGEN on all 7 target RPCs — present only on Ethereum, `0x` on the other six. The Arbitrum `EIGEN`-symbol decoy (`0x9fcc…dc47`, name "EigenLayer World Builders", 45-byte EIP-1167 clone) identified by `name()`/`symbol()`/code-length.
+- **Re-checked 2026-10-05:** impl slots of every core proxy re-read; `Upgraded(address)` logs since block 25,200,000 on DelegationManager, StrategyManager, StrategyFactory, the stETH strategy and EIGEN read from indexed chain data; events of `src/contracts/interfaces/{IDelegationManager,IStrategyManager,IStrategyFactory,IAllocationManager,IRewardsCoordinator,IEigenPodManager}.sol` at tag `v1.13.0` recomputed and diffed against this doc; per-topic log counts on the emitters since block 22,000,000 (✓ = at least one live log).
+- **Cross-chain:** `eth_getCode` for DelegationManager / StrategyManager / EigenPodManager / EIGEN / bEIGEN on all 7 target RPCs — present only on Ethereum, `0x` on the other six; AllocationManager too on Robinhood Chain and Arc (2026-10-05), `0x`. The Arbitrum `EIGEN`-symbol decoy (`0x9fcc…dc47`, name "EigenLayer World Builders", 45-byte EIP-1167 clone) identified by `name()`/`symbol()`/code-length.
 
 Authoritative sources:
 
 - [`Layr-Labs/eigenlayer-contracts`](https://github.com/Layr-Labs/eigenlayer-contracts) — `src/contracts/interfaces/{IDelegationManager,IStrategyManager,IEigenPodManager,IEigenPod,IAVSDirectory,IAllocationManager,IRewardsCoordinator}.sol`, `libraries/OperatorSetLib.sol`, and `script/configs/mainnet/mainnet-addresses.config.json`.
 - [EigenLayer docs](https://docs.eigencloud.xyz/eigenlayer/) (formerly docs.eigenlayer.xyz).
+- [Releases](https://github.com/Layr-Labs/eigenlayer-contracts/releases) — `v1.12.0` (2026-03-24, Rewards 2.2 + Duration Vaults), `v1.13.0` (2026-06-25, Slash Resolution Delay).
 - Explorers: [Etherscan EIGEN](https://etherscan.io/address/0xec53bf9167f50cdeb3ae105f56099aaab9061f83), [DelegationManager](https://etherscan.io/address/0x39053D51B77DC0d36036Fc1fCc8Cb819df8Ef37A).

@@ -1,15 +1,15 @@
-# Hyperlane core (Mailbox, hooks, gas paymaster, ISMs) — Topics, Selectors, Addresses (Ethereum, Base, Arbitrum, Optimism, Polygon, BNB, Avalanche, Robinhood Chain)
+# Hyperlane core (Mailbox, hooks, gas paymaster, ISMs) — Topics, Selectors, Addresses (Ethereum, Base, Arbitrum, Optimism, Polygon, BNB, Avalanche, Robinhood Chain, Arc)
 
-**Status:** verified on 2026-09-29 against live RPC on all eight target chains, the canonical `hyperlane-xyz/hyperlane-registry` (`chains/<chain>/addresses.yaml` and `metadata.yaml`, commit `09aa8356`, 2026-09-28) and `hyperlane-xyz/hyperlane-monorepo` (`solidity/contracts`, commit `c52b7280`, 2026-09-29). Topics and selectors recomputed as `keccak256(signature)` and matched against the deployed Ethereum implementation bytecode; addresses existence-checked with `eth_getCode`; proxy implementations and admins read from the EIP-1967 slots; wiring read with `eth_call`.
-**Scope:** the permissionless messaging core that every Hyperlane transfer uses: **Mailbox** (dispatch and delivery), the post-dispatch hooks (**MerkleTreeHook**, **InterchainGasPaymaster**, ProtocolFee, PausableHook), the default ISM stack, **ValidatorAnnounce**, the **ProxyAdmin** and the **InterchainAccountRouter**. The registry has a core deployment on all eight target chains, including **Robinhood Chain (4663)**. The token layer (warp routes) is in [warp_routes.md](warp_routes.md). Topics and selectors are chain-agnostic; addresses are network-specific.
+**Status:** verified on 2026-09-29 against live RPC on all eight target chains, the canonical `hyperlane-xyz/hyperlane-registry` (`chains/<chain>/addresses.yaml` and `metadata.yaml`, commit `09aa8356`, 2026-09-28) and `hyperlane-xyz/hyperlane-monorepo` (`solidity/contracts`, commit `c52b7280`, 2026-09-29). Topics and selectors recomputed as `keccak256(signature)` and matched against the deployed Ethereum implementation bytecode; addresses existence-checked with `eth_getCode`; proxy implementations and admins read from the EIP-1967 slots; wiring read with `eth_call`. Arc (5042) added 2026-10-05 from registry commit `fe66faf5`, checked live on `https://rpc.mainnet.arc.io`.
+**Scope:** the permissionless messaging core that every Hyperlane transfer uses: **Mailbox** (dispatch and delivery), the post-dispatch hooks (**MerkleTreeHook**, **InterchainGasPaymaster**, ProtocolFee, PausableHook), the default ISM stack, **ValidatorAnnounce**, the **ProxyAdmin** and the **InterchainAccountRouter**. The registry has a core deployment on all eight target chains, including **Robinhood Chain (4663)**, and also on **Arc (5042)**. The token layer (warp routes) is in [warp_routes.md](warp_routes.md). Topics and selectors are chain-agnostic; addresses are network-specific.
 
 Hyperlane moves messages, not value. An app contract (a warp route, an interchain account router, any custom app) calls `Mailbox.dispatch`. The Mailbox emits `Dispatch` and `DispatchId`, then runs the required hook (ProtocolFee) and the default hook set (PausableHook, MerkleTreeHook, IGP). Off chain, validators sign the MerkleTreeHook root and a relayer calls `Mailbox.process` on the destination chain with the message and an ISM proof. The Mailbox emits `Process` and `ProcessId`, asks the recipient's ISM to verify, and calls `recipient.handle`. The value of a token transfer moves only inside the app (§0 of [warp_routes.md](warp_routes.md)).
 
 Facts to know before indexing:
 
 1. **The link key is `messageId`, on chain on both sides.** `messageId = keccak256(message)`. It is topic1 of `DispatchId` (source) and topic1 of `ProcessId` (destination). `Dispatch` and `Process` carry no `messageId`; pair each with its `DispatchId` / `ProcessId` in the same transaction.
-2. **Hyperlane domain ids equal the chain ids on all eight target chains** (read live from `Mailbox.localDomain()`): 1, 8453, 42161, 10, 137, 56, 43114 and 4663. Non-EVM and app chains use other numbers (for example `solanamainnet` 1399811149, `katana` 747474).
-3. **Addresses differ per chain.** There is no vanity address. The same literal address can be a different Hyperlane contract on another chain: `0xeA87ae93Fa0019a82A727bfd3eBd1cFCa8f64f1D` is the Base Mailbox and the Robinhood Chain ProxyAdmin; `0x748040afB89B8FdBb992799808215419d36A0930` is the Arbitrum MerkleTreeHook and the Polygon PausableHook. Key every contract on `(chain, address)`.
+2. **Hyperlane domain ids equal the chain ids on all eight target chains** (read live from `Mailbox.localDomain()`): 1, 8453, 42161, 10, 137, 56, 43114 and 4663, and Arc 5042. Non-EVM and app chains use other numbers (for example `solanamainnet` 1399811149, `katana` 747474).
+3. **Addresses differ per chain.** There is no vanity address. The same literal address can be a different Hyperlane contract on another chain: `0xeA87ae93Fa0019a82A727bfd3eBd1cFCa8f64f1D` is the Base Mailbox and the Robinhood Chain and Arc ProxyAdmin; `0x748040afB89B8FdBb992799808215419d36A0930` is the Arbitrum MerkleTreeHook and the Polygon PausableHook. Key every contract on `(chain, address)`.
 4. **The Mailbox is permissionless and deployed many times.** Other teams run their own Mailbox, with the same code and the same topics, outside the registry (§12). Allow-list the registry Mailbox of each chain.
 5. **There is no refund, cancel or expiry path in the core.** A message that is not delivered stays pending. Anyone may retry `process` with valid metadata; anyone may top up gas with `payForGas`. The only "refund" is an app-level design.
 
@@ -53,12 +53,13 @@ Facts to know before indexing:
 | BNB Smart Chain | 56 | 56 | `bsc` |
 | Avalanche C-Chain | 43114 | 43114 | `avalanche` |
 | Robinhood Chain | 4663 | 4663 | `robinhood` (technical stack `arbitrumnitro`) |
+| Arc | 5042 | 5042 | `arc` |
 
 ---
 
 ## 1. Topics (chain-agnostic — `topic0 = keccak256(event signature)`)
 
-### 1.1 Mailbox (emitter = the Mailbox of each chain, §3–§10)
+### 1.1 Mailbox (emitter = the Mailbox of each chain, §3–§10b)
 
 | topic0 | Event | Notes |
 |--------|-------|-------|
@@ -360,6 +361,30 @@ From `chains/robinhood/addresses.yaml` (registry `domainId` 4663, `technicalStac
 
 ---
 
+## 10b. Addresses — Arc (chain ID 5042)
+
+From `chains/arc/addresses.yaml` (registry commit `fe66faf5`, `domainId` 5042, native gas token USDC, 18 decimals). Read live on 2026-10-05: `localDomain()` = 5042, `nonce()` = 319, `PACKAGE_VERSION()` = `12.1.0`. The Mailbox and IGP proxies are the 2,840-byte TransparentUpgradeableProxy, and the Mailbox implementation address is the same as on Robinhood Chain. Last ~1.16 M blocks (about 7 days to 2026-10-05; blocks are ~0.5 s): `Dispatch` 144, `Process` 143. **`0xeA87ae93Fa0019a82A727bfd3eBd1cFCa8f64f1D` here is the ProxyAdmin, not a Mailbox.** No warp-route file in `deployments/warp_routes/` names Arc.
+
+| Role | Address | One-liner |
+|------|---------|-----------|
+| **Mailbox** (proxy) | `0x7f50C5776722630a0024fAE05fDe8b47571D7B39` | Dispatch and process. `localDomain()` = 5042. Impl `0x3a464f746d23ab22155710f44db16dca53e0775e`. |
+| **MerkleTreeHook** | `0xc2Da384799488B4e1E773d70a83346529145085B` | Emits `InsertedIntoTree`. Not a proxy. |
+| **InterchainGasPaymaster** (proxy) | `0x7621e04860F0bDe63311db9D5D8b589AD3458A1f` | Emits `GasPayment`. Impl `0xd01a3e167d59ff98c983e83baa5da0c3e0ade726`. |
+| ProtocolFee (Mailbox `requiredHook()`) | `0x2F619Ac5122689180AeBB930ADccdae215d538a9` | Runs on every dispatch. |
+| FallbackRoutingHook (Mailbox `defaultHook()`) | `0x47bf94790241B1764fC41A35a8329A15569E121C` | Routes to the aggregation hook by default. |
+| AggregationHook | `0xDe8500555B02ef1CAC8A5C659b09916251D6404b` | IGP + MerkleTreeHook + PausableHook of this chain (read with `hooks(bytes)`). |
+| PausableHook | `0xcC2816aC3fe471e5378BBd3B30F2B8247021625D` | `pause()` stops default-hook dispatches. |
+| Default ISM (Mailbox `defaultIsm()`) | `0xc8c1B45f6875f0Eba892F1628ff2F4ea13838bb2` | Static aggregation ISM (246-byte clone). |
+| PausableIsm | `0xed9a722c543883FB7e07E78F3879762DE09eA7D5` | Emergency ISM switch. |
+| ValidatorAnnounce | `0x145566181A18E23bB6a8A3eC6D87765542A7F754` | Emits `ValidatorAnnouncement`. |
+| ProxyAdmin | `0xeA87ae93Fa0019a82A727bfd3eBd1cFCa8f64f1D` | Admin of the Mailbox and IGP proxies (EIP-1967 admin slot). |
+| InterchainAccountRouter | `0x13E83ac41e696856B6996263501fB3225AD5E6F5` | Interchain accounts; remote governance path. |
+| QuotedCalls | `0x18B0688990720103dB63559a3563f7E8d0f63EDb` | Periphery command router. |
+| Mailbox and ProxyAdmin `owner()` | `0xb99a2f00e5f30931a8908ae3a27bd25d9a62d237` | Interchain account (EIP-1167 clone of the ICA router's `implementation()` `0xcf404e4b76235f3176e8941ff65e0c613cc6846e`). |
+| IGP `owner()` and `beneficiary()` — EOA | `0xa7eccdb9be08178f896c26b7bbd8c3d4e844d9ba` | The same EOA as on the other chains. |
+
+---
+
 ## 11. Cross-chain summary
 
 | Chain | ID = domain | Mailbox | MerkleTreeHook | InterchainGasPaymaster | Mailbox owner | `Dispatch` / `Process` in the pinned window |
@@ -372,8 +397,9 @@ From `chains/robinhood/addresses.yaml` (registry `domainId` 4663, `technicalStac
 | BNB Smart Chain | 56 | `0x2971b9Aec44bE4eb673DF1B88cDB57b96eefe8a4` | `0xFDb9Cd5f9daAA2E4474019405A328a88E7484f26` | `0x78E25e7f84416e69b9339B0A6336EB6EFfF6b451` | Safe | 76 / 102 |
 | Avalanche C-Chain | 43114 | `0xFf06aFcaABaDDd1fb08371f9ccA15D73D51FeBD6` | `0x84eea61D679F42D92145fA052C89900CBAccE95A` | `0x95519ba800BBd0d34eeAE026fEc620AD978176C0` | Interchain account | 0 / 1 |
 | Robinhood Chain | 4663 | `0x3a867fCfFeC2B790970eeBDC9023E75B0a172aa7` | `0xF16E63B42Df7f2676B373979120BBf7e6298F473` | `0x3862A9B1aCd89245a59002C2a08658EC1d5690E3` | Interchain account | 1 / 0 |
+| Arc | 5042 | `0x7f50C5776722630a0024fAE05fDe8b47571D7B39` | `0xc2Da384799488B4e1E773d70a83346529145085B` | `0x7621e04860F0bDe63311db9D5D8b589AD3458A1f` | Interchain account | not in the window (144 / 143 over ~7 days to 2026-10-05) |
 
-All eight chains have the full core set (§3–§10). The registry also lists the core on many chains outside the eight (Solana, Katana, HyperEVM and others); they appear here only as message origins and destinations.
+All eight chains and Arc have the full core set (§3–§10b). The registry also lists the core on many chains outside the eight (Solana, Katana, HyperEVM and others); they appear here only as message origins and destinations.
 
 ---
 
@@ -403,8 +429,8 @@ These are leads for attribution, not Hyperlane-operated infrastructure: the regi
 
 | Contract | Pattern | Detection | Upgrade auth |
 |----------|---------|-----------|--------------|
-| **Mailbox** (all eight) | TransparentUpgradeableProxy (2,555-byte runtime on seven chains; 2,840-byte on Robinhood Chain) | EIP-1967 impl slot = the implementation in §3–§10; admin slot = the chain's ProxyAdmin (read on every chain). | ProxyAdmin `owner()`: a Safe on Ethereum, Base, Optimism and BNB; a TimelockController (7 days) on Arbitrum; an interchain account on Polygon, Avalanche and Robinhood Chain. The Mailbox's own `owner()` (ISM and hook setters) is the same account, except on Arbitrum (the Safe). |
-| **InterchainGasPaymaster** (all eight) | TransparentUpgradeableProxy | Admin slot = the same ProxyAdmin as the Mailbox. | ProxyAdmin owner for upgrades; the IGP `owner()` for gas configs is the EOA `0xa7eccdb9be08178f896c26b7bbd8c3d4e844d9ba`. |
+| **Mailbox** (all eight + Arc) | TransparentUpgradeableProxy (2,555-byte runtime on seven chains; 2,840-byte on Robinhood Chain and Arc) | EIP-1967 impl slot = the implementation in §3–§10b; admin slot = the chain's ProxyAdmin (read on every chain). | ProxyAdmin `owner()`: a Safe on Ethereum, Base, Optimism and BNB; a TimelockController (7 days) on Arbitrum; an interchain account on Polygon, Avalanche, Robinhood Chain and Arc. The Mailbox's own `owner()` (ISM and hook setters) is the same account, except on Arbitrum (the Safe). |
+| **InterchainGasPaymaster** (all eight + Arc) | TransparentUpgradeableProxy | Admin slot = the same ProxyAdmin as the Mailbox. | ProxyAdmin owner for upgrades; the IGP `owner()` for gas configs is the EOA `0xa7eccdb9be08178f896c26b7bbd8c3d4e844d9ba`. |
 | MerkleTreeHook, ProtocolFee, FallbackRoutingHook, AggregationHook, PausableHook, PausableIsm, ValidatorAnnounce, ProxyAdmin, InterchainAccountRouter, QuotedCalls | Not proxies | Full runtime bytecode, no EIP-1967 implementation. | `owner()` per contract where Ownable. A new version = a new address set in the registry. |
 | Default ISM, aggregation hook | Minimal clones with immutable arguments (246 / 278 bytes) | Factory-made, immutable. | Replaced through `setDefaultIsm` / `setDefaultHook` on the Mailbox. |
 | DomainRoutingIsm | EIP-1167 clone (45 bytes) | Delegates to a per-chain implementation. | `owner()`. |
@@ -423,7 +449,7 @@ Watch `Upgraded(address)` `0xbc7cd75a20ee27fd9adebab32041f755214dbc6bffa90cc0225
 6. **`InsertedIntoTree` and `GasPayment` are hook status events.** They repeat the `messageId`, move no app value, and may be missing: a route with a custom hook can skip the default hook set, and `GasPayment` also fires on later top-ups.
 7. **No refund path exists in the core.** A message whose delivery fails stays undelivered (`delivered(messageId)` = false). Retries are new `process` calls; a revert leaves no event. Monitor stuck value by messages that have a `DispatchId` and no `ProcessId` after a time bound.
 8. **Admin triggers.** `DefaultIsmSet` (changes the security of most apps at once), `RequiredHookSet`, `DefaultHookSet`, `Upgraded` / `AdminChanged` on the Mailbox and IGP, `Paused` on the PausableHook (stops default dispatches) or the PausableIsm, and `OwnershipTransferred` on any core contract.
-9. **Remote chains are governed by messages.** On Polygon, Avalanche and Robinhood Chain the Mailbox owner is an interchain account. An admin action there is a `process` call whose recipient is the InterchainAccountRouter, not a local multisig transaction.
+9. **Remote chains are governed by messages.** On Polygon, Avalanche, Robinhood Chain and Arc the Mailbox owner is an interchain account. An admin action there is a `process` call whose recipient is the InterchainAccountRouter, not a local multisig transaction.
 10. **The same literal address can be different contracts on different chains** (see the facts above). Never reuse an address across chains without `(chain, address)`.
 11. **The IGP owner is one EOA on every chain** (`0xa7eccdb9be08178f896c26b7bbd8c3d4e844d9ba`, EIP-7702-delegated on Ethereum). It can change gas oracles and the beneficiary, and `claim()` sends the collected fees to it.
 
@@ -479,6 +505,7 @@ POLY_MAILBOX                     = '\x5d934f4e2f797775e53561bb72aca21ba36b96bb'
 BNB_MAILBOX                      = '\x2971b9aec44be4eb673df1b88cdb57b96eefe8a4'
 AVAX_MAILBOX                     = '\xff06afcaabaddd1fb08371f9cca15d73d51febd6'
 RH_MAILBOX                       = '\x3a867fcffec2b790970eebdc9023e75b0a172aa7'
+ARC_MAILBOX                      = '\x7f50c5776722630a0024fae05fde8b47571d7b39'
 -- ===== MerkleTreeHook (per chain) =====
 ETH_MERKLE_TREE_HOOK             = '\x48e6c30b97748d1e2e03bf3e9fbe3890ca5f8cca'
 BASE_MERKLE_TREE_HOOK            = '\x19dc38aeae620380430c200a6e990d5af5480117'
@@ -488,6 +515,7 @@ POLY_MERKLE_TREE_HOOK            = '\x73fbd25c3e817dc4b4cd9d00eff6d83dcde2dff6'
 BNB_MERKLE_TREE_HOOK             = '\xfdb9cd5f9daaa2e4474019405a328a88e7484f26'
 AVAX_MERKLE_TREE_HOOK            = '\x84eea61d679f42d92145fa052c89900cbacce95a'
 RH_MERKLE_TREE_HOOK              = '\xf16e63b42df7f2676b373979120bbf7e6298f473'
+ARC_MERKLE_TREE_HOOK             = '\xc2da384799488b4e1e773d70a83346529145085b'
 -- ===== InterchainGasPaymaster (per chain) =====
 ETH_IGP                          = '\x9e6b1022be9bbf5afd152483dad9b88911bc8611'
 BASE_IGP                         = '\xc3f23848ed2e04c0c6d41bd7804fa8f89f940b94'
@@ -497,6 +525,7 @@ POLY_IGP                         = '\x0071740bf129b05c4684abfbbed248d80971cce2'
 BNB_IGP                          = '\x78e25e7f84416e69b9339b0a6336eb6efff6b451'
 AVAX_IGP                         = '\x95519ba800bbd0d34eeae026fec620ad978176c0'
 RH_IGP                           = '\x3862a9b1acd89245a59002c2a08658ec1d5690e3'
+ARC_IGP                          = '\x7621e04860f0bde63311db9d5d8b589ad3458a1f'
 -- ===== ProxyAdmin (per chain) =====
 ETH_PROXY_ADMIN                  = '\x75ee15ee1b4a75fa3e2fdf5df3253c25599cc659'
 BASE_PROXY_ADMIN                 = '\x4ed7d626f1e96cd1c0401607bf70d95243e3ded1'
@@ -506,6 +535,7 @@ POLY_PROXY_ADMIN                 = '\xc4f7590c5d30be959225dc75640657954a86b980'
 BNB_PROXY_ADMIN                  = '\x65993af9d0d3a64ec77590db7ba362d6eb78ef70'
 AVAX_PROXY_ADMIN                 = '\xd7cf8c05fd81b8ca7cff8e6c49b08a9d63265c9b'
 RH_PROXY_ADMIN                   = '\xea87ae93fa0019a82a727bfd3ebd1cfca8f64f1d'
+ARC_PROXY_ADMIN                  = '\xea87ae93fa0019a82a727bfd3ebd1cfca8f64f1d'
 -- ===== PausableHook / PausableIsm (per chain) =====
 ETH_PAUSABLE_HOOK                = '\x3a66dc852e56d3748838b3c27cf381105b83705b'
 BASE_PAUSABLE_HOOK               = '\x46fa3a5780e5b90eaf34bded554d5353b5abe9e7'
@@ -515,6 +545,7 @@ POLY_PAUSABLE_HOOK               = '\x748040afb89b8fdbb992799808215419d36a0930'
 BNB_PAUSABLE_HOOK                = '\x7dbdad1b4a922b65d37d7258a4227b6658344b7f'
 AVAX_PAUSABLE_HOOK               = '\x239eb860770f1c48abac9be9825d20e3e7c018df'
 RH_PAUSABLE_HOOK                 = '\xa377b8269e0a47cdd2fd5aaeae860b45623c6d82'
+ARC_PAUSABLE_HOOK                = '\xcc2816ac3fe471e5378bbd3b30f2b8247021625d'
 ETH_PAUSABLE_ISM                 = '\xdc98a856fb9112894c2fe32267da8bf35645faf3'
 BASE_PAUSABLE_ISM                = '\x2af32cf8e3cf42d221eda0c843818fa5ee129e27'
 ARB_PAUSABLE_ISM                 = '\x1e38556b4fe553e6249448960875883990efcf34'
@@ -523,6 +554,7 @@ POLY_PAUSABLE_ISM                = '\x6741e91ffdc31c7786e3684427c628dad06299b0'
 BNB_PAUSABLE_ISM                 = '\x25db01cadf91cfd2f7e6dd829ce81698217f9151'
 AVAX_PAUSABLE_ISM                = '\xd76080269c641e1adb786b72ae60ddac3b6b8ed0'
 RH_PAUSABLE_ISM                  = '\xe350143242a2f7962f23d71ee9dd98f6e86d1772'
+ARC_PAUSABLE_ISM                 = '\xed9a722c543883fb7e07e78f3879762de09ea7d5'
 -- ===== InterchainAccountRouter (per chain) =====
 ETH_ICA_ROUTER                   = '\xc00b94c115742f711a6f9ea90373c33e9b72a4a9'
 BASE_ICA_ROUTER                  = '\x44647cd983e80558793780f9a0c7c2aa9f384d07'
@@ -532,6 +564,7 @@ POLY_ICA_ROUTER                  = '\xd8b641feb587844854aec97544ccea426dff04a3'
 BNB_ICA_ROUTER                   = '\xf453b589f0166b90e050691eac281c01a8959897'
 AVAX_ICA_ROUTER                  = '\x2c58687fffcd5b7043a5bf256b196216a98a6587'
 RH_ICA_ROUTER                    = '\xf2755ae2a6f3b49fee5d6ccf5c7c60ec06a45200'
+ARC_ICA_ROUTER                   = '\x13e83ac41e696856b6996263501fb3225ad5e6f5'
 -- ===== Owners =====
 ETH_MAILBOX_OWNER_SAFE           = '\x562dfaac27a84be6c96273f5c9594da1681c0da7'
 BASE_MAILBOX_OWNER_SAFE          = '\x890ac177fe3052b8676a65f32c1589bc329f3d50'
@@ -542,8 +575,9 @@ ARB_PROXY_ADMIN_OWNER_TIMELOCK   = '\xac98b0cd1b64ea4fe133c6d2edaf842ce5cf4b01'
 POLY_MAILBOX_OWNER_ICA           = '\x20e52e3bedf7bd305ca816dc54a0835d3bded820'
 AVAX_MAILBOX_OWNER_ICA           = '\x66c21cfa8b765318a458435519a31a5cf0f7ae4b'
 RH_MAILBOX_OWNER_ICA             = '\x0e7e5d38695d7939303244ad56ace1eea263dce8'
+ARC_MAILBOX_OWNER_ICA            = '\xb99a2f00e5f30931a8908ae3a27bd25d9a62d237'
 IGP_OWNER_EOA                    = '\xa7eccdb9be08178f896c26b7bbd8c3d4e844d9ba'
--- Hyperlane domain = chain id on all eight: 1, 8453, 42161, 10, 137, 56, 43114, 4663
+-- Hyperlane domain = chain id on all eight + Arc: 1, 8453, 42161, 10, 137, 56, 43114, 4663, 5042
 ```
 
 ---
@@ -553,11 +587,11 @@ IGP_OWNER_EOA                    = '\xa7eccdb9be08178f896c26b7bbd8c3d4e844d9ba'
 How each constant was verified (2026-09-29):
 
 - **Topic0 / selectors:** recomputed as `keccak256(canonical signature)` from `hyperlane-monorepo/solidity/contracts` (`interfaces/IMailbox.sol`, `Mailbox.sol`, `hooks/MerkleTreeHook.sol`, `interfaces/IInterchainGasPaymaster.sol`, `hooks/igp/InterchainGasPaymaster.sol`, `hooks/ProtocolFee.sol`, `hooks/PausableHook.sol`, `isms/PausableIsm.sol`, `isms/multisig/ValidatorAnnounce.sol`, `middleware/AbstractInterchainAccountRouter.sol`). Every event topic and every listed selector was found in the deployed Ethereum bytecode (Mailbox implementation `0x7b4d881c122a5e61adcffb56a2e3ce9927d53455`, IGP implementation `0xb6b16b5eede90e93c8e558f49effb06193b04edf`, MerkleTreeHook, ValidatorAnnounce, PausableIsm, PausableHook, ICA router). `ProtocolFeePaid` was confirmed from a Robinhood Chain log instead (the Ethereum ProtocolFee bytecode has no such event). The legacy three-field `GasPayment(bytes32,uint256,uint256)` is absent from every deployed IGP checked, so it is not listed.
-- **Addresses:** parsed from `hyperlane-registry` `chains/<chain>/addresses.yaml` for the eight chains; every address existence-checked with `eth_getCode`. Proxy implementations and admins read from the EIP-1967 slots. `localDomain()`, `owner()`, `defaultIsm()`, `defaultHook()`, `requiredHook()` and `nonce()` read on each Mailbox; `hooks(bytes)` on each AggregationHook (all eight chains); `implementation()` on the Polygon, Avalanche and Robinhood Chain ICA routers (equal to the EIP-1167 targets of the owners); `getMinDelay()` on the Arbitrum timelock; `getThreshold()` on the Ethereum Safe.
+- **Addresses:** parsed from `hyperlane-registry` `chains/<chain>/addresses.yaml` for the eight chains; every address existence-checked with `eth_getCode`. Proxy implementations and admins read from the EIP-1967 slots. `localDomain()`, `owner()`, `defaultIsm()`, `defaultHook()`, `requiredHook()` and `nonce()` read on each Mailbox; `hooks(bytes)` on each AggregationHook (all eight chains); `implementation()` on the Polygon, Avalanche and Robinhood Chain ICA routers (equal to the EIP-1167 targets of the owners); `getMinDelay()` on the Arbitrum timelock; `getThreshold()` on the Ethereum Safe. Arc: the same reads on 2026-10-05 against `chains/arc/addresses.yaml` (commit `fe66faf5`); activity counted with `eth_getLogs` on the Mailbox.
 - **Sample transactions read:** Ethereum `0xfb299b17db0e06f677d0d7f935821a08738682613d6dac83b684997dba1bc027` (USDC into a warp route, `SentTransferRemote`, `Dispatch`, `DispatchId`, `InsertedIntoTree`, `GasPayment` to domain 1399811149); Ethereum `0x955037563771deab94c3681051b6c10b771bde2d41d3108848792d28cdf94d5a` (`process` from a relayer EOA: `Process`, `ProcessId`, `ReceivedTransferRemote`, USDT `Transfer` to the recipient); Robinhood Chain `0x488bfa12b9fd6cb560facc316a64bdb60a91c9619a30a310f3af4621a6d021f9` (`Dispatch`, `DispatchId`, `ProtocolFeePaid`, `InsertedIntoTree`).
 - **Activity, pinned 12-hour window 2026-09-28 00:00–12:00 UTC** (logs at the registry Mailbox of each chain): `Dispatch` — Ethereum 148, Base 206, Arbitrum 153, Optimism 50, Polygon 85, BNB 76, Avalanche 0, Robinhood Chain 1. `Process` — Ethereum 150, Base 224, Arbitrum 141, Optimism 62, Polygon 19, BNB 102, Avalanche 1, Robinhood Chain 0. `DispatchId`/`ProcessId` equal `Dispatch`/`Process` on every chain. A 0 is a finding of this window only.
 
 Authoritative sources:
 - Canonical repositories — [hyperlane-xyz/hyperlane-monorepo](https://github.com/hyperlane-xyz/hyperlane-monorepo) (`solidity/contracts`) · [hyperlane-xyz/hyperlane-registry](https://github.com/hyperlane-xyz/hyperlane-registry) (`chains/*/addresses.yaml`, `chains/*/metadata.yaml`)
 - Docs — [Hyperlane domains](https://docs.hyperlane.xyz/docs/reference/domains)
-- Explorers — [Etherscan Mailbox](https://etherscan.io/address/0xc005dc82818d67af737725bd4bf75435d065d239) · [Basescan Mailbox](https://basescan.org/address/0xea87ae93fa0019a82a727bfd3ebd1cfca8f64f1d) · [Robinhood Chain Blockscout Mailbox](https://robinhoodchain.blockscout.com/address/0x3a867fCfFeC2B790970eeBDC9023E75B0a172aa7) · [Blockscout: independent Mailbox `0x599899e6b3b1362ba2460d125756a738ec1592d6`](https://eth.blockscout.com/address/0x599899e6b3b1362ba2460d125756a738ec1592d6)
+- Explorers — [Etherscan Mailbox](https://etherscan.io/address/0xc005dc82818d67af737725bd4bf75435d065d239) · [Basescan Mailbox](https://basescan.org/address/0xea87ae93fa0019a82a727bfd3ebd1cfca8f64f1d) · [Arcscan Mailbox](https://arcscan.app/address/0x7f50C5776722630a0024fAE05fDe8b47571D7B39) · [Robinhood Chain Blockscout Mailbox](https://robinhoodchain.blockscout.com/address/0x3a867fCfFeC2B790970eeBDC9023E75B0a172aa7) · [Blockscout: independent Mailbox `0x599899e6b3b1362ba2460d125756a738ec1592d6`](https://eth.blockscout.com/address/0x599899e6b3b1362ba2460d125756a738ec1592d6)

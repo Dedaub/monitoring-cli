@@ -1,11 +1,11 @@
-# Eco Routes — Topics, Selectors, Addresses (Ethereum, Base, Arbitrum, Optimism, Polygon, BNB, Robinhood Chain; NOT Avalanche)
+# Eco Routes — Topics, Selectors, Addresses (Ethereum, Base, Arbitrum, Optimism, Polygon, Arc; retired Portal on BNB and Robinhood Chain; NOT Avalanche)
 
-**Status:** verified on 2026-09-29 against live RPC on all eight target chains, the `@eco-foundation/routes-ts` npm package (the `deployAddresses.csv` of every published version from 0.0.714-beta to 3.2.22, and the Portal, Executor, IntentSource, Inbox and prover ABIs), the verified sources on Blockscout (Portal, Executor, HyperProver, CCIPProver, ECDSAExecutor), and the Eco docs (architecture, provers, contract addresses, the `/v1/chains` API reference). Topic0s and selectors are recomputed as `keccak256(sig)`. Addresses are existence-checked with `eth_getCode`. `executor()`, `version()`, `getProofType()` and `PORTAL()` are read live.
-**Scope:** Eco Routes, the intent bridge of Eco: the current **Portal** generation (routes-ts 3.x: Portal, Executor, per-intent Vaults, provers), the older Portal addresses, and the legacy **IntentSource + Inbox** pairs of routes-ts 1.x and 2.x. Chains: Ethereum (1), Base (8453), Arbitrum One (42161), Optimism (10), Polygon PoS (137), BNB Smart Chain (56), Robinhood Chain (4663); Avalanche C-Chain (43114) has no deployment. Topics and selectors are chain-agnostic. Addresses are network-specific.
+**Status:** verified on 2026-09-29 and re-verified on 2026-10-05 (Portal migration of 2026-09-29, routes-ts 3.2.23/3.2.24) against live RPC on all nine target chains, the `@eco-foundation/routes-ts` npm package (the `deployAddresses.csv` of every published version from 0.0.714-beta to 3.2.24, and the Portal, Executor, IntentSource, Inbox and prover ABIs), the verified sources on Blockscout (Portal, Executor, HyperProver, CCIPProver, ECDSAExecutor), and the Eco docs (architecture, provers, contract addresses, the `/v1/chains` API reference). Topic0s and selectors are recomputed as `keccak256(sig)`. Addresses are existence-checked with `eth_getCode`. `executor()`, `version()`, `getProofType()` and `PORTAL()` are read live.
+**Scope:** Eco Routes, the intent bridge of Eco: the current **Portal** generation (routes-ts 3.2.23+: Portal, Executor, per-intent Vaults, provers), the older Portal addresses, and the legacy **IntentSource + Inbox** pairs of routes-ts 1.x and 2.x. Chains: Ethereum (1), Base (8453), Arbitrum One (42161), Optimism (10), Polygon PoS (137), Arc (5042) carry the current Portal; BNB Smart Chain (56) and Robinhood Chain (4663) carry only the retired 3.2.19–3.2.22 Portal; Avalanche C-Chain (43114) has no deployment. Topics and selectors are chain-agnostic. Addresses are network-specific.
 
 Eco Routes is an intent protocol. On the source chain, a user **publishes** an intent on the Portal and **funds** a Vault that belongs to that intent alone. On the destination chain, a solver **fulfills** the intent through the Portal: the solver's tokens go through the Executor to the recipient. The destination Portal then **dispatches a proof** through the prover that the user chose (for example Hyperlane, Polymer, LayerZero, CCIP or Metalayer). When the proof arrives, the source-chain prover records it, and the solver **withdraws** the reward from the Vault. If no solver fulfills before the deadline, the creator **refunds** the Vault. The Portal holds no funds between transactions.
 
-**The link key is `intentHash`**, and it is on chain on both sides. `intentHash = keccak256(abi.encodePacked(destination, routeHash, rewardHash))`. It is topic1 of `IntentPublished` (source), topic1 of `IntentFulfilled` and of the Portal's `IntentProven` (destination), topic1 of the prover's `IntentProven` (source), and the first data word of `IntentFunded`, `IntentWithdrawn` and `IntentRefunded` (source). The Portal address `0xEC000064576f9C95a8623Bc0eff3db6d296ea6df` is the same on every chain in this file. It is immutable: no proxy, no owner, no pause.
+**The link key is `intentHash`**, and it is on chain on both sides. `intentHash = keccak256(abi.encodePacked(destination, routeHash, rewardHash))`. It is topic1 of `IntentPublished` (source), topic1 of `IntentFulfilled` and of the Portal's `IntentProven` (destination), topic1 of the prover's `IntentProven` (source), and the first data word of `IntentFunded`, `IntentWithdrawn` and `IntentRefunded` (source). The current Portal address `0xEC000769A73b70e16f361a442292500b3BCf4A85` is the same on every chain that has it. It is immutable: no proxy, no owner, no pause. **The previous Portal `0xEC000064576f9C95a8623Bc0eff3db6d296ea6df` is retired:** the new Portal emitted its first events on 2026-09-29, and the old Portal emitted its last observed events on Ethereum 2026-09-30 17:40 UTC, Arbitrum 2026-09-30 23:31 UTC and Base 2026-10-01 12:56 UTC, and it had 0 events in the 24 hours to 2026-10-05 10:00 UTC. An alert keyed on the old address misses all new intents.
 
 ---
 
@@ -13,13 +13,18 @@ Eco Routes is an intent protocol. On the source chain, a user **publishes** an i
 
 | Contract | Role | Proxy? | Where (of the eight) |
 |----------|------|--------|-------|
-| **Portal** (routes-ts 3.2.19+, `version()` = "2.6") | Source side: publish, fund, withdraw, refund; ERC-7683 origin settler (`open`). Destination side: fulfill, prove; ERC-7683 destination settler (`fill`). | **No** (22,537 B; the code hash differs per chain) | ETH, Base, Arb, OP, Poly, BNB; Robinhood Chain (unlisted) |
-| **Executor** | Created by the Portal. Runs the route's calls on the destination. Only the Portal can call it. No storage. | No (1,642 B, one code hash) | same seven chains |
-| **Vault** (one per intent) | Escrow of one intent's reward, at a CREATE2 address from the Portal and the intent hash. Deployed on first funding or on withdraw/refund. A 75-byte proxy that delegates to the Vault implementation. | per-intent minimal proxy | same seven chains |
-| **Vault implementation** | Logic of every Vault. | No (4,203 B) | same seven chains |
-| **HyperProver** (current, routes-ts 3.2.21+) | Hyperlane prover: sends the proof from the destination through the Hyperlane Mailbox, records it on the source. | No | ETH, Base, Arb, OP, Poly |
-| **PolymerProver** | Polymer (IBC light client) prover. Two live addresses (§3). | No | ETH, Base, Arb, OP, Poly |
-| **CCIPProver** | Chainlink CCIP prover (verified source). Not in the routes-ts address file. | No | ETH, Base |
+| **Portal** (routes-ts 3.2.23+, `version()` = "2.12.0") | Source side: publish, fund, withdraw, refund; ERC-7683 origin settler (`open`). Destination side: fulfill, cancel, prove; ERC-7683 destination settler (`fill`). | **No** (24,197 B; the code hash differs per chain) | ETH, Base, Arb, OP, Poly, Arc |
+| **Executor** | Created by the Portal. Runs the route's calls on the destination. Only the Portal can call it. No storage. | No (1,642 B, one code hash) | same six chains |
+| **Vault** (one per intent) | Escrow of one intent's reward, at a CREATE2 address from the Portal and the intent hash. Deployed on first funding or on withdraw/refund. A 75-byte proxy that delegates to the Vault implementation. | per-intent minimal proxy | same six chains |
+| **Vault implementation** | Logic of every Vault. | No (4,370 B, one code hash) | same six chains |
+| **HyperProver** (current, routes-ts 3.2.23+) | Hyperlane prover: sends the proof from the destination through the Hyperlane Mailbox, records it on the source. `version()` = "2.12.0". | No (7,891 B) | ETH, Base, Arb, OP, Poly, Arc |
+| **PolymerProver** (current, routes-ts 3.2.23+) | Polymer (IBC light client) prover. | No (11,784 B, one code hash) | ETH, Base, Arb, OP, Poly, Arc |
+| **CCIPProver** (current) | Chainlink CCIP prover for the current Portal (`PORTAL()` = the current Portal). Not in the routes-ts address file. | No (8,125 B) | ETH, Base |
+| Portal (routes-ts 3.2.19–3.2.22, `version()` = "2.6") | **Retired 2026-09-30/10-01** (last events, see above). Same event set minus `IntentCancelled`. Late withdrawals and refunds of its Vaults can still come from it. | No (22,537 B) | ETH, Base, Arb, OP, Poly, BNB; Robinhood Chain (unlisted) |
+| Executor / Vault implementation (3.2.19–3.2.22) | Executor and Vault logic of the retired Portal. | No (1,642 B / 4,203 B) | same seven chains |
+| HyperProver (routes-ts 3.2.21–3.2.22) | Hyperlane prover of the retired Portal. | No | ETH, Base, Arb, OP, Poly, Arc |
+| PolymerProver (3.2.20–3.2.22) and the unlisted PolymerProver / CCIPProver of the retired Portal | §3. | No | see §3–§7 |
+| Portal (routes-ts 3.2.19–3.2.22, Arc only) | Arc had its own address `0xEC002CA16cE20c2a9F3C6200EF04E7d92a3dfBD8` (`version()` = "2.10.0"), replaced by the current Portal. | No (23,650 B) | Arc |
 | **LayerZeroProver** (routes-ts 3.2.18) | LayerZero prover. | No | ETH, Base, Arb, OP, Poly |
 | **MetaProver** (routes-ts 2.8.1–3.2.18) | Caldera Metalayer prover. | No | Base, Arb |
 | **HyperProver** (routes-ts 3.2.17–3.2.20) | Previous Hyperlane prover. | No | ETH, Base, Arb, OP, Poly, BNB |
@@ -34,7 +39,7 @@ Between 0.1.10-beta and 2.7.0, routes-ts published 29 IntentSource addresses (th
 
 ### Chain and domain ids
 
-`IntentPublished.destination` is a `uint64` **chain id**: Ethereum 1, Base 8453, Arbitrum 42161, Optimism 10, Polygon 137, BNB 56. Eco uses 1399811149 for Solana and 728126428 for Tron. The provers take their own domain ids in `sourceChainDomainID` (for example a Hyperlane domain or a LayerZero eid); the Portal docs warn that it is not the chain id. In the sampled Ethereum fulfillment, the Hyperlane message goes to domain 1399811149 (Solana), the source of that intent.
+`IntentPublished.destination` is a `uint64` **chain id**: Ethereum 1, Base 8453, Arbitrum 42161, Optimism 10, Polygon 137, Arc 5042, BNB 56. Eco uses 1399811149 for Solana and 728126428 for Tron. The provers take their own domain ids in `sourceChainDomainID` (for example a Hyperlane domain or a LayerZero eid); the Portal docs warn that it is not the chain id. In the sampled Ethereum fulfillment, the Hyperlane message goes to domain 1399811149 (Solana), the source of that intent.
 
 ---
 
@@ -57,6 +62,7 @@ Between 0.1.10-beta and 2.7.0, routes-ts published 29 IntentSource addresses (th
 |--------|-------|-------|
 | `0xc471de166a60c0b81727dfa2f57d4fc3ad1b45b057c1f034b7058365613bde8d` | `IntentFulfilled(bytes32 indexed intentHash, bytes32 indexed claimant)` | **Destination leg.** In the same transaction the solver's tokens go through the Executor to the recipient. `claimant` = the solver's reward address on the source chain (`bytes32`). |
 | `0xe6d8040a8a6bc519f4e5a42fb2677067c929ddbf2cca9287a44b23fb617a6f00` | `IntentProven(bytes32 indexed intentHash, bytes32 indexed claimant)` | Status only: the destination Portal sent the proof through the prover. |
+| `0xc08eb64db16a39d2848960af04e3f16fb404d9d436a9f0e9d7d0d4854715c9dc` | `IntentCancelled(bytes32 indexed intentHash)` | Current Portal only (routes-ts 3.2.23+). The intent is cancelled on the destination (`cancel` / `cancelAndProve`), so no solver can fulfill it. |
 | `0x0555709e59fb225fcf12cc582a9e5f7fd8eea54c91f3dc500ab9d8c37c507770` | `OrderFilled(bytes32 orderId, address solver)` | ERC-7683 destination event (`fill`). The legacy Inbox emits the same topic. |
 
 ### 1.3 Provers (source side)
@@ -122,9 +128,11 @@ The same topics come from every current prover contract (HyperProver, PolymerPro
 | `0x52a8339e` | `fulfill(bytes32 intentHash, (bytes32 salt, uint64 deadline, address portal, uint256 nativeAmount, (address token, uint256 amount)[] tokens, (address target, bytes data, uint256 value)[] calls) route, bytes32 rewardHash, bytes32 claimant)` | Payable. Pulls `route.tokens` from the solver to the Executor, runs `route.calls`. Emits `IntentFulfilled`. |
 | `0xb6681e39` | `fulfillAndProve(bytes32 intentHash, (bytes32 salt, uint64 deadline, address portal, uint256 nativeAmount, (address token, uint256 amount)[] tokens, (address target, bytes data, uint256 value)[] calls) route, bytes32 rewardHash, bytes32 claimant, address prover, uint64 sourceChainDomainID, bytes data)` | Payable. `IntentFulfilled` + `IntentProven` + the prover's message. |
 | `0x17d4e807` | `prove(address prover, uint64 sourceChainDomainID, bytes32[] intentHashes, bytes data)` | Payable. Batch proof dispatch. Emits `IntentProven` per intent. |
+| `0x377eacd1` | `cancel(bytes32 intentHash, (bytes32 salt, uint64 deadline, address portal, uint256 nativeAmount, (address token, uint256 amount)[] tokens, (address target, bytes data, uint256 value)[] calls) route, bytes32 rewardHash)` | Current Portal only. Emits `IntentCancelled`. |
+| `0xee433264` | `cancelAndProve(bytes32 intentHash, (bytes32 salt, uint64 deadline, address portal, uint256 nativeAmount, (address token, uint256 amount)[] tokens, (address target, bytes data, uint256 value)[] calls) route, bytes32 rewardHash, address prover, uint64 sourceChainDomainID, bytes data)` | Current Portal only. Payable. Cancel + proof dispatch. |
 | `0x82e2c43f` | `fill(bytes32 orderId, bytes originData, bytes fillerData)` | ERC-7683 fill. Emits `OrderFilled`. |
-| `0xc34c08e5` | `executor()` | View → `address`. Live: `0x645dADD5Bf354526b68A2befd9A305F7E03b91Ca`. |
-| `0x54fd4d50` | `version()` | View → `string`. Live: "2.6". |
+| `0xc34c08e5` | `executor()` | View → `address`. Live: `0x8B5D51AF4C4542f241C4e54CFd903CeEd145f082` (retired Portal: `0x645dADD5Bf354526b68A2befd9A305F7E03b91Ca`). |
+| `0x54fd4d50` | `version()` | View → `string`. Live: "2.12.0" (retired Portal: "2.6"). |
 | `0x1299d617` | `getRewardStatus(bytes32 intentHash)` | View → `uint8` status enum of the intent's reward. |
 | `0x0742ebe4` | `intentVaultAddress(uint64 destination, bytes route, (uint64 deadline, address creator, address prover, uint256 nativeAmount, (address token, uint256 amount)[] tokens) reward)` | View → the intent's Vault address. |
 | `0xed60f2a3` | `claimants(bytes32)` | View → the recorded claimant of a fulfilled intent (destination). |
@@ -158,17 +166,23 @@ The same topics come from every current prover contract (HyperProver, PolymerPro
 
 ## 3. Addresses — Ethereum (chain ID 1)
 
-All verified with `eth_getCode` on 2026-09-29.
+All verified with `eth_getCode` on 2026-09-29; the current-generation rows on 2026-10-05.
 
 | Role | Address | One-liner |
 |------|---------|-----------|
-| **Portal** | `0xEC000064576f9C95a8623Bc0eff3db6d296ea6df` | Verified `Portal`. Created through the EIP-2470 singleton factory `0xce0042B868300000d44A59004Da54A005ffdcf9f`. Contract nonce 15,469. |
-| **Executor** | `0x645dADD5Bf354526b68A2befd9A305F7E03b91Ca` | Verified `Executor`. `Portal.executor()` returns it. |
-| Vault implementation | `0x9f70b0c839fe2D7190a09AE87ED658B6d1Cba4F9` | 4,203 B. Every Vault proxy delegates to it. |
-| **HyperProver** (current) | `0xec004Ab4870c4e177c66949329dCdb503CE41022` | Verified `HyperProver`. `getProofType()` = "Hyperlane". Mailbox `0xc005dc82818d67AF737725bD4bf75435d065D239`. |
-| PolymerProver | `0xE3e4e6F284f1c8E17bafE4268EB98c36886B4d8B` | In routes-ts 3.2.20–3.2.22 for Ethereum and Base. |
-| PolymerProver (unlisted) | `0xEC00993f947cecBBfB261f25d4af2C95F97c91F9` | `getProofType()` = "Polymer", `version()` = "2.10.0", `PORTAL()` = the Portal. Not in routes-ts. |
-| CCIPProver (unlisted) | `0xceBB7cDDBA4734C7130BF114a37C2dA4C5f3c473` | Verified `CCIPProver`. `getProofType()` = "CCIP", `PORTAL()` = the Portal. |
+| **Portal** | `0xEC000769A73b70e16f361a442292500b3BCf4A85` | Current (routes-ts 3.2.23+). `version()` = "2.12.0". |
+| **Executor** | `0x8B5D51AF4C4542f241C4e54CFd903CeEd145f082` | `Portal.executor()` returns it. |
+| Vault implementation | `0x204D732E8d2f71D756eF5De79Dc6589721b53420` | 4,370 B. Every current Vault proxy delegates to it. |
+| **HyperProver** | `0xEC08fb4647f3f50d1162a578d481266687C60fc5` | `getProofType()` = "Hyperlane", `PORTAL()` = the current Portal. |
+| **PolymerProver** | `0xEC0DeD087Ee6C55991Bb4D4567ca1134c5353Ed6` | `getProofType()` = "Polymer", `PORTAL()` = the current Portal. |
+| **CCIPProver** (unlisted) | `0xEC0B53A81C996da376F125E541E40082815CDcDc` | `getProofType()` = "CCIP", `PORTAL()` = the current Portal. Emitted 4 prover `IntentProven` in the 24 h to 2026-10-05. |
+| Portal (3.2.19–3.2.22, retired) | `0xEC000064576f9C95a8623Bc0eff3db6d296ea6df` | Verified `Portal`. Created through the EIP-2470 singleton factory `0xce0042B868300000d44A59004Da54A005ffdcf9f`. Last event 2026-09-30 17:40 UTC. |
+| Executor (retired Portal) | `0x645dADD5Bf354526b68A2befd9A305F7E03b91Ca` | Verified `Executor`. |
+| Vault implementation (retired Portal) | `0x9f70b0c839fe2D7190a09AE87ED658B6d1Cba4F9` | 4,203 B. |
+| HyperProver (3.2.21–3.2.22) | `0xec004Ab4870c4e177c66949329dCdb503CE41022` | Verified `HyperProver`. Mailbox `0xc005dc82818d67AF737725bD4bf75435d065D239`. |
+| PolymerProver (3.2.20–3.2.22) | `0xE3e4e6F284f1c8E17bafE4268EB98c36886B4d8B` | Listed for Ethereum and Base. |
+| PolymerProver (unlisted, retired Portal) | `0xEC00993f947cecBBfB261f25d4af2C95F97c91F9` | `getProofType()` = "Polymer", `version()` = "2.10.0". |
+| CCIPProver (unlisted, retired Portal) | `0xceBB7cDDBA4734C7130BF114a37C2dA4C5f3c473` | Verified `CCIPProver`. |
 | LayerZeroProver | `0x0C4E3063239c9f4f323A956C79738916594D8Fd4` | routes-ts 3.2.18. |
 | HyperProver (previous) | `0xC972B26C1E208845Ca8C18c6B83466bFCeED8c2F` | routes-ts 3.2.17–3.2.20. |
 | Portal (previous) | `0x399Dbd5DF04f83103F77A58cBa2B7c4d3cdede97` | routes-ts 3.2.4–3.2.18. |
@@ -184,13 +198,17 @@ MetaProver and the routes-ts 1.21.2 pair are not deployed on Ethereum (`eth_getC
 
 | Role | Address | One-liner |
 |------|---------|-----------|
-| **Portal** | `0xEC000064576f9C95a8623Bc0eff3db6d296ea6df` | Verified `Portal`. |
-| **Executor** | `0x645dADD5Bf354526b68A2befd9A305F7E03b91Ca` | Same code as Ethereum. |
-| Vault implementation | `0x9f70b0c839fe2D7190a09AE87ED658B6d1Cba4F9` | Same code. |
-| **HyperProver** (current) | `0xec004Ab4870c4e177c66949329dCdb503CE41022` | Mailbox `0xeA87ae93Fa0019a82A727bfd3eBd1cFCa8f64f1D`. |
-| PolymerProver | `0xE3e4e6F284f1c8E17bafE4268EB98c36886B4d8B` | Same code as Ethereum. |
-| PolymerProver (unlisted) | `0xEC00993f947cecBBfB261f25d4af2C95F97c91F9` | Same code as Ethereum. |
-| CCIPProver (unlisted) | `0xceBB7cDDBA4734C7130BF114a37C2dA4C5f3c473` | 7,804 B. |
+| **Portal** | `0xEC000769A73b70e16f361a442292500b3BCf4A85` | Current. Same address as Ethereum. |
+| **Executor** | `0x8B5D51AF4C4542f241C4e54CFd903CeEd145f082` | `Portal.executor()` returns it. |
+| Vault implementation | `0x204D732E8d2f71D756eF5De79Dc6589721b53420` | 4,370 B. Every current Vault proxy delegates to it. |
+| **HyperProver** | `0xEC08fb4647f3f50d1162a578d481266687C60fc5` | `getProofType()` = "Hyperlane", `PORTAL()` = the current Portal. |
+| **PolymerProver** | `0xEC0DeD087Ee6C55991Bb4D4567ca1134c5353Ed6` | `getProofType()` = "Polymer", `PORTAL()` = the current Portal. |
+| **CCIPProver** (unlisted) | `0xEC0B53A81C996da376F125E541E40082815CDcDc` | 8,125 B. |
+| Portal (3.2.19–3.2.22, retired) | `0xEC000064576f9C95a8623Bc0eff3db6d296ea6df` | Verified `Portal`. Last event 2026-10-01 12:56 UTC. |
+| Executor / Vault implementation (retired Portal) | `0x645dADD5Bf354526b68A2befd9A305F7E03b91Ca` · `0x9f70b0c839fe2D7190a09AE87ED658B6d1Cba4F9` | |
+| HyperProver (3.2.21–3.2.22) | `0xec004Ab4870c4e177c66949329dCdb503CE41022` | Mailbox `0xeA87ae93Fa0019a82A727bfd3eBd1cFCa8f64f1D`. |
+| PolymerProver (3.2.20–3.2.22 / unlisted) | `0xE3e4e6F284f1c8E17bafE4268EB98c36886B4d8B` · `0xEC00993f947cecBBfB261f25d4af2C95F97c91F9` | |
+| CCIPProver (unlisted, retired Portal) | `0xceBB7cDDBA4734C7130BF114a37C2dA4C5f3c473` | 7,804 B. |
 | LayerZeroProver | `0x0C4E3063239c9f4f323A956C79738916594D8Fd4` | Same code as Ethereum. |
 | MetaProver | `0x3d529eFAEDb3B999A404c1B8543441aE616cB914` | routes-ts 2.8.1–3.2.18. |
 | HyperProver (previous) | `0xC972B26C1E208845Ca8C18c6B83466bFCeED8c2F` | |
@@ -203,11 +221,15 @@ MetaProver and the routes-ts 1.21.2 pair are not deployed on Ethereum (`eth_getC
 
 | Role | Address | One-liner |
 |------|---------|-----------|
-| **Portal** | `0xEC000064576f9C95a8623Bc0eff3db6d296ea6df` | |
-| **Executor** | `0x645dADD5Bf354526b68A2befd9A305F7E03b91Ca` | |
-| Vault implementation | `0x9f70b0c839fe2D7190a09AE87ED658B6d1Cba4F9` | |
-| **HyperProver** (current) | `0xec004Ab4870c4e177c66949329dCdb503CE41022` | |
-| PolymerProver | `0xE3e4e6F284f1c8E17bafE4268EB98c36886B4d8B` · `0xEC00993f947cecBBfB261f25d4af2C95F97c91F9` | Code present; routes-ts lists neither for Arbitrum. |
+| **Portal** | `0xEC000769A73b70e16f361a442292500b3BCf4A85` | Current. |
+| **Executor** | `0x8B5D51AF4C4542f241C4e54CFd903CeEd145f082` | |
+| Vault implementation | `0x204D732E8d2f71D756eF5De79Dc6589721b53420` | |
+| **HyperProver** | `0xEC08fb4647f3f50d1162a578d481266687C60fc5` | |
+| **PolymerProver** | `0xEC0DeD087Ee6C55991Bb4D4567ca1134c5353Ed6` | |
+| Portal (3.2.19–3.2.22, retired) | `0xEC000064576f9C95a8623Bc0eff3db6d296ea6df` | Last event 2026-09-30 23:31 UTC. |
+| Executor / Vault implementation (retired Portal) | `0x645dADD5Bf354526b68A2befd9A305F7E03b91Ca` · `0x9f70b0c839fe2D7190a09AE87ED658B6d1Cba4F9` | |
+| HyperProver (3.2.21–3.2.22) | `0xec004Ab4870c4e177c66949329dCdb503CE41022` | |
+| PolymerProver (retired Portal) | `0xE3e4e6F284f1c8E17bafE4268EB98c36886B4d8B` · `0xEC00993f947cecBBfB261f25d4af2C95F97c91F9` | Code present; routes-ts lists neither for Arbitrum. |
 | LayerZeroProver | `0x0C4E3063239c9f4f323A956C79738916594D8Fd4` | |
 | MetaProver | `0x3d529eFAEDb3B999A404c1B8543441aE616cB914` | |
 | HyperProver (previous) | `0xC972B26C1E208845Ca8C18c6B83466bFCeED8c2F` | |
@@ -221,11 +243,15 @@ CCIPProver: `eth_getCode` = `0x` on Arbitrum.
 
 | Role | Address | One-liner |
 |------|---------|-----------|
-| **Portal** | `0xEC000064576f9C95a8623Bc0eff3db6d296ea6df` | |
-| **Executor** | `0x645dADD5Bf354526b68A2befd9A305F7E03b91Ca` | |
-| Vault implementation | `0x9f70b0c839fe2D7190a09AE87ED658B6d1Cba4F9` | |
-| **HyperProver** (current) | `0xec004Ab4870c4e177c66949329dCdb503CE41022` | |
-| PolymerProver | `0xE3e4e6F284f1c8E17bafE4268EB98c36886B4d8B` · `0xEC00993f947cecBBfB261f25d4af2C95F97c91F9` | Code present. |
+| **Portal** | `0xEC000769A73b70e16f361a442292500b3BCf4A85` | Current. |
+| **Executor** | `0x8B5D51AF4C4542f241C4e54CFd903CeEd145f082` | |
+| Vault implementation | `0x204D732E8d2f71D756eF5De79Dc6589721b53420` | |
+| **HyperProver** | `0xEC08fb4647f3f50d1162a578d481266687C60fc5` | |
+| **PolymerProver** | `0xEC0DeD087Ee6C55991Bb4D4567ca1134c5353Ed6` | |
+| Portal (3.2.19–3.2.22, retired) | `0xEC000064576f9C95a8623Bc0eff3db6d296ea6df` | Replaced in routes-ts 3.2.23. |
+| Executor / Vault implementation (retired Portal) | `0x645dADD5Bf354526b68A2befd9A305F7E03b91Ca` · `0x9f70b0c839fe2D7190a09AE87ED658B6d1Cba4F9` | |
+| HyperProver (3.2.21–3.2.22) | `0xec004Ab4870c4e177c66949329dCdb503CE41022` | |
+| PolymerProver (retired Portal) | `0xE3e4e6F284f1c8E17bafE4268EB98c36886B4d8B` · `0xEC00993f947cecBBfB261f25d4af2C95F97c91F9` | Code present. |
 | LayerZeroProver | `0x0C4E3063239c9f4f323A956C79738916594D8Fd4` | |
 | HyperProver (previous) | `0xC972B26C1E208845Ca8C18c6B83466bFCeED8c2F` | |
 | Portal (previous / older / pre-release) | `0x399Dbd5DF04f83103F77A58cBa2B7c4d3cdede97` · `0x18d4415ad59b6B08976517C613D94974b6bCB79c` · `0xB5e58A8206473Df3Ab9b8DDd3B0F84c0ba68F8b5` | |
@@ -238,11 +264,15 @@ MetaProver and CCIPProver: `eth_getCode` = `0x` on Optimism.
 
 | Role | Address | One-liner |
 |------|---------|-----------|
-| **Portal** | `0xEC000064576f9C95a8623Bc0eff3db6d296ea6df` | |
-| **Executor** | `0x645dADD5Bf354526b68A2befd9A305F7E03b91Ca` | |
-| Vault implementation | `0x9f70b0c839fe2D7190a09AE87ED658B6d1Cba4F9` | |
-| **HyperProver** (current) | `0xec004Ab4870c4e177c66949329dCdb503CE41022` | |
-| PolymerProver | `0xE3e4e6F284f1c8E17bafE4268EB98c36886B4d8B` · `0xEC00993f947cecBBfB261f25d4af2C95F97c91F9` | Code present. |
+| **Portal** | `0xEC000769A73b70e16f361a442292500b3BCf4A85` | Current. |
+| **Executor** | `0x8B5D51AF4C4542f241C4e54CFd903CeEd145f082` | |
+| Vault implementation | `0x204D732E8d2f71D756eF5De79Dc6589721b53420` | |
+| **HyperProver** | `0xEC08fb4647f3f50d1162a578d481266687C60fc5` | |
+| **PolymerProver** | `0xEC0DeD087Ee6C55991Bb4D4567ca1134c5353Ed6` | |
+| Portal (3.2.19–3.2.22, retired) | `0xEC000064576f9C95a8623Bc0eff3db6d296ea6df` | Replaced in routes-ts 3.2.23. |
+| Executor / Vault implementation (retired Portal) | `0x645dADD5Bf354526b68A2befd9A305F7E03b91Ca` · `0x9f70b0c839fe2D7190a09AE87ED658B6d1Cba4F9` | |
+| HyperProver (3.2.21–3.2.22) | `0xec004Ab4870c4e177c66949329dCdb503CE41022` | |
+| PolymerProver (retired Portal) | `0xE3e4e6F284f1c8E17bafE4268EB98c36886B4d8B` · `0xEC00993f947cecBBfB261f25d4af2C95F97c91F9` | Code present. |
 | LayerZeroProver | `0x0C4E3063239c9f4f323A956C79738916594D8Fd4` | |
 | HyperProver (previous) | `0xC972B26C1E208845Ca8C18c6B83466bFCeED8c2F` | |
 | Portal (previous / older / pre-release) | `0x399Dbd5DF04f83103F77A58cBa2B7c4d3cdede97` · `0x18d4415ad59b6B08976517C613D94974b6bCB79c` · `0xB5e58A8206473Df3Ab9b8DDd3B0F84c0ba68F8b5` | |
@@ -250,60 +280,79 @@ MetaProver and CCIPProver: `eth_getCode` = `0x` on Optimism.
 
 MetaProver, CCIPProver and the 1.21.2 pair: `eth_getCode` = `0x` on Polygon.
 
-## 8. Addresses — BNB Smart Chain (chain ID 56)
+## 8. Addresses — BNB Smart Chain (chain ID 56): retired Portal only
+
+routes-ts 3.2.23+ drops chain 56. The current Portal, Executor, Vault implementation and provers have no code on BNB (`eth_getCode` = `0x`, 2026-10-05).
 
 | Role | Address | One-liner |
 |------|---------|-----------|
-| **Portal** | `0xEC000064576f9C95a8623Bc0eff3db6d296ea6df` | `executor()` and `version()` answer as on Ethereum. In routes-ts 3.2.22; not in the `/v1/chains` example. |
-| **Executor** | `0x645dADD5Bf354526b68A2befd9A305F7E03b91Ca` | |
-| Vault implementation | `0x9f70b0c839fe2D7190a09AE87ED658B6d1Cba4F9` | |
+| Portal (3.2.19–3.2.22, retired) | `0xEC000064576f9C95a8623Bc0eff3db6d296ea6df` | `executor()` and `version()` answer as on Ethereum. Listed up to routes-ts 3.2.22; not in the `/v1/chains` example. |
+| Executor (retired Portal) | `0x645dADD5Bf354526b68A2befd9A305F7E03b91Ca` | |
+| Vault implementation (retired Portal) | `0x9f70b0c839fe2D7190a09AE87ED658B6d1Cba4F9` | |
 | HyperProver (previous) | `0xC972B26C1E208845Ca8C18c6B83466bFCeED8c2F` | The only prover with code on BNB. |
 | Portal (previous / older / pre-release) | `0x399Dbd5DF04f83103F77A58cBa2B7c4d3cdede97` · `0x18d4415ad59b6B08976517C613D94974b6bCB79c` · `0xB5e58A8206473Df3Ab9b8DDd3B0F84c0ba68F8b5` | |
 | IntentSource / Inbox (2.8.x) | `0x2020ae689ED3e017450280CEA110d0ef6E640Da4` · `0x04c816032A076dF65b411Bb3F31c8d569d411ee2` | |
 | ECDSAExecutor (not Routes) | `0xEc2C96e75B09e29b66bf2Ee5C37fa749eF9AA7c7` | |
 
-The current HyperProver, both PolymerProvers, CCIPProver, LayerZeroProver and MetaProver have no code on BNB. routes-ts lists MetaProver `0x3d529eFAEDb3B999A404c1B8543441aE616cB914` for BNB up to 3.2.18, but `eth_getCode` returns `0x` there.
+The 3.2.21–3.2.22 HyperProver, both PolymerProvers, CCIPProver, LayerZeroProver and MetaProver have no code on BNB. routes-ts lists MetaProver `0x3d529eFAEDb3B999A404c1B8543441aE616cB914` for BNB up to 3.2.18, but `eth_getCode` returns `0x` there.
 
-## 9. Addresses — Robinhood Chain (chain ID 4663): unlisted Portal
+## 9. Addresses — Robinhood Chain (chain ID 4663): unlisted retired Portal
 
-The Portal, the Executor and the Vault implementation have code at their usual addresses on Robinhood Chain. `executor()` returns the same Executor, and `version()` returns "2.6". The routes-ts address file (3.2.22) and the `/v1/chains` example (2026-09-15) do not list Robinhood Chain. The Portal is a permissionless deployment through the EIP-2470 factory, so its presence does not prove that Eco solvers serve the chain. Eco announced a Robinhood Chain integration on 2026-07-29.
+The 3.2.19–3.2.22 Portal, its Executor and its Vault implementation have code at their usual addresses on Robinhood Chain. `executor()` returns the same Executor, and `version()` returns "2.6". The current Portal `0xEC000769A73b70e16f361a442292500b3BCf4A85`, its Executor and its provers have no code on Robinhood Chain (2026-10-05). The routes-ts address file (3.2.22 to 3.2.24) and the `/v1/chains` example (2026-09-15) do not list Robinhood Chain. The Portal is a permissionless deployment through the EIP-2470 factory, so its presence does not prove that Eco solvers serve the chain. Eco announced a Robinhood Chain integration on 2026-07-29.
 
 | Role | Address | One-liner |
 |------|---------|-----------|
-| **Portal** | `0xEC000064576f9C95a8623Bc0eff3db6d296ea6df` | 22,537 B. **Contract nonce 4** (Ethereum: 15,469). 0 Portal events in the pinned window. |
-| **Executor** | `0x645dADD5Bf354526b68A2befd9A305F7E03b91Ca` | Same code. |
+| Portal (3.2.19–3.2.22) | `0xEC000064576f9C95a8623Bc0eff3db6d296ea6df` | 22,537 B. **Contract nonce 4** (Ethereum: 15,469). 0 Portal events in the pinned window. |
+| Executor | `0x645dADD5Bf354526b68A2befd9A305F7E03b91Ca` | Same code. |
 | Vault implementation | `0x9f70b0c839fe2D7190a09AE87ED658B6d1Cba4F9` | Same code. |
 
 No prover, no older Portal and no legacy IntentSource or Inbox has code on Robinhood Chain.
 
+## 10. Addresses — Arc (chain ID 5042)
+
+routes-ts 3.2.23+ lists Arc with the shared current addresses. All rows were existence-checked with `eth_getCode` on `https://rpc.mainnet.arc.io` on 2026-10-05. `Portal.executor()` and `version()` answer as on Ethereum. The Portal emitted `IntentFulfilled` and `IntentWithdrawn` in the ~40,000 Arc blocks to 2026-10-05.
+
+| Role | Address | One-liner |
+|------|---------|-----------|
+| **Portal** | `0xEC000769A73b70e16f361a442292500b3BCf4A85` | Current. 24,197 B. |
+| **Executor** | `0x8B5D51AF4C4542f241C4e54CFd903CeEd145f082` | Same code as Ethereum. |
+| Vault implementation | `0x204D732E8d2f71D756eF5De79Dc6589721b53420` | Same code as Ethereum. |
+| **HyperProver** | `0xEC08fb4647f3f50d1162a578d481266687C60fc5` | 7,891 B. |
+| **PolymerProver** | `0xEC0DeD087Ee6C55991Bb4D4567ca1134c5353Ed6` | Same code as Ethereum. |
+| Portal (3.2.19–3.2.22, Arc only, retired) | `0xEC002CA16cE20c2a9F3C6200EF04E7d92a3dfBD8` | `version()` = "2.10.0", `executor()` = `0x95b2d45F49c68a54BDBa0356fc3034751A43b3D4`. 0 logs in the last 20,000 blocks. |
+| HyperProver (3.2.21–3.2.22) | `0xec004Ab4870c4e177c66949329dCdb503CE41022` | Code present. |
+
+The 3.2.19–3.2.22 shared Portal `0xEC000064576f9C95a8623Bc0eff3db6d296ea6df`, its Executor and its Vault implementation have no code on Arc. The current CCIPProver `0xEC0B53A81C996da376F125E541E40082815CDcDc` has no code on Arc. LayerZeroProver and the legacy contracts were not checked on Arc.
+
 ---
 
-## 10. Cross-chain summary
+## 11. Cross-chain summary
 
-| Chain | ID | Portal | Executor | Current HyperProver | PolymerProver (either) | CCIPProver | Legacy 2.8.x pair | `IntentPublished` | `IntentFulfilled` | `IntentWithdrawn` | `IntentRefunded` |
+| Chain | ID | Current Portal `0xEC000769…` | Retired Portal `0xEC000064…` | Current HyperProver | Current PolymerProver | Current CCIPProver | Legacy 2.8.x pair | `IntentPublished` | `IntentFulfilled` | `IntentWithdrawn` | `IntentRefunded` |
 |-------|----|----|----|----|----|----|----|----|----|----|----|
 | Ethereum | 1 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 92 | 68 | 91 | 0 |
 | Base | 8453 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 127 | 163 | 135 | 3 |
 | Arbitrum One | 42161 | ✅ | ✅ | ✅ | ✅ | — | ✅ | 103 | 115 | 101 | 2 |
 | Optimism | 10 | ✅ | ✅ | ✅ | ✅ | — | ✅ | 25 | 47 | 29 | 0 |
 | Polygon PoS | 137 | ✅ | ✅ | ✅ | ✅ | — | ✅ | 9 | 75 | 10 | 1 |
-| BNB Smart Chain | 56 | ✅ | ✅ | — | — | — | ✅ | 0 | 0 | 0 | 0 |
+| Arc | 5042 | ✅ | — (own 3.2.22 Portal) | ✅ | ✅ | — | n/c | n/c | live | live | n/c |
+| BNB Smart Chain | 56 | — | ✅ | — | — | — | ✅ | 0 | 0 | 0 | 0 |
 | Avalanche C-Chain | 43114 | — | — | — | — | — | — | not deployed | | | |
-| Robinhood Chain | 4663 | ✅ (unlisted) | ✅ | — | — | — | — | 0 | 0 | 0 | 0 |
+| Robinhood Chain | 4663 | — | ✅ (unlisted) | — | — | — | — | 0 | 0 | 0 | 0 |
 
-Counts are Portal logs in the pinned 12-hour window 2026-09-28 00:00–12:00 UTC. The Portal is at `0xEC000064576f9C95a8623Bc0eff3db6d296ea6df` on every chain that has it. Outside the eight, routes-ts 3.2.22 lists the Portal on Unichain, Sonic, World Chain, HyperEVM, Ronin, Plasma, Celo, Ink and Arc (Arc at a different address), plus Tron and Solana.
+Counts are logs of the then-current Portal `0xEC000064576f9C95a8623Bc0eff3db6d296ea6df` in the pinned 12-hour window 2026-09-28 00:00–12:00 UTC, before the migration. After it, the current Portal on Base emitted `IntentFunded` 89, `IntentWithdrawn` 81, `IntentFulfilled` 79, Portal `IntentProven` 74, `IntentPublished` 71 and `IntentRefunded` 1 in the 24 hours to 2026-10-05 10:00 UTC (n/c = not counted). Outside the nine, routes-ts 3.2.24 lists the current Portal on Unichain, Monad, World Chain, HyperEVM, Ronin and Plasma, plus Tron and Solana; it drops Sonic, Celo and Ink.
 
-**Avalanche C-Chain has no Eco deployment.** `eth_getCode` returns `0x` at the Portal, the Executor, the Vault implementation, every prover and every legacy address. No routes-ts version lists chain 43114.
+**Avalanche C-Chain has no Eco deployment.** `eth_getCode` returns `0x` at both Portals, both Executors, both Vault implementations, every prover and every legacy address. No routes-ts version lists chain 43114.
 
 ---
 
-## 11. Proxies
+## 12. Proxies
 
 | Contract | Pattern | Detection | Upgrade auth |
 |----------|---------|-----------|--------------|
-| **Portal** | Immutable | EIP-1967 slots empty. The Eco docs: "no proxy, no admin keys, no upgrade path". The ABI has no owner, pause or upgrade function. | None. |
+| **Portal** | Immutable | EIP-1967 slots empty (both the current and the retired Portal). The Eco docs: "no proxy, no admin keys, no upgrade path". The ABI has no owner, pause or upgrade function. | None. |
 | **Executor** | Immutable | EIP-1967 slots empty. One function (`execute`), only the Portal. | None. |
-| **Vault** (per intent) | Minimal proxy (75 B) | The runtime code holds the implementation `0x9f70b0c839fe2D7190a09AE87ED658B6d1Cba4F9` as a `PUSH32` and delegates to it; an empty call is accepted (native funding). Not the 45-byte ERC-1167 layout. | None. Only the Portal can call it. |
+| **Vault** (per intent) | Minimal proxy (75 B) | The runtime code holds the implementation as a `PUSH32` and delegates to it (current Portal: `0x204D732E8d2f71D756eF5De79Dc6589721b53420`; retired Portal: `0x9f70b0c839fe2D7190a09AE87ED658B6d1Cba4F9`); an empty call is accepted (native funding). Not the 45-byte ERC-1167 layout. | None. Only the Portal can call it. |
 | **Provers** | Immutable | EIP-1967 slots empty. The verified HyperProver and CCIPProver ABIs have no owner or upgrade function; their whitelists are set in the constructor. | None. |
 | Legacy IntentSource / Inbox | Immutable | EIP-1967 slots empty. | None. |
 
@@ -311,24 +360,24 @@ There is no admin trigger to watch on the Routes contracts. A new prover needs n
 
 ---
 
-## 12. Detection invariants & gotchas
+## 13. Detection invariants & gotchas
 
 1. **Take the value from the Vault, not the Portal.** The Portal holds nothing. On the source chain, the token goes from the funder straight to the intent's Vault. Example: Ethereum `0xff8bb9fab062392121d07b52a0d9b8ff8d5ef36935b8ec22e52e0e7b73744215` moves USDC from a Bungee router (`0x50cFe7c1938dB66A1a6D2e86D36F39FBef3d5c4a`) to the Vault `0xd875d181A5E298114ca3FfcC310E5163a51523da`, then emits `IntentFunded`. Get the Vault address from that `Transfer`, or call `intentVaultAddress`.
 2. **A Vault can be funded with no event.** The docs describe funding as "a vanilla ERC-20 transfer to a CREATE2 address". A plain transfer to a Vault address emits no `IntentFunded`.
-3. **The payout comes from the Executor.** On the destination, the solver's tokens go solver → Executor `0x645dADD5Bf354526b68A2befd9A305F7E03b91Ca` → recipient, in the same transaction as `IntentFulfilled`. The Executor has one address on all seven chains that have Eco. Example: Ethereum `0x661bfd50ed1484623e58eb0e2a999c6ac82af7a3a414bdbbfa93811e3d719bb9`.
+3. **The payout comes from the Executor.** On the destination, the solver's tokens go solver → Executor → recipient, in the same transaction as `IntentFulfilled`. The current Executor is `0x8B5D51AF4C4542f241C4e54CFd903CeEd145f082` on all six chains with the current Portal; the retired Portal used `0x645dADD5Bf354526b68A2befd9A305F7E03b91Ca`. Example (retired Portal): Ethereum `0x661bfd50ed1484623e58eb0e2a999c6ac82af7a3a414bdbbfa93811e3d719bb9`.
 4. **The solver is not `tx.from`.** Solvers use smart accounts. In the Ethereum example, the transaction goes to the ECDSAExecutor module, and a smart account (`0x1Da38A31F369343bdD33cCc48E89D165E8ab3450`) supplies the USDC. `IntentFulfilled.claimant` (`bytes32`) is the reward address on the source chain.
 5. **Two different `IntentProven` topics.** The Portal's `IntentProven(bytes32,bytes32)` (`0xe6d8040a8a6bc519f4e5a42fb2677067c929ddbf2cca9287a44b23fb617a6f00`, destination) means "proof sent". The prover's `IntentProven(bytes32,address,uint64)` (`0xa79bcebf1cb6259b008ad946df35c764dd6b25206bb5c47ec11976cdce4f0145`, source) means "proof received". The legacy prover had a third topic. Do not merge them.
 6. **Two different `IntentFunded` topics.** The Portal's has a `bool complete` field; the legacy IntentSource's does not.
-7. **The prover set is open.** In the pinned window the source-side `IntentProven` came from the current HyperProver (Ethereum 89, Base 125, Arbitrum 102, Optimism 27, Polygon 8), the unlisted PolymerProver `0xEC00993f947cecBBfB261f25d4af2C95F97c91F9` (Base 6, Optimism 2), PolymerProver `0xE3e4e6F284f1c8E17bafE4268EB98c36886B4d8B` (Base 1) and the CCIPProver (Ethereum 2). Two of these are not in the routes-ts address file. Read the prover from `IntentPublished` topic3 instead of a fixed list.
+7. **The prover set is open.** In the pinned window the source-side `IntentProven` came from the current HyperProver (Ethereum 89, Base 125, Arbitrum 102, Optimism 27, Polygon 8), the unlisted PolymerProver `0xEC00993f947cecBBfB261f25d4af2C95F97c91F9` (Base 6, Optimism 2), PolymerProver `0xE3e4e6F284f1c8E17bafE4268EB98c36886B4d8B` (Base 1) and the CCIPProver (Ethereum 2). Two of these are not in the routes-ts address file. After the migration (24 h to 2026-10-05) the emitters were the current HyperProver `0xEC08fb4647f3f50d1162a578d481266687C60fc5` (Ethereum 77, Base 77, Arbitrum 69), the current CCIPProver `0xEC0B53A81C996da376F125E541E40082815CDcDc` (Ethereum 4, Base 1) and the current PolymerProver `0xEC0DeD087Ee6C55991Bb4D4567ca1134c5353Ed6` (Base 1). Read the prover from `IntentPublished` topic3 instead of a fixed list.
 8. **ERC-7683 topics are shared.** The standard `Open` topic is emitted by other settlers too: in the pinned window, five other contracts emitted it on Ethereum, Base, Arbitrum and Optimism, and the Portal emitted none. `OrderFilled(bytes32,address)` is also the legacy Inbox topic. Filter on the emitter.
 9. **Refund and reward both leave the Vault.** `IntentWithdrawn` pays the solver; `IntentRefunded` returns the funds to the creator (or `refundTo`'s address). Example refund: Base `0xa55653f0223fe243f42fcd30c21b5296b0dcfd294af452292536889a2a32949e` moves USDC from the Vault `0x645fEbD586E739a37B322aC5dCB25cf61e923563` to the refundee, through a Multicall3 batch.
-10. **Older Portals still exist.** The 3.2.4–3.2.18 Portal and the older ones keep their Vaults, so late withdrawals and refunds can still come from them. They had 0 events in the pinned window.
-11. **Robinhood Chain has a Portal but almost no activity.** Contract nonce 4 and 0 events in the window. BNB has a listed Portal with 0 events in the window.
-12. **The docs' address page is stale.** The Eco "Contract Addresses" page lists only 2.8-era HyperProvers (`0x0f124aA8F92F47302fCba08b7349AEFEe853Ed8d` and `0xb4B22BaFafc0Fe12Bc9Be00D6611Dd2d8A42a7a8`). The `/v1/chains` example names the ECDSAExecutor as `executor`, while `Portal.executor()` returns `0x645dADD5Bf354526b68A2befd9A305F7E03b91Ca`. Use the routes-ts address file and on-chain reads.
+10. **Older Portals still exist.** The retired 3.2.19–3.2.22 Portal `0xEC000064576f9C95a8623Bc0eff3db6d296ea6df` (last events 2026-09-30/10-01), the 3.2.4–3.2.18 Portal and the older ones keep their Vaults, so late withdrawals and refunds can still come from them. The pre-3.2.19 Portals had 0 events in the pinned window. Watch the current and the retired Portal together.
+11. **Robinhood Chain and BNB have only the retired Portal.** Robinhood: contract nonce 4 and 0 events in the window. BNB: listed up to routes-ts 3.2.22 with 0 events in the window, and dropped from 3.2.23. Neither chain has the current Portal.
+12. **The docs' address page is stale.** The Eco "Contract Addresses" page lists only 2.8-era HyperProvers (`0x0f124aA8F92F47302fCba08b7349AEFEe853Ed8d` and `0xb4B22BaFafc0Fe12Bc9Be00D6611Dd2d8A42a7a8`). The `/v1/chains` example names the ECDSAExecutor as `executor`, while `Portal.executor()` returns `0x8B5D51AF4C4542f241C4e54CFd903CeEd145f082` (retired Portal: `0x645dADD5Bf354526b68A2befd9A305F7E03b91Ca`). Use the routes-ts address file and on-chain reads.
 
 ---
 
-## 13. Quick-copy detection constants (bytea-ready for PG)
+## 14. Quick-copy detection constants (bytea-ready for PG)
 
 ```
 -- ===== Portal topics (chain-agnostic) =====
@@ -336,6 +385,7 @@ TOPIC_INTENT_PUBLISHED              = '\x43974895be1bcec7344337863fa7de24a0d1c31
 TOPIC_INTENT_FUNDED                 = '\xc1ed05721d27ad6b2555d61388ac393b120f5cc0e6009e53230e02c68e60064a'
 TOPIC_INTENT_FULFILLED              = '\xc471de166a60c0b81727dfa2f57d4fc3ad1b45b057c1f034b7058365613bde8d'
 TOPIC_INTENT_PROVEN_PORTAL          = '\xe6d8040a8a6bc519f4e5a42fb2677067c929ddbf2cca9287a44b23fb617a6f00'
+TOPIC_INTENT_CANCELLED              = '\xc08eb64db16a39d2848960af04e3f16fb404d9d436a9f0e9d7d0d4854715c9dc'   -- current Portal only
 TOPIC_INTENT_WITHDRAWN              = '\xbb062c23e818de8ea9c157514eb098052cf36904bbe431cd50d4ec92264ca3ac'
 TOPIC_INTENT_REFUNDED               = '\x8d53c2b04800cf061b987a07179bb6c9730c05536b2f6a3a091fe62303682eb6'
 TOPIC_INTENT_TOKEN_RECOVERED        = '\x21ea3a531675a90b5b0263d6dc9be64e34e0bfd422a8b428b2d0729c5d4446e4'
@@ -366,42 +416,37 @@ SEL_REFUND_TO                       = '\x572ac041'
 SEL_RECOVER_TOKEN                   = '\x0d0eeb7a'
 SEL_OPEN                            = '\xe917a962'
 SEL_FILL                            = '\x82e2c43f'
+SEL_CANCEL                          = '\x377eacd1'
+SEL_CANCEL_AND_PROVE                = '\xee433264'
 SEL_EXECUTOR_EXECUTE                = '\x760f2a0b'
 SEL_INTENT_VAULT_ADDRESS            = '\x0742ebe4'
 
--- ===== Portal / Executor / Vault implementation (same address on every chain that has them) =====
-ETH_PORTAL                          = '\xec000064576f9c95a8623bc0eff3db6d296ea6df'
-BASE_PORTAL                         = '\xec000064576f9c95a8623bc0eff3db6d296ea6df'
-ARB_PORTAL                          = '\xec000064576f9c95a8623bc0eff3db6d296ea6df'
-OP_PORTAL                           = '\xec000064576f9c95a8623bc0eff3db6d296ea6df'
-POLY_PORTAL                         = '\xec000064576f9c95a8623bc0eff3db6d296ea6df'
-BNB_PORTAL                          = '\xec000064576f9c95a8623bc0eff3db6d296ea6df'
-RH_PORTAL                           = '\xec000064576f9c95a8623bc0eff3db6d296ea6df'   -- unlisted
-ETH_EXECUTOR                        = '\x645dadd5bf354526b68a2befd9a305f7e03b91ca'
-BASE_EXECUTOR                       = '\x645dadd5bf354526b68a2befd9a305f7e03b91ca'
-ARB_EXECUTOR                        = '\x645dadd5bf354526b68a2befd9a305f7e03b91ca'
-OP_EXECUTOR                         = '\x645dadd5bf354526b68a2befd9a305f7e03b91ca'
-POLY_EXECUTOR                       = '\x645dadd5bf354526b68a2befd9a305f7e03b91ca'
-BNB_EXECUTOR                        = '\x645dadd5bf354526b68a2befd9a305f7e03b91ca'
-RH_EXECUTOR                         = '\x645dadd5bf354526b68a2befd9a305f7e03b91ca'
-ETH_VAULT_IMPLEMENTATION            = '\x9f70b0c839fe2d7190a09ae87ed658b6d1cba4f9'
+-- ===== Current Portal generation (routes-ts 3.2.23+; ETH, Base, Arb, OP, Poly, Arc; same address on each) =====
+ETH_PORTAL                          = '\xec000769a73b70e16f361a442292500b3bcf4a85'
+BASE_PORTAL                         = '\xec000769a73b70e16f361a442292500b3bcf4a85'
+ARB_PORTAL                          = '\xec000769a73b70e16f361a442292500b3bcf4a85'
+OP_PORTAL                           = '\xec000769a73b70e16f361a442292500b3bcf4a85'
+POLY_PORTAL                         = '\xec000769a73b70e16f361a442292500b3bcf4a85'
+ARC_PORTAL                          = '\xec000769a73b70e16f361a442292500b3bcf4a85'
+ETH_EXECUTOR                        = '\x8b5d51af4c4542f241c4e54cfd903ceed145f082'   -- same on all six
+ETH_VAULT_IMPLEMENTATION            = '\x204d732e8d2f71d756ef5de79dc6589721b53420'   -- same on all six
+ETH_HYPER_PROVER                    = '\xec08fb4647f3f50d1162a578d481266687c60fc5'   -- same on all six
+ETH_POLYMER_PROVER                  = '\xec0ded087ee6c55991bb4d4567ca1134c5353ed6'   -- same on all six
+ETH_CCIP_PROVER                     = '\xec0b53a81c996da376f125e541e40082815cdcdc'   -- also Base; unlisted
 
--- ===== Provers =====
-ETH_HYPER_PROVER                    = '\xec004ab4870c4e177c66949329dcdb503ce41022'   -- also Base, Arb, OP, Poly
-BASE_HYPER_PROVER                   = '\xec004ab4870c4e177c66949329dcdb503ce41022'
-ARB_HYPER_PROVER                    = '\xec004ab4870c4e177c66949329dcdb503ce41022'
-OP_HYPER_PROVER                     = '\xec004ab4870c4e177c66949329dcdb503ce41022'
-POLY_HYPER_PROVER                   = '\xec004ab4870c4e177c66949329dcdb503ce41022'
-ETH_POLYMER_PROVER                  = '\xe3e4e6f284f1c8e17bafe4268eb98c36886b4d8b'
-BASE_POLYMER_PROVER                 = '\xe3e4e6f284f1c8e17bafe4268eb98c36886b4d8b'
-ETH_POLYMER_PROVER_2                = '\xec00993f947cecbbfb261f25d4af2c95f97c91f9'
-BASE_POLYMER_PROVER_2               = '\xec00993f947cecbbfb261f25d4af2c95f97c91f9'
-OP_POLYMER_PROVER_2                 = '\xec00993f947cecbbfb261f25d4af2c95f97c91f9'
-ETH_CCIP_PROVER                     = '\xcebb7cddba4734c7130bf114a37c2da4c5f3c473'
-BASE_CCIP_PROVER                    = '\xcebb7cddba4734c7130bf114a37c2da4c5f3c473'
+-- ===== Retired Portal generation (routes-ts 3.2.19–3.2.22; last events 2026-09-30/10-01) =====
+ETH_PORTAL_3_2_19                   = '\xec000064576f9c95a8623bc0eff3db6d296ea6df'   -- also Base, Arb, OP, Poly, BNB, Robinhood (unlisted)
+BNB_PORTAL_3_2_19                   = '\xec000064576f9c95a8623bc0eff3db6d296ea6df'
+RH_PORTAL_3_2_19                    = '\xec000064576f9c95a8623bc0eff3db6d296ea6df'
+ARC_PORTAL_3_2_19                   = '\xec002ca16ce20c2a9f3c6200ef04e7d92a3dfbd8'   -- Arc-only address
+ETH_EXECUTOR_3_2_19                 = '\x645dadd5bf354526b68a2befd9a305f7e03b91ca'   -- also Base, Arb, OP, Poly, BNB, Robinhood
+ETH_VAULT_IMPLEMENTATION_3_2_19     = '\x9f70b0c839fe2d7190a09ae87ed658b6d1cba4f9'
+ETH_HYPER_PROVER_3_2_21             = '\xec004ab4870c4e177c66949329dcdb503ce41022'   -- also Base, Arb, OP, Poly, Arc
+ETH_POLYMER_PROVER_3_2_20           = '\xe3e4e6f284f1c8e17bafe4268eb98c36886b4d8b'   -- also Base, Arb, OP, Poly
+ETH_POLYMER_PROVER_UNLISTED         = '\xec00993f947cecbbfb261f25d4af2c95f97c91f9'   -- also Base, Arb, OP, Poly
+ETH_CCIP_PROVER_3_2_19              = '\xcebb7cddba4734c7130bf114a37c2da4c5f3c473'   -- also Base
 ETH_LAYERZERO_PROVER                = '\x0c4e3063239c9f4f323a956c79738916594d8fd4'
-BASE_META_PROVER                    = '\x3d529efaedb3b999a404c1b8543441ae616cb914'
-ARB_META_PROVER                     = '\x3d529efaedb3b999a404c1b8543441ae616cb914'
+BASE_META_PROVER                    = '\x3d529efaedb3b999a404c1b8543441ae616cb914'   -- also Arb
 BNB_HYPER_PROVER_PREVIOUS           = '\xc972b26c1e208845ca8c18c6b83466bfceed8c2f'   -- also ETH, Base, Arb, OP, Poly
 
 -- ===== Older Portals and legacy contracts (ETH, Base, Arb, OP, Poly, BNB) =====
@@ -417,14 +462,15 @@ BASE_INBOX_1_21                     = '\x6405778b5e261afa0f7c4094a25cf4fe806c987
 
 ---
 
-## 14. Verification & sources
+## 15. Verification & sources
 
-How the constants in this file were verified (2026-09-29):
+How the constants in this file were verified (2026-09-29; migration rows 2026-10-05):
 
+- **Portal migration (2026-10-05):** routes-ts 3.2.23 (2026-09-29) and 3.2.24 (2026-09-30) list the current Portal, HyperProver and PolymerProver on chains 1, 10, 137, 8453, 42161 and 5042, and drop chain 56. Its Portal ABI adds `IntentCancelled`, `cancel` and `cancelAndProve` (recomputed); every other Portal, prover and Executor signature is unchanged from 3.2.22. `eth_getCode` confirms the current Portal (24,197 B), Executor (1,642 B), Vault implementation (4,370 B, the `PUSH32` target of a current Base Vault), HyperProver, PolymerProver and CCIPProver on each listed chain, and `0x` on BNB, Avalanche and Robinhood Chain. `executor()`, `version()`, `getProofType()` and `PORTAL()` are read live. Per-emitter log counts and first/last timestamps of both Portals on Ethereum, Base and Arbitrum come from indexed log data; Arc logs come from `eth_getLogs`.
 - **Topic0 / selectors:** recomputed as `keccak256(canonical signature)` from the ABIs in `@eco-foundation/routes-ts` 3.2.22 (Portal, Executor, IProver, IMessageBridgeProver, IVault), 2.8.20 and 1.21.2 (IntentSource, Inbox, Eco7683OriginSettler, Eco7683DestinationSettler, IMessageBridgeProver), and from the verified HyperProver and CCIPProver sources. The live topics of §1.1–§1.3 appear at the Portal and the provers in the pinned window. The sampled selectors match: `batchWithdraw` `0x7af10029`.
-- **Addresses:** from the `deployAddresses.csv` of every routes-ts version (0.0.714-beta to 3.2.22): Portal 3.2.19+, HyperProver 3.2.21+, PolymerProver 3.2.20+, LayerZeroProver 3.2.18, MetaProver 2.8.1–3.2.18, the previous HyperProver and Portals, and the legacy IntentSource / Inbox pairs. `eth_getCode` confirms each one on each chain (§3–§9). `Portal.executor()` returns the Executor on Ethereum, BNB and Robinhood Chain. The Vault implementation is the `PUSH32` target inside the Vault `0xd875d181A5E298114ca3FfcC310E5163a51523da` on Ethereum, and it has the same 4,203-byte code on seven chains. The two unlisted provers are the emitters of `IntentProven` in the pinned window; their type and Portal are read with `getProofType()` and `PORTAL()`, and the CCIPProver source is verified on Blockscout. The Portal's creator on Ethereum and Base (Blockscout) is the EIP-2470 factory.
+- **Addresses:** from the `deployAddresses.csv` of every routes-ts version (0.0.714-beta to 3.2.22): Portal 3.2.19+, HyperProver 3.2.21+, PolymerProver 3.2.20+, LayerZeroProver 3.2.18, MetaProver 2.8.1–3.2.18, the previous HyperProver and Portals, and the legacy IntentSource / Inbox pairs. `eth_getCode` confirms each one on each chain (§3–§10). `Portal.executor()` returns the Executor on Ethereum, BNB and Robinhood Chain. The Vault implementation is the `PUSH32` target inside the Vault `0xd875d181A5E298114ca3FfcC310E5163a51523da` on Ethereum, and it has the same 4,203-byte code on seven chains. The two unlisted provers are the emitters of `IntentProven` in the pinned window; their type and Portal are read with `getProofType()` and `PORTAL()`, and the CCIPProver source is verified on Blockscout. The Portal's creator on Ethereum and Base (Blockscout) is the EIP-2470 factory.
 - **Value movement, read from receipts:** publish and fund `0xff8bb9fab062392121d07b52a0d9b8ff8d5ef36935b8ec22e52e0e7b73744215` (Ethereum; prover = the current HyperProver). Fulfill and prove `0x661bfd50ed1484623e58eb0e2a999c6ac82af7a3a414bdbbfa93811e3d719bb9` (Ethereum; USDC smart account → Executor → recipient, then a Hyperlane `Dispatch` from the Mailbox `0xc005dc82818d67AF737725bD4bf75435d065D239` to domain 1399811149). Withdraw `0xcf3867370c79f52f7a93f52c6e6a541aeb12a3fc74c4e3a6e77d80e8cb8c4620` (Ethereum; USDC Vault `0xd875d181A5E298114ca3FfcC310E5163a51523da` → claimant). Refund `0xa55653f0223fe243f42fcd30c21b5296b0dcfd294af452292536889a2a32949e` (Base).
-- **Activity (pinned 12-hour window 2026-09-28 00:00–12:00 UTC, emitter = the Portal):** see §10. `IntentFunded`: Ethereum 94, Base 137, Arbitrum 105, Optimism 29, Polygon 11, BNB 0, Robinhood Chain 0. Portal `IntentProven`: Ethereum 68, Base 164, Arbitrum 114, Optimism 47, Polygon 73, BNB 0, Robinhood Chain 0. `IntentTokenRecovered`, `Open` and `OrderFilled` at the Portal: 0 on all chains. Legacy `IntentCreated`, legacy `IntentFunded` and `Fulfillment`: 0 on all eight chains. The Ethereum `IntentPublished` count (92) was measured twice with the same result. Prover `IntentProven`: see §12 item 7 (BNB 0).
+- **Activity (pinned 12-hour window 2026-09-28 00:00–12:00 UTC, emitter = the Portal):** see §11. `IntentFunded`: Ethereum 94, Base 137, Arbitrum 105, Optimism 29, Polygon 11, BNB 0, Robinhood Chain 0. Portal `IntentProven`: Ethereum 68, Base 164, Arbitrum 114, Optimism 47, Polygon 73, BNB 0, Robinhood Chain 0. `IntentTokenRecovered`, `Open` and `OrderFilled` at the Portal: 0 on all chains. Legacy `IntentCreated`, legacy `IntentFunded` and `Fulfillment`: 0 on all eight chains. The Ethereum `IntentPublished` count (92) was measured twice with the same result. Prover `IntentProven`: see §13 item 7 (BNB 0).
 - **Chain coverage:** six chains carry the listed Portal. Robinhood Chain carries an unlisted Portal (contract nonce 4 read with `eth_getTransactionCount`). Avalanche carries nothing.
 
 Authoritative sources:

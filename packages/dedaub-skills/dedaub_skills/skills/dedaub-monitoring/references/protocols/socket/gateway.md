@@ -1,4 +1,4 @@
-# SocketGateway (Socket v2 routes) — Topics, Selectors, Addresses (Ethereum + Base + Arbitrum + Optimism + Polygon + BNB + Avalanche; not Robinhood Chain)
+# SocketGateway (Socket v2 routes) — Topics, Selectors, Addresses (Ethereum + Base + Arbitrum + Optimism + Polygon + BNB + Avalanche; not Robinhood Chain, not Arc)
 
 **Status:** verified on 2026-09-29 against live RPC on all eight chains, the `SocketDotTech/bungee-contracts-public` repository (`src/SocketGateway.sol`, `src/bridges/`, `src/swap/`, `src/static/RouteIdentifiers.sol`, `deployments/<network>.json`) and the explorer-verified sources of the gateway and of the current route implementations. Topics and selectors recomputed as `keccak256(signature)`; addresses existence-checked with `eth_getCode`; a sample `SocketBridge` transaction read on Ethereum.
 **Scope:** the SocketGateway, which the Socket docs call "legacy routes": one gateway contract per chain that runs registered route implementations (bridges and swaps) by `DELEGATECALL`, the SocketDeployFactory that deploys and disables routes, and the route events. It has the same address on seven chains; Robinhood Chain has none. Topics and selectors are chain-agnostic; addresses are network-specific.
@@ -245,6 +245,7 @@ From `deployments/avalanche.json`; existence-checked with `eth_getCode` on 2026-
 | BNB Smart Chain | 56 | `0x3a23F943181408EAC424116Af7b7790c94Cb97a5` | `0x71630095e3F08A86aFC73f7b07342192adf39C55` | not read | 26 |
 | Avalanche C-Chain | 43114 | `0x3a23F943181408EAC424116Af7b7790c94Cb97a5` | `0x71630095e3F08A86aFC73f7b07342192adf39C55` | not read | 0 |
 | Robinhood Chain | 4663 | — (no code) | — | — | — |
+| Arc | 5042 | — (no code, 2026-10-05) | — | — | — |
 
 **Robinhood Chain (4663): no SocketGateway.** `eth_getCode` returns `0x` at `0x3a23F943181408EAC424116Af7b7790c94Cb97a5` (nonce 0), no `deployments/robinhood.json` exists in the repository, and the Socket docs list only the OpenRouter contracts for Robinhood Chain.
 

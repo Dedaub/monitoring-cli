@@ -1,7 +1,7 @@
-# Layerswap — Topics, Selectors, Addresses (Ethereum, Base, Arbitrum, Optimism, Polygon, BNB, Avalanche, Robinhood Chain)
+# Layerswap — Topics, Selectors, Addresses (Ethereum, Base, Arbitrum, Optimism, Polygon, BNB, Avalanche, Robinhood Chain, Arc)
 
-**Status:** verified on 2026-09-29 against live RPC on all eight target chains, the canonical `layerswap/layerswap-depository` source (`evm/src/LayerswapDepository.sol`), the Layerswap docs and public API (`/api/v2/networks`, `/api/v2/explorer/{tx}`), and the LI.FI integration config (`lifinance/contracts` `config/layerswap.json`). Topic0s and selectors are recomputed as `keccak256(sig)`. Addresses are existence-checked with `eth_getCode`. The whitelist, owner and pause state are read with `eth_call`.
-**Scope:** the Layerswap EVM surface: the **LayerswapDepository** (one immutable contract at one address on all eight chains), the two whitelisted **Layerswap wallets** that take deposits and send payouts (EOAs, one address each on all eight chains), and the paths with no Layerswap event (plain transfers, generated deposit addresses). Chains: Ethereum (1), Base (8453), Arbitrum One (42161), Optimism (10), Polygon PoS (137), BNB Smart Chain (56), Avalanche C-Chain (43114), Robinhood Chain (4663). Topics and selectors are chain-agnostic. Addresses are network-specific. The TRAIN atomic-swap contracts are a separate protocol; the Layerswap docs say that TRAIN is not part of the current Layerswap integrations, so this file does not cover them.
+**Status:** verified on 2026-09-29 against live RPC on the eight original target chains (Arc added on 2026-10-05 with the same checks), the canonical `layerswap/layerswap-depository` source (`evm/src/LayerswapDepository.sol`), the Layerswap docs and public API (`/api/v2/networks`, `/api/v2/explorer/{tx}`), and the LI.FI integration config (`lifinance/contracts` `config/layerswap.json`). Topic0s and selectors are recomputed as `keccak256(sig)`. Addresses are existence-checked with `eth_getCode`. The whitelist, owner and pause state are read with `eth_call`.
+**Scope:** the Layerswap EVM surface: the **LayerswapDepository** (one immutable contract at one address on all nine chains), the two whitelisted **Layerswap wallets** that take deposits and send payouts (EOAs, one address each on all nine chains), and the paths with no Layerswap event (plain transfers, generated deposit addresses). Chains: Ethereum (1), Base (8453), Arbitrum One (42161), Optimism (10), Polygon PoS (137), BNB Smart Chain (56), Avalanche C-Chain (43114), Robinhood Chain (4663), Arc (5042). Topics and selectors are chain-agnostic. Addresses are network-specific. The TRAIN atomic-swap contracts are a separate protocol; the Layerswap docs say that TRAIN is not part of the current Layerswap integrations, so this file does not cover them.
 
 Layerswap is a solver bridge with an off-chain order book. A user creates a **swap** in the Layerswap API. The user then sends the source asset to a Layerswap wallet. Layerswap pays the recipient on the destination chain from its own inventory. There is no destination-side contract and no on-chain settlement.
 
@@ -15,10 +15,10 @@ The destination leg is a plain native or ERC-20 transfer from a Layerswap wallet
 
 | Component | Role | Proxy? | Where |
 |-----------|------|--------|-------|
-| **LayerswapDepository** (v1.0.0) | Source-leg entry point. Forwards native and ERC-20 funds to a whitelisted wallet in the same call. Emits `Deposited(id, token, receiver, amount)`. `Ownable2Step` + `Pausable` + `ReentrancyGuard`. | **No** (immutable, 3,876 B, same code hash on all eight chains) | all eight chains, one address |
-| **Wallet A** | Whitelisted receiver of deposits. Sends payouts and refunds. The Layerswap deposit-widget example uses it. | n/a (EOA) | all eight chains, one address |
-| **Wallet B** | Second whitelisted receiver. Same roles as wallet A. The Layerswap refunds page uses it in its example. | n/a (EOA) | all eight chains, one address |
-| **Depository owner** | `owner()` of the Depository on all eight chains. Can pause, edit the whitelist and transfer ownership. | n/a (EOA, no code on all eight chains) | all eight chains |
+| **LayerswapDepository** (v1.0.0) | Source-leg entry point. Forwards native and ERC-20 funds to a whitelisted wallet in the same call. Emits `Deposited(id, token, receiver, amount)`. `Ownable2Step` + `Pausable` + `ReentrancyGuard`. | **No** (immutable, 3,876 B, same code hash on all nine chains) | all nine chains, one address |
+| **Wallet A** | Whitelisted receiver of deposits. Sends payouts and refunds. The Layerswap deposit-widget example uses it. | n/a (EOA) | all nine chains, one address |
+| **Wallet B** | Second whitelisted receiver. Same roles as wallet A. The Layerswap refunds page uses it in its example. | n/a (EOA) | all nine chains, one address |
+| **Depository owner** | `owner()` of the Depository on all nine chains. Can pause, edit the whitelist and transfer ownership. | n/a (EOA, no code on all nine chains) | all nine chains |
 | **Generated deposit addresses** | One address per swap for the "deposit address" funding method. | n/a | not enumerable on chain |
 
 ---
@@ -64,9 +64,9 @@ Native deposits to the wallets and native payouts from them emit no log. Read th
 | `0xf2fde38b` | `transferOwnership(address newOwner)` | `onlyOwner`. Starts the two-step transfer. |
 | `0x79ba5097` | `acceptOwnership()` | Called by the pending owner. |
 | `0x715018a6` | `renounceOwnership()` | `onlyOwner` (inherited from OpenZeppelin `Ownable`). |
-| `0x6d028027` | `getWhitelistedAddresses()` | View → `address[]`. Live value on all eight chains: wallet A and wallet B. |
+| `0x6d028027` | `getWhitelistedAddresses()` | View → `address[]`. Live value on all nine chains: wallet A and wallet B. |
 | `0x3af32abf` | `isWhitelisted(address addr)` | View → `bool`. |
-| `0x5c975abb` | `paused()` | View → `bool`. Live value: `false` on all eight chains. |
+| `0x5c975abb` | `paused()` | View → `bool`. Live value: `false` on all nine chains. |
 | `0x8da5cb5b` | `owner()` | View → `address`. |
 | `0xe30c3978` | `pendingOwner()` | View → `address`. |
 
@@ -80,7 +80,7 @@ Native deposits to the wallets and native payouts from them emit no log. Read th
 
 ## 3. Addresses — Ethereum (chain ID 1)
 
-All addresses on this page were existence-checked with `eth_getCode` on 2026-09-29. The Depository, both wallets and the owner have the same address on all eight chains.
+All addresses on this page were existence-checked with `eth_getCode` on 2026-09-29 (Arc on 2026-10-05). The Depository, both wallets and the owner have the same address on all nine chains.
 
 | Role | Address | One-liner |
 |------|---------|-----------|
@@ -154,11 +154,22 @@ Layerswap lists `ROBINHOOD_MAINNET` (chain id 4663) in its public network list, 
 | Wallet B (EOA) | `0x08b00cEEE2Fb66029B53D76110B19eeAabfd1e65` | Nonce 4,005. |
 | Depository owner (EOA) | `0xB6103502673173ab5Df6A57Ac3017Db4e16af399` | No code, nonce 0. |
 
-Nonces are the wallets' transaction counts at the latest block on 2026-09-29. They are a measure of outbound activity, not of volume.
+## 11. Addresses — Arc (chain ID 5042)
+
+Layerswap lists `ARC_MAINNET` (chain id 5042) in its public network list (tokens include USDC, EURC, cirBTC, LINK). Checked on `https://rpc.mainnet.arc.io` on 2026-10-05.
+
+| Role | Address | One-liner |
+|------|---------|-----------|
+| **LayerswapDepository** | `0xE226E4825CB215aBaFAd98fdd400583eAb6a594f` | Same code hash as Ethereum. Same whitelist and owner. Not paused. EIP-1967 implementation and beacon slots empty. 7 `Deposited` logs in ~40,000 blocks (about 5.7 h) to 2026-10-05. |
+| Wallet A (EOA) | `0x2Fc617E933a52713247CE25730f6695920B3befe` | Nonce 174. |
+| Wallet B (EOA) | `0x08b00cEEE2Fb66029B53D76110B19eeAabfd1e65` | Nonce 67. |
+| Depository owner (EOA) | `0xB6103502673173ab5Df6A57Ac3017Db4e16af399` | No code, nonce 0. |
+
+Nonces are the wallets' transaction counts at the latest block on 2026-09-29 (Arc: 2026-10-05). They are a measure of outbound activity, not of volume.
 
 ---
 
-## 11. Cross-chain summary
+## 12. Cross-chain summary
 
 | Chain | ID | LayerswapDepository `0xE226E4825CB215aBaFAd98fdd400583eAb6a594f` | Wallet A | Wallet B | `Deposited` in the pinned window |
 |-------|----|----|----|----|----|
@@ -170,22 +181,23 @@ Nonces are the wallets' transaction counts at the latest block on 2026-09-29. Th
 | BNB Smart Chain | 56 | ✅ | ✅ EOA | ✅ EOA | 149 |
 | Avalanche C-Chain | 43114 | ✅ | ✅ EOA | ✅ EOA | 20 |
 | Robinhood Chain | 4663 | ✅ | ✅ EOA | ✅ EOA | 270 |
+| Arc | 5042 | ✅ | ✅ EOA | ✅ EOA | not counted (7 via `eth_getLogs` in ~5.7 h on 2026-10-05) |
 
-Layerswap is deployed on all eight target chains. The LI.FI integration config lists the Depository at the same address on 43 networks in total (for example Abstract, Arc, Blast, Linea, Scroll, Tron, zkSync). Layerswap also serves chains that are not EVM (Solana, Starknet, TON, Bitcoin, Tron, Fuel), each with its own deposit method.
+Layerswap is deployed on all nine target chains. The LI.FI integration config lists the Depository at the same address on 43 networks in total (for example Abstract, Blast, Linea, Scroll, Tron, zkSync). Layerswap also serves chains that are not EVM (Solana, Starknet, TON, Bitcoin, Tron, Fuel), each with its own deposit method.
 
 ---
 
-## 12. Proxies
+## 13. Proxies
 
 | Contract | Pattern | Detection | Upgrade auth |
 |----------|---------|-----------|--------------|
-| **LayerswapDepository** | **Immutable** (no proxy) | EIP-1967 implementation and beacon slots are empty on all eight chains. The runtime code (3,876 B) has the same hash on all eight chains. The source has no upgrade function. | None. The owner can only pause, edit the whitelist and transfer ownership. |
+| **LayerswapDepository** | **Immutable** (no proxy) | EIP-1967 implementation and beacon slots are empty on all nine chains. The runtime code (3,876 B) has the same hash on all nine chains. The source has no upgrade function. | None. The owner can only pause, edit the whitelist and transfer ownership. |
 
 There are no other contracts in this system. The wallets and the owner are EOAs.
 
 ---
 
-## 13. Detection invariants & gotchas
+## 14. Detection invariants & gotchas
 
 1. **The Depository never holds funds.** `depositERC20` moves the token from the caller straight to the wallet. So the ERC-20 `Transfer` of a Depository deposit goes to wallet A or wallet B, not to the Depository. Do not look for a Depository balance.
 2. **`Deposited.id` is the swap's `sequence_number`, not the swap UUID.** Example: the Ethereum deposit `0x9bef18faa4ee8990435683563d0b6075e29c2bd882102fff14ff61b2df6da7de` has `id` 17,938,734 (`0x111b92e`). The explorer API returns swap `55ed2f2f-9d7a-4cc7-b0ba-dd5207e2911e` with `metadata.sequence_number` 17,938,734.
@@ -195,12 +207,12 @@ There are no other contracts in this system. The wallets and the owner are EOAs.
 6. **Three deposit methods emit no Layerswap event.** Plain transfers to a wallet, transfers to a generated deposit address, and gasless deposits leave only token transfers (or native value). A generated deposit address is not enumerable on chain.
 7. **The `Deposited` topic is not unique to Layerswap.** In the pinned window, other contracts emitted the same topic0: on Ethereum `0xc3cfc78a52bDFF4973dDaCE07E17A52F253f463d` (1 log, a different 10,127-byte contract), and on BNB `0x5c72aBc9822eC98dfDCeD995CcD2BdD2040B68C6` (10), `0xfE006acf268f944AA2D03B7B4943E1a3b57a0eFd` (5) and `0x952a26dA229c95a1ae375F6dd352B7214B105A6f` (1). Filter on the emitter.
 8. **Aggregators call the Depository.** LI.FI's LayerSwap facet calls `depositERC20` / `depositNative`. Then `tx.to` is the LI.FI diamond `0x1231DEB6f5749EF6cE6943a275A1D3E7486F4EaE`, and the Depository is an inner call. Smart accounts (EIP-7702 and ERC-7579) also call it from inside `execute`.
-9. **Admin triggers.** `AddressWhitelisted` and `AddressUpdatedInWhitelist` add a receiver that can take all new Depository deposits: treat both as high severity. `Paused` stops the Depository only; plain transfers to the wallets still work. The owner is one EOA on all eight chains.
+9. **Admin triggers.** `AddressWhitelisted` and `AddressUpdatedInWhitelist` add a receiver that can take all new Depository deposits: treat both as high severity. `Paused` stops the Depository only; plain transfers to the wallets still work. The owner is one EOA on all nine chains.
 10. **Robinhood Chain is live.** The Depository emitted 270 `Deposited` logs there in the pinned window, and wallet A pays out there (example: `0x34506343d19acd16bdb56913a40229f66831f5d0d3b711d50d6e7765bfd34ab2`, a native transfer).
 
 ---
 
-## 14. Quick-copy detection constants (bytea-ready for PG)
+## 15. Quick-copy detection constants (bytea-ready for PG)
 
 ```
 -- ===== Topics (chain-agnostic) =====
@@ -227,7 +239,7 @@ SEL_ACCEPT_OWNERSHIP               = '\x79ba5097'
 SEL_GET_WHITELISTED_ADDRESSES      = '\x6d028027'
 SEL_ERC20_TRANSFER                 = '\xa9059cbb'
 
--- ===== LayerswapDepository (one address on all eight chains) =====
+-- ===== LayerswapDepository (one address on all nine chains) =====
 ETH_DEPOSITORY                     = '\xe226e4825cb215abafad98fdd400583eab6a594f'
 BASE_DEPOSITORY                    = '\xe226e4825cb215abafad98fdd400583eab6a594f'
 ARB_DEPOSITORY                     = '\xe226e4825cb215abafad98fdd400583eab6a594f'
@@ -236,8 +248,9 @@ POLY_DEPOSITORY                    = '\xe226e4825cb215abafad98fdd400583eab6a594f
 BNB_DEPOSITORY                     = '\xe226e4825cb215abafad98fdd400583eab6a594f'
 AVAX_DEPOSITORY                    = '\xe226e4825cb215abafad98fdd400583eab6a594f'
 RH_DEPOSITORY                      = '\xe226e4825cb215abafad98fdd400583eab6a594f'
+ARC_DEPOSITORY                     = '\xe226e4825cb215abafad98fdd400583eab6a594f'
 
--- ===== Layerswap wallets (EOAs, one address each on all eight chains) =====
+-- ===== Layerswap wallets (EOAs, one address each on all nine chains) =====
 ETH_WALLET_A_EOA                   = '\x2fc617e933a52713247ce25730f6695920b3befe'
 ETH_WALLET_B_EOA                   = '\x08b00ceee2fb66029b53d76110b19eeaabfd1e65'
 BASE_WALLET_A_EOA                  = '\x2fc617e933a52713247ce25730f6695920b3befe'
@@ -254,22 +267,24 @@ AVAX_WALLET_A_EOA                  = '\x2fc617e933a52713247ce25730f6695920b3befe
 AVAX_WALLET_B_EOA                  = '\x08b00ceee2fb66029b53d76110b19eeaabfd1e65'
 RH_WALLET_A_EOA                    = '\x2fc617e933a52713247ce25730f6695920b3befe'
 RH_WALLET_B_EOA                    = '\x08b00ceee2fb66029b53d76110b19eeaabfd1e65'
--- Depository owner, the same EOA on all eight chains:
+ARC_WALLET_A_EOA                   = '\x2fc617e933a52713247ce25730f6695920b3befe'
+ARC_WALLET_B_EOA                   = '\x08b00ceee2fb66029b53d76110b19eeaabfd1e65'
+-- Depository owner, the same EOA on all nine chains:
 ETH_DEPOSITORY_OWNER_EOA           = '\xb6103502673173ab5df6a57ac3017db4e16af399'
 ```
 
 ---
 
-## 15. Verification & sources
+## 16. Verification & sources
 
 How the constants in this file were verified (2026-09-29):
 
-- **Topic0 / selectors:** recomputed as `keccak256(canonical signature)` from `evm/src/LayerswapDepository.sol` (OpenZeppelin v5 `Ownable2Step`, `Pausable` for the inherited events). The live `Deposited` topic0 appears at the Depository on all eight chains.
-- **Addresses:** the Depository address comes from the LI.FI integration config (`layerSwapDepository`, 43 networks, all eight target chains included). `eth_getCode` returns 3,876 bytes with code hash `0xe2c5b091f98ff37764289b288afff06c0603e81a35cf4e55af17526838228831` on all eight chains. `getWhitelistedAddresses()` returns wallet A and wallet B on all eight chains. `owner()` returns `0xB6103502673173ab5Df6A57Ac3017Db4e16af399` on all eight chains; that address has no code on any of them. `paused()` returns `false` on all eight chains. The Layerswap docs name both wallets (the refunds example uses wallet B; the deposit-widget example uses wallet A).
+- **Topic0 / selectors:** recomputed as `keccak256(canonical signature)` from `evm/src/LayerswapDepository.sol` (OpenZeppelin v5 `Ownable2Step`, `Pausable` for the inherited events). The live `Deposited` topic0 appears at the Depository on all nine chains.
+- **Addresses:** the Depository address comes from the LI.FI integration config (`layerSwapDepository`, 43 networks, all nine target chains included). `eth_getCode` returns 3,876 bytes with code hash `0xe2c5b091f98ff37764289b288afff06c0603e81a35cf4e55af17526838228831` on all nine chains. `getWhitelistedAddresses()` returns wallet A and wallet B on all nine chains. `owner()` returns `0xB6103502673173ab5Df6A57Ac3017Db4e16af399` on all nine chains; that address has no code on any of them. `paused()` returns `false` on all nine chains. The Layerswap docs name both wallets (the refunds example uses wallet B; the deposit-widget example uses wallet A).
 - **Link key:** the public explorer API (`GET /api/v2/explorer/{tx}`, the endpoint of the `layerswap/layerswap-explorer` app) returned swap `55ed2f2f-9d7a-4cc7-b0ba-dd5207e2911e`, `sequence_number` 17,938,734, for Ethereum deposit `0x9bef18faa4ee8990435683563d0b6075e29c2bd882102fff14ff61b2df6da7de`, whose `Deposited.id` is 17,938,734. It also returned swap `fa4b1380-1eb0-4247-9cb2-356db0fef31e` (sequence number 17,938,823) for Base deposit `0xc95e66c07ae653338ecdac4057a060fa44259c6739e29a468ff60c72d216fad9`, whose `Deposited.id` is 17,938,823 (`0x111b987`).
 - **Value movement, read from receipts:** Ethereum `0x9bef18faa4ee8990435683563d0b6075e29c2bd882102fff14ff61b2df6da7de` (QNT moves from the LI.FI diamond to wallet B, then `Deposited`). Base `0xc95e66c07ae653338ecdac4057a060fa44259c6739e29a468ff60c72d216fad9` (native, `token` = zero address, `receiver` = wallet A). Robinhood Chain payout `0x34506343d19acd16bdb56913a40229f66831f5d0d3b711d50d6e7765bfd34ab2` (native transfer from wallet A, no logs). Arbitrum payout `0xf701b7b90ebd87899b4de20e3516e47cb1319a441b69ef62fda12177c0073d4f` and Ethereum payout `0xdd335f399935e11c303bb8a3438caf894504afb95c2584af12ab5dadadfc4357` (both sent by wallet B through a DEX router).
 - **Activity:** `Deposited` at the Depository in the pinned 12-hour window 2026-09-28 00:00–12:00 UTC: Ethereum 153, Base 506, Arbitrum 331, Optimism 163, Polygon 72, BNB 149, Avalanche 20, Robinhood Chain 270. The Ethereum count was measured twice (with and without the emitter filter) with the same result. These counts say nothing about the plain-transfer and deposit-address paths.
-- **Chain coverage:** all eight chains carry the Depository and both wallets. The Layerswap network list (`/api/v2/networks`) includes all eight chain ids.
+- **Chain coverage:** all nine chains carry the Depository and both wallets. The Layerswap network list (`/api/v2/networks`) includes all nine chain ids.
 
 Authoritative sources:
 - [layerswap/layerswap-depository](https://github.com/layerswap/layerswap-depository) — `evm/src/LayerswapDepository.sol`, `evm/README.md`, `evm/script/DeployLayerswapDepository.s.sol`.

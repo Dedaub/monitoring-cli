@@ -1,6 +1,6 @@
-# Owlto Finance — Topics, Selectors, Addresses (Ethereum + Base + Arbitrum + Optimism + Polygon + BNB; Robinhood relay route only; NOT Avalanche)
+# Owlto Finance — Topics, Selectors, Addresses (Ethereum + Base + Arbitrum + Optimism + Polygon + BNB; Robinhood and Arc relay route only; NOT Avalanche)
 
-**Status:** verified on 2026-09-29 against live RPC on all eight chains, the Sourcify-verified `Depositor` source (Ethereum `0x0e83DEd9f80e1C92549615D96842F5cB64A08762`, solc 0.8.18), Owlto's official docs page "Smart Contracts & Maker", Owlto's public bridge API (`get_all_pair_infos`, `get_build_tx`, `get_receipt`) and Owlto's open-source repositories (`owlto-finance/owlto`, `owlto-finance/owlto-frontend`, `owlto-finance/owlto-sdk`).
+**Status:** verified on 2026-09-29 against live RPC on all eight chains, the Sourcify-verified `Depositor` source (Ethereum `0x0e83DEd9f80e1C92549615D96842F5cB64A08762`, solc 0.8.18), Owlto's official docs page "Smart Contracts & Maker", Owlto's public bridge API (`get_all_pair_infos`, `get_build_tx`, `get_receipt`) and Owlto's open-source repositories (`owlto-finance/owlto`, `owlto-finance/owlto-frontend`, `owlto-finance/owlto-sdk`). Arc (5042) relay route added 2026-10-05 from live RPC (`https://rpc.mainnet.arc.io`).
 **Scope:** the Owlto maker bridge: the `Depositor` ("Bridge-Core") contracts, the maker EOA that receives deposits and pays out, the destination code scheme, and two newer routing contract families that the Owlto API now returns (a route into the Relay depository that emits `Bridged`, and an Across-style deposit route). Topics and selectors are chain-agnostic. Addresses are network-specific.
 
 Owlto is a **maker bridge**. A user's funds go to an Owlto maker EOA on the source chain. Owlto's backend then pays the recipient from the same maker EOA on the destination chain with a plain transfer. There is **no on-chain link key on the payout side**: the payout is a native transfer (no log) or an ERC-20 `Transfer` from the maker. The source transaction hash is the key of Owlto's off-chain receipt API.
@@ -63,6 +63,7 @@ Mapped on 2026-09-29 by sending sample source transaction hashes to Owlto's offi
 | 21 | Polygon PoS (137) | `0021` |
 | — | Avalanche C-Chain (43114) | not supported (no code seen; not in the supported-network list) |
 | — | Robinhood Chain (4663) | not supported by the Owlto API (no code seen) |
+| — | Arc (5042) | not in the Owlto API pair list (2026-10-05; no code seen) |
 | 2, 6, 7, 9, 11, 13, 18, 22, 30, 41, 47, 49, 84, 88, 91, 92, 100, 102 | zkSync Era, Scroll, Linea, Taiko, Mantle, Zora, Manta, X Layer, Mode, Solana, Bob, Mint, Unichain, Ink, Soneium, Abstract, Katana, Monad | off-target |
 
 **Amount code (direct transfers to the maker).** Owlto's open-source backend decodes a direct transfer with `getChainIdByValue`: `parseInt(value.toString().slice(-4))` is the network code. The open-source frontend builds the value as `amountInWei.slice(0, -(codeLength + 1)) + dtcCode + networkCode`, with the network code zero-padded to 4 digits and one more digit for the fee level. Example: a direct ETH transfer to Base ends in the digits `0012` (wei).
@@ -85,6 +86,7 @@ All existence-checked with `eth_getCode` on 2026-09-29.
 | BNB Smart Chain | 56 | `0xC626845BF4E6a5802Ef774dA0B3DfC6707F015F7` | 1446 B | Official list and API. |
 | Avalanche C-Chain | 43114 | — | — | Not in the official list. `0x0e83DEd9f80e1C92549615D96842F5cB64A08762`, `0xC626845BF4E6a5802Ef774dA0B3DfC6707F015F7` and `0xB5CeDAF172425BdeA4c186f6fCF30b367273DA19` return `0x`. A third-party indexer lists `0x3F0F0E6411F859Da1A1BbF8bD6217cA93820Bb98` (2862 B on Avalanche) as an Owlto Depositor: unverified. |
 | Robinhood Chain | 4663 | — | — | No Depositor: all Depositor addresses return `0x`. |
+| Arc | 5042 | — | — | No Depositor: all Depositor addresses return `0x` (2026-10-05). |
 
 Other deployments of the same 1446-byte Depositor code: `0xC626845BF4E6a5802Ef774dA0B3DfC6707F015F7` also exists on Ethereum, Base, Arbitrum and Optimism (not the listed Depositor there, but a third-party indexer tracks it on Base). **Decoy:** `0x0e83DEd9f80e1C92549615D96842F5cB64A08762` on Polygon and BNB holds a different 2373-byte contract.
 
@@ -92,9 +94,9 @@ Makers:
 
 | Role | Address | Chains (nonce on 2026-09-29) | Source |
 |------|---------|-------------------------------|--------|
-| **Owlto maker (EVM)** | `0x74F665BE90ffcd9ce9dcA68cB5875570B711CEca` | EOA. Ethereum 1808, Base 31149, Arbitrum 17415, Optimism 1546, Polygon 237, BNB 2472. Avalanche and Robinhood: nonce 0. | Official docs. Receiver in every sampled `Deposit` and sender of every sampled payout (§9). |
-| Maker (third-party list) | `0x1f49a3fa2b5B5b61df8dE486aBb6F3b9df066d86` | EOA. Ethereum 42864, Base 222659, Arbitrum 254161, Optimism 45508, Polygon 4596, BNB 34707, Avalanche 717. Robinhood 0. | Used as the Owlto maker by a third-party bridge indexer. Not in Owlto's docs. Unverified. |
-| Explorer label "Owlto Finance: Bridge" | `0x45a318273749d6eb00f5f6ca3bc7cd3de26d642a` | EOA. Ethereum 31439, Base 69581, Arbitrum 75147, Optimism 34159, Polygon 2667, BNB 6221. Avalanche and Robinhood 0. | Etherscan label only. Unverified. |
+| **Owlto maker (EVM)** | `0x74F665BE90ffcd9ce9dcA68cB5875570B711CEca` | EOA. Ethereum 1808, Base 31149, Arbitrum 17415, Optimism 1546, Polygon 237, BNB 2472. Avalanche, Robinhood and Arc: nonce 0. | Official docs. Receiver in every sampled `Deposit` and sender of every sampled payout (§9). |
+| Maker (third-party list) | `0x1f49a3fa2b5B5b61df8dE486aBb6F3b9df066d86` | EOA. Ethereum 42864, Base 222659, Arbitrum 254161, Optimism 45508, Polygon 4596, BNB 34707, Avalanche 717. Robinhood 0, Arc 0. | Used as the Owlto maker by a third-party bridge indexer. Not in Owlto's docs. Unverified. |
+| Explorer label "Owlto Finance: Bridge" | `0x45a318273749d6eb00f5f6ca3bc7cd3de26d642a` | EOA. Ethereum 31439, Base 69581, Arbitrum 75147, Optimism 34159, Polygon 2667, BNB 6221. Avalanche, Robinhood and Arc 0. | Etherscan label only. Unverified. |
 
 ---
 
@@ -111,11 +113,12 @@ These contracts are the `to` of transactions built by Owlto's `get_build_tx` API
 | Arbitrum One | `0x949bE0e6Df9cC210BA0e4dbD90639da05437F5Ff` | `0x32180efb2afa93593febcb715e70d3f281243d0c` | API (`ETH`, Arbitrum → Base) |
 | BNB Smart Chain | `0x1b7A410EcC527a4aB97693eFD7850FcF088Db989` | `0x079abf6c173dd31b4938a6d8e440ab4d76b42430` | API (`USDT`, BNB → Ethereum) |
 | Robinhood Chain | `0x1b7A410EcC527a4aB97693eFD7850FcF088Db989` | `0x079abf6c173dd31b4938a6d8e440ab4d76b42430` | emits `Bridged` (5 logs in the window), same proxy and implementation code as BNB |
+| Arc (5042) | `0x1b7A410EcC527a4aB97693eFD7850FcF088Db989` | `0x079abf6c173dd31b4938a6d8e440ab4d76b42430` | emits `Bridged` (6 logs in the ~7 days to 2026-10-05), same proxy and implementation code as BNB; not in the API |
 | Optimism | `0x1b7A410EcC527a4aB97693eFD7850FcF088Db989` | `0x079abf6c173dd31b4938a6d8e440ab4d76b42430` | same proxy and implementation code; not in the API; 0 `Bridged` in the window |
 | Polygon PoS | `0x1b7A410EcC527a4aB97693eFD7850FcF088Db989` | `0x079abf6c173dd31b4938a6d8e440ab4d76b42430` | same proxy and implementation code; not in the API; 0 `Bridged` in the window |
 | Avalanche C-Chain | — | — | none |
 
-The Relay depository `0x4cd00e387622c35bddb9b4c962c136462338bc31` has code on all eight chains (8628 B).
+The Relay depository `0x4cd00e387622c35bddb9b4c962c136462338bc31` has code on all eight chains and on Arc (8628 B).
 
 ### 5.2 Across-style route (`DepositExecuted`)
 
@@ -127,7 +130,7 @@ The Relay depository `0x4cd00e387622c35bddb9b4c962c136462338bc31` has code on al
 | Arbitrum One | `0x8d7285C97D0d0C451be72F737875A98751870B97` | `0x2d5e0cd9bfea95e89cef80fb39c050991ac19eaf` | API (`USDC`, Arbitrum → Base) |
 | Optimism, Polygon PoS | `0x8d7285C97D0d0C451be72F737875A98751870B97` | `0x2d5e0cd9bfea95e89cef80fb39c050991ac19eaf` | same proxy pattern; not in the API |
 
-**Same-address trap:** `0x2d5E0Cd9bfeA95e89CeF80fb39c050991Ac19EaF` is the Relay-route proxy on Ethereum, but on Arbitrum, Optimism, Polygon and BNB it is the 6916-byte **implementation** of the Across-style proxy. On Robinhood Chain it is an unrelated 825-byte contract.
+**Same-address trap:** `0x2d5E0Cd9bfeA95e89CeF80fb39c050991Ac19EaF` is the Relay-route proxy on Ethereum, but on Arbitrum, Optimism, Polygon and BNB it is the 6916-byte **implementation** of the Across-style proxy. On Robinhood Chain it is an unrelated 825-byte contract. On Arc, `0x8d7285C97D0d0C451be72F737875A98751870B97` is an 825-byte contract, not the 126-byte Across-style proxy.
 
 ---
 
@@ -143,6 +146,7 @@ The Relay depository `0x4cd00e387622c35bddb9b4c962c136462338bc31` has code on al
 | BNB Smart Chain | 56 | `0xC626845BF4E6a5802Ef774dA0B3DfC6707F015F7` | yes | `0x1b7A410EcC527a4aB97693eFD7850FcF088Db989` | `0x3C0158627F81e9a83D5E306D0078525306370f29` | 15 |
 | Avalanche C-Chain | 43114 | — | no (nonce 0) | — | — | — |
 | Robinhood Chain | 4663 | — | no (nonce 0) | `0x1b7A410EcC527a4aB97693eFD7850FcF088Db989` | — | — |
+| Arc | 5042 | — | no (nonce 0) | `0x1b7A410EcC527a4aB97693eFD7850FcF088Db989` | — | — |
 
 (Owlto maker = `0x74F665BE90ffcd9ce9dcA68cB5875570B711CEca`.)
 
@@ -169,7 +173,7 @@ Off-target Depositors in the official list: XLayer, Bob, Mint, Taiko (`0xC626845
 4. **Direct maker deposits have no Owlto event.** Capture an ERC-20 `Transfer` with `to` = maker (or a native transfer to the maker) and decode the last four digits of the amount as the code (§3). Many transfers to the maker are dust or address-poisoning spam: drop amounts below the route minimum.
 5. **The Relay route double-counts with Relay.** A `Bridged` transaction also deposits into the Relay depository `0x4cd00e387622c35bddb9b4c962c136462338bc31` (`RelayNativeDeposit` in the same transaction), so a Relay monitor sees the same value. Count it once.
 6. **Same-address traps.** `0x2d5E0Cd9bfeA95e89CeF80fb39c050991Ac19EaF` is three different things on different chains (§5.2). `0x0e83DEd9f80e1C92549615D96842F5cB64A08762` is a Depositor on Ethereum, Arbitrum and Optimism, but a different contract on Polygon and BNB. Always key on `(chainId, address)`.
-7. **Robinhood Chain:** only the Relay-route contract is present. There is no Depositor and the maker has nonce 0.
+7. **Robinhood Chain and Arc:** only the Relay-route contract is present. There is no Depositor and the maker has nonce 0. On Arc the native USDC leg of a `Bridged` transaction also shows as ERC-20 `Transfer` logs from the system address `0xfffffffffffffffffffffffffffffffffffffffe`.
 8. **Large-transfer trigger:** `Deposit.amount` with `token`, `Bridged.amount`, and ERC-20 `Transfer` to or from the maker. There are no admin events: the Depositor is immutable, and the routing proxies are unverified.
 
 ---
@@ -213,6 +217,7 @@ OP_RELAY_ROUTE                   = '\x1b7a410ecc527a4ab97693efd7850fcf088db989'
 POLY_RELAY_ROUTE                 = '\x1b7a410ecc527a4ab97693efd7850fcf088db989'
 BNB_RELAY_ROUTE                  = '\x1b7a410ecc527a4ab97693efd7850fcf088db989'
 RH_RELAY_ROUTE                   = '\x1b7a410ecc527a4ab97693efd7850fcf088db989'
+ARC_RELAY_ROUTE                  = '\x1b7a410ecc527a4ab97693efd7850fcf088db989'
 ETH_RELAY_DEPOSITORY             = '\x4cd00e387622c35bddb9b4c962c136462338bc31'
 
 -- ===== Across-style route (DepositExecuted) =====
@@ -222,7 +227,7 @@ BASE_ACROSS_STYLE_ROUTE          = '\x2338dce713726e75141e2bd0dbadfddefc8a9d68'
 ARB_ACROSS_STYLE_ROUTE           = '\x8d7285c97d0d0c451be72f737875a98751870b97'
 OP_ACROSS_STYLE_ROUTE            = '\x8d7285c97d0d0c451be72f737875a98751870b97'
 POLY_ACROSS_STYLE_ROUTE          = '\x8d7285c97d0d0c451be72f737875a98751870b97'
--- Avalanche (43114): no Owlto contract; Robinhood (4663): Relay route only
+-- Avalanche (43114): no Owlto contract; Robinhood (4663) and Arc (5042): Relay route only
 ```
 
 ---
@@ -234,8 +239,8 @@ How every constant was verified (2026-09-29):
 - **Topic0 / selectors:** `Deposit`, `deposit` and `isOwltoDepositor` recomputed as `keccak256(sig)` from the Sourcify-verified `Depositor.sol`. `Bridged(address,address,uint256,uint256,bytes32)` recomputed and matched to live logs (two indexed topics in the Robinhood sample). `DepositExecuted(address,uint256,uint256,bool)`, `RelayNativeDeposit(address,uint256,bytes32)` and the `0x5e3bd9e9` tuple were taken from a public signature database and recomputed. `0x2a0b3013` is unresolved.
 - **Addresses:** Depositors and the maker from the official docs table, cross-checked with the API pair list (`contract_address` per source chain). Routing contracts from the `to` field of API-built transactions (`get_build_tx`, read-only) and from `Bridged` emitters. All existence-checked with `eth_getCode` on all eight chains; EIP-1967 slots read.
 - **Network codes:** 30 source transaction hashes from `Deposit` logs (Ethereum, Base and Arbitrum Depositors; logs from the explorer API) were sent to the official `get_receipt` API. 28 returned a destination chain; 2 (codes 73 and 79) returned status 908 (still processing). Each code maps to one chain, with no conflict. The amount-code rule is from `src.ts/utils/chain-config.ts` (`getChainIdByValue`) of `owlto-finance/owlto` and `src/components/pages/Confirm.vue` of `owlto-finance/owlto-frontend`.
-- **Activity (pinned 12-hour window 2026-09-28 00:00–12:00 UTC, logs by topic from every emitter):** `Deposit`: Ethereum 1 (at `0x0e83DEd9f80e1C92549615D96842F5cB64A08762`), Base 1 (at `0xB5CeDAF172425BdeA4c186f6fCF30b367273DA19`), all other chains 0. `Bridged`: Ethereum 5, Base 37, Arbitrum 8, BNB 10, Robinhood 5, Optimism 0, Polygon 0, Avalanche 0. `DepositExecuted` at the Across-style proxies: BNB 2, Ethereum 0, Base 0, Arbitrum 0; Optimism and Polygon not measured. Native payouts from the maker have no log and were not counted.
-- **Sample transactions (receipts read):** Ethereum `0x6b54a743723c09cb4b0a16833703c3c92249d00c8c6acce47cee7965b861db80` (`deposit`, 0.0004 ETH to maker `0x74F665BE90ffcd9ce9dcA68cB5875570B711CEca`, `destination` 4); its payout per `get_receipt` is Arbitrum `0xcdf47ccecee10aadc621525842c367a452d2f3fbbcb107bc84358fec5649e80d`, a 0.0001 ETH native transfer from the maker with no log. Base `0xc39afb2800d7666f09a743dcd8549b2c446c1b0173d5d3afbe680221353a1ae1` (`deposit`, `destination` 4). Payouts from the same maker confirmed on Ethereum `0x0960f41d4c5aa85c778e9f15b540069edae13c83d2f5050733f604c80497ddce`, Optimism `0x31d229e65346c16e395bdcee25e26e67b33a4255c6f868b9d374cf91df739310` and Base `0xcdff62708eed47a1449d69b485e5718ccba5679ea6c9b5cbda539b39577c8e67`. Robinhood `0xa5a4d36eb464a44b8309c71348dd10694d187b5cc0f81bb89aaf806336462a8e` (`0x2a0b3013` with 0.0874 ETH: `RelayNativeDeposit` at the Relay depository, then `Bridged`).
+- **Activity (pinned 12-hour window 2026-09-28 00:00–12:00 UTC, logs by topic from every emitter):** `Deposit`: Ethereum 1 (at `0x0e83DEd9f80e1C92549615D96842F5cB64A08762`), Base 1 (at `0xB5CeDAF172425BdeA4c186f6fCF30b367273DA19`), all other chains 0. `Bridged`: Ethereum 5, Base 37, Arbitrum 8, BNB 10, Robinhood 5, Optimism 0, Polygon 0, Avalanche 0. Arc (separate count, `eth_getLogs` over the ~7 days to 2026-10-05): 6. `DepositExecuted` at the Across-style proxies: BNB 2, Ethereum 0, Base 0, Arbitrum 0; Optimism and Polygon not measured. Native payouts from the maker have no log and were not counted.
+- **Sample transactions (receipts read):** Ethereum `0x6b54a743723c09cb4b0a16833703c3c92249d00c8c6acce47cee7965b861db80` (`deposit`, 0.0004 ETH to maker `0x74F665BE90ffcd9ce9dcA68cB5875570B711CEca`, `destination` 4); its payout per `get_receipt` is Arbitrum `0xcdf47ccecee10aadc621525842c367a452d2f3fbbcb107bc84358fec5649e80d`, a 0.0001 ETH native transfer from the maker with no log. Base `0xc39afb2800d7666f09a743dcd8549b2c446c1b0173d5d3afbe680221353a1ae1` (`deposit`, `destination` 4). Payouts from the same maker confirmed on Ethereum `0x0960f41d4c5aa85c778e9f15b540069edae13c83d2f5050733f604c80497ddce`, Optimism `0x31d229e65346c16e395bdcee25e26e67b33a4255c6f868b9d374cf91df739310` and Base `0xcdff62708eed47a1449d69b485e5718ccba5679ea6c9b5cbda539b39577c8e67`. Robinhood `0xa5a4d36eb464a44b8309c71348dd10694d187b5cc0f81bb89aaf806336462a8e` (`0x2a0b3013` with 0.0874 ETH: `RelayNativeDeposit` at the Relay depository, then `Bridged`). Arc `0x00e459a2262e927e1938c973f449123a50aa2e9c03cde52e7950cea14ba4e075` (`RelayNativeDeposit` at the Relay depository, then `Bridged`).
 
 Authoritative sources:
 - Docs — [Smart Contracts & Maker](https://docs.owlto.finance/basics/smart-contracts-and-maker.md) · [Supported Networks & Tokens](https://docs.owlto.finance/basics/supported-networks-and-tokens.md) · [API overview](https://docs.owlto.finance/integration-guides/api/overview.md) · [API Q&A](https://docs.owlto.finance/integration-guides/api/q-and-a.md)

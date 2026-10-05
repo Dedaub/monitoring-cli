@@ -3,6 +3,7 @@
 **Status:** topic0/selectors via `cast keccak`/`cast sig` (verified, read from `aerodrome-finance/contracts` source); addresses on-chain re-verified with `cast` vs `publicnode` (2026-05).
 **Scope:** the classic **Solidly-style AMM** (volatile + stable pools) and the **ve(3,3) governance** stack (Voter, VotingEscrow veNFT, Gauge, AERO/VELO) of **Aerodrome (Base)** and its identical-codebase twin **Velodrome (Optimism)**. The concentrated-liquidity product is in [`slipstream.md`](slipstream.md). **This file holds the shared ve(3,3) governance** (same contracts back both AMM and Slipstream); slipstream.md references it.
 **Key facts:** Aerodrome ⇒ **Base only**, Velodrome ⇒ **Optimism only** — same code (Velodrome V2), different addresses + token. The veToken is an **ERC-721 veNFT**, not an ERC-20. The AMM `Swap` topic0 **differs from Uniswap V2** (different arg layout), but several other events collide by signature with Uni V2 / Curve / Balancer / Sushi (see Detection).
+**Announced merger (not deployed yet):** Dromos Labs announced that Aerodrome and Velodrome merge into one DEX, "Aero", with expansion to Ethereum mainnet and Arc ([The Defiant](https://thedefiant.io/news/defi/dromos-labs-merges-aerodrome-and-velodrome-into-new-dex-aero)). On 2026-10-05 none of the addresses in this file or in [`slipstream.md`](slipstream.md) has code on Arc (5042) or Robinhood Chain (4663) (`eth_getCode` = `0x`). Re-check before you assume new Aero contracts or chains.
 
 ---
 

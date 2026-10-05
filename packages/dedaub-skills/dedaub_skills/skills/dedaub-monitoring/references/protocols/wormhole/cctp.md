@@ -1,4 +1,4 @@
-# Wormhole CCTP Integration (Circle Integration, Circle Relayer, CCTP with Executor) — Topics, Selectors, Addresses (Ethereum, Base, Arbitrum, Optimism, Polygon, Avalanche; NOT BNB, NOT Robinhood Chain)
+# Wormhole CCTP Integration (Circle Integration, Circle Relayer, CCTP with Executor) — Topics, Selectors, Addresses (Ethereum, Base, Arbitrum, Optimism, Polygon, Avalanche; NOT BNB, NOT Robinhood Chain; Arc: CCTP v2 with Executor only)
 
 **Status:** verified on 2026-09-29 against live RPC on all eight chains, `wormhole-foundation/wormhole-circle-integration`, `wormhole-foundation/example-circle-relayer` (archived), `wormholelabs-xyz/example-cctp-with-executor`, `core/base/src/constants/contracts/circle.ts` of the SDK, the Executor deployment registry and the Wormhole docs CCTP guide. Topics and selectors recomputed as `keccak256(signature)`; addresses existence-checked with `eth_getCode`; implementations read from the EIP-1967 slot and scanned for each topic and selector.
 **Scope:** the Wormhole contracts that wrap Circle's CCTP for native USDC: (1) the **Circle Integration** (`CircleIntegration`: a CCTP v1 burn plus a Wormhole message with a payload), (2) the **Circle Relayer** built on it, and (3) the Executor-era **CCTP v1 / v2 with Executor** helpers. They are deployed on **six chains: Ethereum, Base, Arbitrum, Optimism, Polygon and Avalanche. BNB and Robinhood Chain (4663) have none.** Circle's own contracts and events (TokenMessenger, MessageTransmitter, `DepositForBurn`, `MintAndWithdraw`) are documented in [../cctp/README.md](../cctp/README.md); this file lists only the topics a Wormhole monitor needs to join both sides.
@@ -129,6 +129,7 @@ All existence-checked with `eth_getCode` on 2026-09-29. Wormhole chain id **2**,
 | Polygon PoS | `0x4cb69FaE7e7Af841e44E1A1c30Af640739378bb2` | `0x7e6Ae241101B355447A4B471D0C6968b132eC4Ab` | `0x5116F1358ae2445f571AA702dA1feB5e13094E59` | `0xbB1A18453D17C91ffa0638Cb12D5B81dfb1c695B` | `0xD64341A38a5eAfb9EB9BACf8A5C52Fe858c4ABE9` |
 | Avalanche C-Chain | `0x4cb69FaE7e7Af841e44E1A1c30Af640739378bb2` | `0x58aC806cd205083E7E048E196f36Ff6C4Ae17bE5` | `0xE42aE9e352157fcEf74E971F2C5c74A5963a71D7` | `0x6abeF0e847e9E5baEa28B1Ffa4a51EA11Ae424db` | `0x588203D627cac76dB95edd5459d50c96f701D7B3` |
 | BNB / Robinhood | ❌ | ❌ | ❌ | ❌ | ❌ |
+| Arc (5042) | ❌ | ❌ | `0x047B0C3A40757A4c97A13ADEf37d9AA0Ace99C69` (2,645 B) | ❌ | `0xD64341A38a5eAfb9EB9BACf8A5C52Fe858c4ABE9` (923 B) |
 
 Deprecated v1 helpers (Executor registry, marked `deprecated`): CCTPv1WithExecutor — ETH `0xeEFb36c4458dA7798742cf038C5c27E07aB9c51E`, Base `0x08FEB1838C3d7F8509DA1EBb9a11a94c1f006cb2`, ARB `0x55Dd4466BFec29527C54A72fd306efb54e5F7027`, OP `0xBC6f9d1CBa49DB365728478cefa02F6743617637`, POLY `0x007995f2AEcfBC745f20a7AE8D3a02c0EbF46264`, AVAX `0xd331819478b74d8a7B8EA631118B4a4e50F6EbD1`; CCTPv2WithExecutor — ETH `0x2cCf230467FE7387674BAa657747F0B5485c7fEC`, Base `0xbd8d42f40a11b37bD1b3770D754f9629F7cd5679`, ARB `0x8442d68524217601ed126f6859694E4B0C7c66A1`, OP `0xd0A8940b2e743E33b682dAEc4D52b46713606C9D`, POLY `0xc8A8E6D760dCBd5d6746E2F66cd2fFA722dd1E59`, AVAX `0x3952914628650Ca510404872D84DfF10A844C5B5`. All twelve still have code (2,571 B for the v1 helpers, 2,394 B for the v2 helpers).
 
@@ -146,6 +147,7 @@ Deprecated v1 helpers (Executor registry, marked `deprecated`): CCTPv1WithExecut
 | Avalanche C-Chain | 43114 | 6 | 1 | `0x09Fb06A271faFf70A651047395AaEb6265265F13` | ✅ | ✅ / ✅ |
 | BNB Smart Chain | 56 | 4 | — | ❌ `0x` | ❌ `0x` | ❌ |
 | **Robinhood Chain** | 4663 | 72 | — | ❌ | ❌ | ❌ |
+| **Arc** | 5042 | 71 | 26 | ❌ `0x` | ❌ | ❌ / ✅ |
 
 **Address reuse:** `0x2703483B1a5a7c577e8680de9Df8Be03c6f30e3c` is the Circle Integration proxy on Arbitrum and Optimism and the Circle Integration **implementation** on Base; `0x03faBB06Fa052557143dC28eFCFc63FC12843f1D` is the proxy on Base and the implementation on Polygon. Key on `(chain, address)` and read the EIP-1967 slot.
 
@@ -219,6 +221,7 @@ ARB_CCTP_V2_WITH_EXECUTOR     = '\x760fec4425b46e3d8fef8e2ce49786e5a6f74446'
 OP_CCTP_V2_WITH_EXECUTOR      = '\x9b51579e67d4ab18d79609105509ad37b2a0d342'
 POLY_CCTP_V2_WITH_EXECUTOR    = '\x5116f1358ae2445f571aa702da1feb5e13094e59'
 AVAX_CCTP_V2_WITH_EXECUTOR    = '\xe42ae9e352157fcef74e971f2c5c74a5963a71d7'
+ARC_CCTP_V2_WITH_EXECUTOR     = '\x047b0c3a40757a4c97a13adef37d9aa0ace99c69'
 ```
 
 ---

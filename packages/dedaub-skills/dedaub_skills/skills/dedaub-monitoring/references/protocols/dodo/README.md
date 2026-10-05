@@ -19,7 +19,7 @@ Each file follows: **Topics** (chain-agnostic `topic0 = keccak256(event sig)`) �
 | Chain | ID | V1 (DODOZoo) | V2 pools | V3 / D3 | Smart-route | DODO token | vDODO | DODO Mine | NFT/Fragment |
 |-------|----|--------------|----------|---------|-------------|------------|-------|-----------|--------------|
 | Ethereum | 1 | ✓ (15 named pairs) | ✓ (+GSP clones) | ✓ | ✓ (V2Proxy + Route + 2× Fee + LimitOrder) | ✓ `0x43Df…4DDd` (immutable) | ✓ | ✓ | ✓ |
-| BNB | 56 | ✓ (2 pairs) | ✓ | ✓ | ✓ (**no DODOV2Proxy**; Route + Fee + LimitOrder) | ✓ `0x67ee…29e2` (mint/burn) | ✓ | ✓ | ✓ |
+| BNB | 56 | ✓ (2 pairs) | ✓ | ✓ | ✓ (V2Proxy `0x8F8D…8486` + Route + Fee + LimitOrder; V2Proxy carries the swaps) | ✓ `0x67ee…29e2` (mint/burn) | ✓ | ✓ | ✓ |
 | Polygon | 137 | ✓ (1 pair) | ✓ | ✓ | ✓ (V2Proxy + Route + Fee + LimitOrder) | ✓ `0xe4Bf…fe78` (**upgradeable proxy**) | — | ✓ | ✓ |
 | Arbitrum | 42161 | ✓ (3 pairs + V1 Mine) | ✓ | ✓ (0 pools yet) | ✓ (V2Proxy + Route + Fee + LimitOrder) | ✓ `0x69Eb…A581` (**beacon proxy**) | — | ✓ | ✓ |
 | Avalanche | 43114 | ✓ (registry only, 0 pairs) | ✓ | ✓ | ✓ (V2Proxy + Route + Fee; **no LimitOrder**) | — | — | ✓ | — |
@@ -38,7 +38,7 @@ Each file follows: **Topics** (chain-agnostic `topic0 = keccak256(event sig)`) �
 ## Verification methodology
 
 - **Topic0 / selectors:** computed locally with keccak-256 from canonical `DODOEX/contractV2` + `dodo-smart-contract` + `dodo-route-contract` + `dodo-v3` + `dodo-gassaving-pool` source signatures; validated against live `eth_getLogs` — `DODOBirth` + `SellBaseToken`/`BuyBaseToken`/`Deposit`/`Withdraw`/`Donate` (ETH V1 pair), `DODOSwap` + `NewDVM` (ETH DVMFactory; `DODOSwap` also on the ETH GSP clone), `OrderHistory` (ETH DODOV2Proxy + RouteProxy + DODOFeeRouteProxy — identical topic0), `D3Birth` + `AddPool` + `MakerDeposit` (ETH D3MMFactory/D3Vault/pool), `MintVDODO`/`RedeemVDODO` (ETH vDODO), `Incentive` (DODOIncentive).
-- **Addresses:** parsed from the DODO contract API (`api.dodoex.io/dodo-contract/list`, both `version=v1,v2` and `version=v3`) and the per-chain repo configs, then **existence-checked via `eth_getCode`** on each chain. Absence is recorded explicitly (e.g. D3 + DODOZoo on Base; DODOV2Proxy on BNB; RouteProxy on Base; DODO token on Avalanche/Optimism/Base). Cross-chain **address collisions were resolved by selector probing** (e.g. Arbitrum `0x4EE639…` carries `getPairDetail`, not `triggerIncentive` → it is `DODOV1PmmHelper`, not `DODOIncentive`).
+- **Addresses:** parsed from the DODO contract API (`api.dodoex.io/dodo-contract/list`, both `version=v1,v2` and `version=v3`) and the per-chain repo configs, then **existence-checked via `eth_getCode`** on each chain. Absence is recorded explicitly (e.g. D3 + DODOZoo on Base; RouteProxy on Base; DODO token on Avalanche/Optimism/Base). Cross-chain **address collisions were resolved by selector probing** (e.g. Arbitrum `0x4EE639…` carries `getPairDetail`, not `triggerIncentive` → it is `DODOV1PmmHelper`, not `DODOIncentive`). BNB `0x8F8Dd7DB…8486` (the Avalanche `PermissionManager` literal) is a BNB `DODOV2Proxy` that the API does not list; found from live `OrderHistory` logs (2026-10-05).
 - **Proxy/immutability:** EIP-1967 impl/admin/beacon slots read live via `eth_getStorageAt`; clone bytecode confirmed on sample instances; factory→template wiring confirmed by reading `_*_TEMPLATE_()`, and the approve wiring by `DODOApprove.getDODOProxy()` ⇄ `DODOApproveProxy._DODO_APPROVE_()`.
 
 ## Coverage caveats (read these)

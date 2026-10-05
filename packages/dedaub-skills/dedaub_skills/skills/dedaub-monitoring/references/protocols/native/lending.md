@@ -1,6 +1,6 @@
 # Native — Credit Pool / Lending (CreditVault + NativeLPToken) — Topics, Selectors, Addresses
 
-**Status:** verified against live RPC on Ethereum(1), BNB Smart Chain(56), Arbitrum One(42161), Base(8453), Avalanche C-Chain(43114), Optimism(10), Polygon PoS(137), and the `Native-org/native-v2-core` repo (`CreditVault.sol`, `NativeLPToken.sol`, `interfaces/ICreditVault.sol`, `libraries/ConstantsLib.sol`) on 2026-06-02.
+**Status:** verified against live RPC on Ethereum(1), BNB Smart Chain(56), Arbitrum One(42161), Base(8453), Avalanche C-Chain(43114), Optimism(10), Polygon PoS(137), and the `Native-org/native-v2-core` repo (`CreditVault.sol`, `NativeLPToken.sol`, `interfaces/ICreditVault.sol`, `libraries/ConstantsLib.sol`) on 2026-06-02. **Re-checked 2026-10-05:** Robinhood Chain (4663) CreditVault added (§3.4a), and the CreditVault `owner()` corrected on all chains (§3).
 **Scope:** the **Native Credit Pool** (lending/credit side) only — the `CreditVault` (asset custody + market-maker position/collateral/settlement/liquidation) and the per-asset `NativeLPToken` yield-bearing LP tokens. The **swap side** (NativeRouter V3/V4, NativeRFQPool, NativeBridge) is **out of scope here** and covered by a separate reference — see the boundary note below. Topics + selectors are **chain-agnostic**; addresses are network-specific. **CreditVault is deployed on Ethereum, BNB, Arbitrum, and Base only** — `eth_getCode` returns `0x` for every candidate on Avalanche, Optimism, and Polygon (§ Cross-chain summary).
 
 Native flips on-chain liquidity from *inventory-based* to *credit-based*. Whitelisted private market makers ("traders" / PMMs) borrow assets directly from the `CreditVault` up to a credit limit (computed off-chain) to quote RFQ swaps, instead of pre-funding inventory. The vault holds almost all protocol assets. A trader's net exposure is tracked as a **signed position** `positions[trader][token]` (positive = long, negative = short = borrowed). LPs deposit an underlying asset into its dedicated `NativeLPToken`; the deposit is forwarded **into the CreditVault** (the LP contract holds no underlying), and LP yield comes from **borrowing fees** the traders pay — distributed to LP holders by an off-chain `epochUpdater` calling `epochUpdate` → `distributeYield`, which raises each LP token's exchange rate (capped at +1% per epoch). Traders may also post `NativeLPToken` (or other supported markets) as **collateral**; positions that go underwater are closed by whitelisted **liquidators**.
@@ -185,11 +185,11 @@ All recomputed locally with keccak-256 on 2026-06-02 from the verified source. T
 
 `CreditVault` is the same vanity-ish prefix per chain but **NOT** a CREATE2-identical address across chains (each chain has a distinct CreditVault address). LP-token addresses **do collide across chains** in several cases (same address, different underlying) because they were deployed by the same EOA at the same nonce — **always key on `(chainId, address)`**, never address alone. All verified via `eth_getCode` / `eth_call` on the per-chain publicnode RPC on 2026-06-02.
 
-**Shared across ETH + BNB + Base** (not Arbitrum): `owner()` = `0x4df7557734b382eb542bea6c74786d398df4cc19`. **Arbitrum owner differs:** `0xd085195edabf4b9f0673b8b8b7da077c292967cd`. **Signer is identical on all four chains:** `0x0b89c5eb76b15a4b09b05b01c953e19dedf80a5e`.
+**`owner()` (read 2026-10-05) is a different contract on each chain**, each 17,236 B with unverified source, `pendingOwner()` = 0: ETH `0x9b9dc7c56e18cfda57d402ca7ded491b1544dc56`, BNB `0x4e86c363afe2f7e5237a11ba5c0b84cfa9e1f584`, Arbitrum `0xe928ffe1e3111f6fbbb8922f6b9b0181605dfd36`, Base `0xca0f3fb46eb413abefa10d91aa2a6fd49eab60eb`, Robinhood `0x0cb46d89ed4ae005160b3270fafe453c43bba664`. The earlier owners (`0x4df7557734b382eb542bea6c74786d398df4cc19` on ETH/BNB/Base, `0xd085195edabf4b9f0673b8b8b7da077c292967cd` on Arbitrum, read 2026-06-02) are retired (observed 2026-10-05). **Signer is identical on all five chains:** `0x0b89c5eb76b15a4b09b05b01c953e19dedf80a5e`.
 
 ### 3.1 Ethereum (chain ID 1) — CreditVault `0xe3D41d19564922C9952f692C5Dd0563030f5f2EF` · **27 LP tokens**
 
-owner `0x4df7…cc19` · signer `0x0b89…0a5e` · ~20 KB, not a proxy.
+owner `0x9b9d…dc56` · signer `0x0b89…0a5e` · ~20 KB, not a proxy.
 
 | LP token | symbol | dec | underlying |
 |----------|--------|-----|------------|
@@ -223,7 +223,7 @@ owner `0x4df7…cc19` · signer `0x0b89…0a5e` · ~20 KB, not a proxy.
 
 ### 3.2 BNB Smart Chain (chain ID 56) — CreditVault `0xBA8dB0CAf781cAc69b6acf6C848aC148264Cc05d` · **44 LP tokens**
 
-owner `0x4df7…cc19` · signer `0x0b89…0a5e` · ~20 KB, not a proxy. Largest deployment by market count. (Full per-token list omitted for length — enumerate live via `allLPTokens`.) Representative / notable markets:
+owner `0x4e86…f584` · signer `0x0b89…0a5e` · ~20 KB, not a proxy. Largest deployment by market count. (Full per-token list omitted for length — enumerate live via `allLPTokens`.) Representative / notable markets:
 
 | LP token | symbol | dec | underlying |
 |----------|--------|-----|------------|
@@ -241,7 +241,7 @@ owner `0x4df7…cc19` · signer `0x0b89…0a5e` · ~20 KB, not a proxy. Largest 
 
 ### 3.3 Arbitrum One (chain ID 42161) — CreditVault `0xbA1cf8A63227b46575AF823BEB4d83D1025eff09` · **5 LP tokens**
 
-owner `0xd085…67cd` (**differs from ETH/BNB/Base**) · signer `0x0b89…0a5e` · ~19.5 KB, not a proxy.
+owner `0xe928…fd36` · signer `0x0b89…0a5e` · ~19.5 KB, not a proxy.
 
 | LP token | symbol | dec | underlying |
 |----------|--------|-----|------------|
@@ -253,7 +253,7 @@ owner `0xd085…67cd` (**differs from ETH/BNB/Base**) · signer `0x0b89…0a5e` 
 
 ### 3.4 Base (chain ID 8453) — CreditVault `0x74a4Cd023e5AfB88369E3f22b02440F2614a1367` · **5 LP tokens**
 
-owner `0x4df7…cc19` · signer `0x0b89…0a5e` · ~19.5 KB, not a proxy.
+owner `0xca0f…60eb` · signer `0x0b89…0a5e` · ~19.5 KB, not a proxy.
 
 | LP token | symbol | dec | underlying |
 |----------|--------|-----|------------|
@@ -263,9 +263,29 @@ owner `0x4df7…cc19` · signer `0x0b89…0a5e` · ~19.5 KB, not a proxy.
 | `0xca135c6520dd03f7e25fbb44c63f7b51e5ad86de` | NTLP-cbBTC | 8 | cbBTC `0xcbb7c000…ed33bf` |
 | `0x5593ddb6e5a1a0cf71a3e0bc7f0f936a06aa9f0b` | NLP-nBRIDGE | 18 | nBRIDGE `0xfb38835e…1b5848` |
 
-### 3.5 Avalanche (43114), Optimism (10), Polygon PoS (137) — **NOT DEPLOYED**
+### 3.4a Robinhood Chain (chain ID 4663) — CreditVault `0x57B8f68ef57Af2dB70BC9aAc891836661CA4cB51` · **11 LP tokens**
 
-`eth_getCode` = `0x` for all four candidate CreditVault addresses on each of these three chains (2026-06-02). The official addresses page lists Credit Pool/CreditVault only for Ethereum, BNB, Arbitrum, and Base. **No Native Credit Pool on Avalanche, Optimism, or Polygon.** (Native's swap-side products may differ — out of scope.)
+From the official addresses page ("Robinhood"). owner `0x0cb4…a664` · signer `0x0b89…0a5e` · 20,187 B, EIP-1967 slot empty, `eip712Domain()` = "Native Credit Vault". `allLPTokens(uint256)` walked to revert on 2026-10-05.
+
+| LP token | symbol | dec | underlying |
+|----------|--------|-----|------------|
+| `0xbb77a4c192d53331162ac2ff0b6dfb78e976a07b` | NLP-WETH | 18 | WETH `0x0bd7d308…eacad73` |
+| `0x4634fafccbe4cd8ae5b686797cfae0b1ae47913f` | NLP-USDG | 6 | USDG `0x5fc5360d…6f1d168` |
+| `0xa19a4e94ea2700d4a2c7b25ce08ddc58b582c4f9` | NLP-NVDA | 18 | NVDA `0xd0601ce1…320d9eec` |
+| `0x4424eac7f489ae8b66e43e68eb9dbf487a103abf` | NLP-TSLA | 18 | TSLA `0x322f0929…1c003b2d` |
+| `0x15d24c62aad94998c4da58a5294b1afc52471ab5` | NLP-AMD | 18 | AMD `0x86923f96…2023fdc` |
+| `0xc6def7f39480293b1db5a8a9947c9ba3851e6e93` | NLP-MU | 18 | MU `0xff080c8c…d232d4afd` |
+| `0xf5a2bf276009e61910302b045ae6dac50e9f89db` | NLP-SNDK | 18 | SNDK `0xb90a19ff…42446400` |
+| `0x3f22e401a79b3c584d737406b0c93699337a3ac8` | NLP-SPCX | 18 | SPCX `0x4a0e65a3…fae35eea` |
+| `0x3c3a3d45e12c69915f63e14ba94105b1e5e38006` | NLP-MSFT | 18 | MSFT `0xe93237c5…c669c2e74` |
+| `0x64542f926ea0f7bbad6096afb26bfd0ba25d5c68` | NLP-CRCL | 18 | CRCL `0xdf0992e4…366bf1cb5` |
+| `0x4a9e03c4f9d5cd82734628cf93d1e593201916f7` | NLP-CASHCAT | 18 | CASHCAT `0x020bfc65…291018b4` |
+
+Most Robinhood markets are tokenized equities. The symbol prefix is `NLP-`, not `NT-LP-`.
+
+### 3.5 Avalanche (43114), Optimism (10), Polygon PoS (137), Arc (5042) — **NOT DEPLOYED**
+
+`eth_getCode` = `0x` for all four candidate CreditVault addresses on each of these three chains (2026-06-02). The official addresses page (2026-10-05) lists a CreditVault for Ethereum, BNB, Arbitrum, Base, Robinhood, Monad, X Layer and Morph only. The Robinhood CreditVault address returns `0x` on Arc. **No Native Credit Pool on Avalanche, Optimism, Polygon or Arc.** (Native's swap-side products may differ — out of scope.)
 
 ---
 
@@ -273,15 +293,16 @@ owner `0x4df7…cc19` · signer `0x0b89…0a5e` · ~19.5 KB, not a proxy.
 
 | Chain | ID | RPC verified | CreditVault | LP tokens | owner | not a proxy |
 |-------|----|--------------|-------------|-----------|-------|-------------|
-| Ethereum | 1 | ✓ | `0xe3D41d19…f5f2EF` | 27 | `0x4df7…cc19` | ✓ |
-| BNB Smart Chain | 56 | ✓ | `0xBA8dB0CA…4Cc05d` | 44 | `0x4df7…cc19` | ✓ |
-| Arbitrum One | 42161 | ✓ | `0xbA1cf8A6…25eff09` | 5 | `0xd085…67cd` | ✓ |
-| Base | 8453 | ✓ | `0x74a4Cd02…14a1367` | 5 | `0x4df7…cc19` | ✓ |
+| Ethereum | 1 | ✓ | `0xe3D41d19…f5f2EF` | 27 | `0x9b9d…dc56` | ✓ |
+| BNB Smart Chain | 56 | ✓ | `0xBA8dB0CA…4Cc05d` | 44 | `0x4e86…f584` | ✓ |
+| Arbitrum One | 42161 | ✓ | `0xbA1cf8A6…25eff09` | 5 | `0xe928…fd36` | ✓ |
+| Base | 8453 | ✓ | `0x74a4Cd02…14a1367` | 5 | `0xca0f…60eb` | ✓ |
+| Robinhood Chain | 4663 | ✓ | `0x57B8f68e…CA4cB51` | 11 | `0x0cb4…a664` | ✓ |
 | Avalanche C-Chain | 43114 | ✓ | **absent** (`0x`) | — | — | — |
 | Optimism | 10 | ✓ | **absent** (`0x`) | — | — | — |
 | Polygon PoS | 137 | ✓ | **absent** (`0x`) | — | — | — |
 
-CreditVault addresses are **distinct per chain** (no CREATE2 identity). LP-token addresses **partially collide** between ETH and BNB (same deployer/nonce, different underlying). Signer `0x0b89…0a5e` is shared across all four deployed chains; owner is shared on ETH/BNB/Base but distinct on Arbitrum.
+CreditVault addresses are **distinct per chain** (no CREATE2 identity). LP-token addresses **partially collide** between ETH and BNB (same deployer/nonce, different underlying). Signer `0x0b89…0a5e` is shared across all five deployed target chains; `owner()` is a distinct 17,236-byte contract on each chain (2026-10-05). LP counts are from 2026-06-02 (Robinhood: 2026-10-05).
 
 ---
 
@@ -316,7 +337,7 @@ CreditVault addresses are **distinct per chain** (no CREATE2 identity). LP-token
 11. **`deposit(uint256)` selector `0xb6b55f25` is identical to Aave V2's `deposit(uint256)`** and other single-arg deposit fns. Always disambiguate by the emitting/target address being a known `NativeLPToken`.
 12. **No oracle / no ERC-4626 / no factory contract on-chain.** Pricing and credit health live off-chain behind the `signer`. Do not look for a Native price-feed, ERC-4626 vault, or LP-token factory — none exist. LP tokens are deployed standalone and registered via `supportMarket` → `MarketListed`.
 13. **Not a proxy → upgrades are redeploys.** No `Upgraded`/`Initialized` events. A migration appears as a new CreditVault address + new `MarketListed` events on a new contract. Track the docs addresses page and `OwnershipTransferred`/`SignerSet` on the live vault.
-14. **Arbitrum has a different `owner()`** (`0xd085…67cd`) than the ETH/BNB/Base owner (`0x4df7…cc19`). Don't assume a single global admin.
+14. **Each chain has its own `owner()` contract** (§3; all 17,236 B, rotated from the earlier EOA owners by 2026-10-05). Watch `OwnershipTransferred` / `OwnershipTransferStarted` on each CreditVault. Don't assume a single global admin.
 15. **Activity is concentrated on Ethereum + BNB.** Base/Arbitrum CreditVaults are live but lower-volume (Base showed a single `EpochUpdated` in a 3.6M-block scan). Absence of recent `Liquidated`/`CollateralAdded` logs ≠ wrong topic0 — the signatures are source-verified and the family is confirmed live on Ethereum.
 
 ---
@@ -396,15 +417,20 @@ EIP1967_ADMIN_SLOT              = '\xb53127684a568b3173ae13b9f8a6016e243e63b6e8e
 
 -- ===== Roles (across deployed chains) =====
 NATIVE_SIGNER_ALL_CHAINS        = '\x0b89c5eb76b15a4b09b05b01c953e19dedf80a5e'
-NATIVE_OWNER_ETH_BNB_BASE       = '\x4df7557734b382eb542bea6c74786d398df4cc19'
-NATIVE_OWNER_ARBITRUM           = '\xd085195edabf4b9f0673b8b8b7da077c292967cd'
+NATIVE_OWNER_ETH                = '\x9b9dc7c56e18cfda57d402ca7ded491b1544dc56'
+NATIVE_OWNER_BNB                = '\x4e86c363afe2f7e5237a11ba5c0b84cfa9e1f584'
+NATIVE_OWNER_ARBITRUM           = '\xe928ffe1e3111f6fbbb8922f6b9b0181605dfd36'
+NATIVE_OWNER_BASE               = '\xca0f3fb46eb413abefa10d91aa2a6fd49eab60eb'
+NATIVE_OWNER_ROBINHOOD          = '\x0cb46d89ed4ae005160b3270fafe453c43bba664'
+-- retired owners (read 2026-06-02): 0x4df7557734b382eb542bea6c74786d398df4cc19 (ETH/BNB/Base), 0xd085195edabf4b9f0673b8b8b7da077c292967cd (Arbitrum)
 
 -- ===== CreditVault addresses =====
 ETH_CREDIT_VAULT                = '\xe3d41d19564922c9952f692c5dd0563030f5f2ef'   -- 27 LP tokens
 BNB_CREDIT_VAULT                = '\xba8db0caf781cac69b6acf6c848ac148264cc05d'   -- 44 LP tokens
 ARB_CREDIT_VAULT                = '\xba1cf8a63227b46575af823beb4d83d1025eff09'   -- 5 LP tokens
 BASE_CREDIT_VAULT               = '\x74a4cd023e5afb88369e3f22b02440f2614a1367'   -- 5 LP tokens
--- NOT deployed on Avalanche(43114) / Optimism(10) / Polygon(137): eth_getCode = 0x
+RH_CREDIT_VAULT                 = '\x57b8f68ef57af2db70bc9aac891836661ca4cb51'   -- 11 LP tokens
+-- NOT deployed on Avalanche(43114) / Optimism(10) / Polygon(137) / Arc(5042): eth_getCode = 0x
 
 -- ===== Sample LP tokens (enumerate full set via allLPTokens per chain) =====
 ETH_NTLP_WETH                   = '\x5994258ec80cc6853e2b6f047ec6d213fe89b24b'
@@ -417,6 +443,8 @@ ARB_NTLP_WETH                   = '\x8a5fca5429f5d572f71959bfec41495420528ce2'
 ARB_NTLP_USDC                   = '\xc6ab8b93d2c5477b887aea4b66977d6e37bbcf97'
 BNB_NTLP_WBNB                   = '\xea91132e79559be0fcd6b1237ded28a31a226644'
 BNB_NTLP_USDT                   = '\x5994258ec80cc6853e2b6f047ec6d213fe89b24b'   -- collides w/ ETH NT-LP-WETH addr
+RH_NLP_WETH                     = '\xbb77a4c192d53331162ac2ff0b6dfb78e976a07b'
+RH_NLP_USDG                     = '\x4634fafccbe4cd8ae5b686797cfae0b1ae47913f'
 ```
 
 ---
@@ -428,6 +456,7 @@ How every constant was verified (2026-06-02):
 - **Source:** `github.com/Native-org/native-v2-core` (cloned `main`, depth 1) — `src/CreditVault.sol`, `src/NativeLPToken.sol`, `src/interfaces/ICreditVault.sol`, `src/libraries/ConstantsLib.sol`. solc 0.8.28. Both contracts are `Ownable2Step` + transient `ReentrancyGuard`; CreditVault is also `EIP712("Native Credit Vault","1")`. **No proxy/upgradeable base classes** in either inheritance chain.
 - **Topic0 / selectors:** computed locally with `pycryptodome` keccak-256 from the canonical signatures (tuples expanded; `uint`→`uint256`; no names/spaces; `indexed` dropped for hashing).
 - **Live topic0 cross-check (`eth_getLogs`):** on the **Ethereum** CreditVault — observed `Settled` (21), `Repaid` (18), `EpochUpdated` (94), `MarketListed` (6), `TraderSet` (2), `CreditPoolUpdated` (2), `OwnershipTransferred`, `OwnershipTransferStarted` in a recent ~1.2M-block window; `EpochUpdated` also observed live on BNB and Base. On an **Ethereum** LP token (`NT-LP-USDC` `0x91f70f89…`) — observed `SharesMinted` (54), `SharesBurned` (32), `TransferShares` (23), `YieldDistributed` (101), `Transfer` (23), `TrustedOperatorUpdated`, `RedeemCooldownExemptUpdated`. This proves the computed signatures appear in real logs.
+- **2026-10-05 re-check:** Robinhood CreditVault from the official addresses page; `eth_getCode` 20,187 B, EIP-1967 slot empty, `allLPTokens` walked (11). `owner()`, `pendingOwner()` and `signer()` re-read on all five CreditVaults; the owners are new 17,236-byte contracts (source unverified on Blockscout and Sourcify).
 - **Addresses + LP-token enumeration:** `eth_call` `allLPTokens(uint256)` walked to revert on each chain (ETH 27, BNB 44, ARB 5, Base 5); each LP token's `symbol()`/`underlying()`/`decimals()`/`creditVault()` read live; vault `owner()`/`signer()` read live.
 - **Deployment presence:** `eth_getCode` non-empty on ETH/BNB/ARB/Base CreditVaults (~19.5–20 KB) and on sampled LP tokens (~21 KB); `0x` for all four candidate addresses on Avalanche/Optimism/Polygon.
 - **Proxy classification:** `eth_getStorageAt` EIP-1967 impl slot `0x360894…bbc` and admin slot `0xb53127…6103` both `0x000…000` on every CreditVault and on the sampled LP token → **not proxies**; corroborated by source (no UUPS/initializer) and by the large full-logic bytecode.

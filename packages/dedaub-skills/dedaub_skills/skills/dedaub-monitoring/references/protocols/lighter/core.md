@@ -1,6 +1,6 @@
 # Lighter (zkLighter) — Topics, Selectors, Addresses (Ethereum L1; a separate instance on Robinhood Chain)
 
-**Status:** verified against live RPC on every listed chain and the canonical `elliottech/lighter-contracts` / `elliottech/lighter-prover` repos (Sourcify-verified source, solc 0.8.25, viaIR) on 2026-06-09. Re-checked on 2026-09-29: Robinhood Chain (4663) hosts a separate Lighter instance with its own contracts (§6a); the Ethereum ZkLighter and ZkLighterVerifier impls rotated after 2026-06-09 (§8).
+**Status:** verified against live RPC on every listed chain and the canonical `elliottech/lighter-contracts` / `elliottech/lighter-prover` repos (Sourcify-verified source, solc 0.8.25, viaIR) on 2026-06-09. Re-checked on 2026-09-29: Robinhood Chain (4663) hosts a separate Lighter instance with its own contracts (§6a); the Ethereum ZkLighter and ZkLighterVerifier impls rotated after 2026-06-09. Re-read on 2026-10-05: all three Ethereum impls (ZkLighter, ZkLighterVerifier, Governance) changed again in two upgrades on 2026-09-30 and 2026-10-01 (§8).
 **Scope:** the entire on-chain footprint of Lighter — an application-specific zk-rollup perpetuals + spot CLOB DEX whose settlement contracts live **only on Ethereum mainnet (chain ID 1)**. Topics and selectors are **chain-agnostic**; addresses are network-specific. **Lighter is NOT deployed on Base, BNB, Avalanche, Arbitrum, Optimism, or Polygon** — `eth_getCode` returns `0x` for every Lighter address on all six (§7). **Robinhood Chain (4663) carries a separate instance** — Robinhood Chain's "Lighter Domain", a USDG-margined fork with its own contracts, sequencer, blockspace and liquidity that settles on Robinhood Chain itself (§6a). Its proxy has the same code hash as the Ethereum proxy, and it emits the same user-flow and batch topic0s. There is no live "Lighter v1 orderbook" contract suite on any of the seven chains: despite older marketing that calls Lighter "an Arbitrum DEX," the production system is its own L1-settled zk-rollup and the only deployment on-chain — hence this single `core.md` rather than `v1.md`/`v2.md`.
 
 Lighter is architecturally a **zkBNB / zkSync-Lite (ZecRey-lineage) rollup**: an off-chain Sequencer matches orders and a Prover produces Plonky2 zk-SNARKs that are verified on L1. The L1 contracts (a) custody all user collateral, (b) hold the canonical state root, (c) accept `commitBatch → verifyBatch → executeBatches` from validators, and (d) process L1↔L2 deposits/withdrawals via a **priority queue** (`NewPriorityRequest`). Because the L2 logic is far larger than the EVM 24,576-byte limit, the main contract is split across **two implementation contracts** — `ZkLighter` (deposits/withdrawals/batch lifecycle, the live impl behind the proxy) and `AdditionalZkLighter` (delegatecall fallback target for the rest of the surface). Both expose nearly the same external ABI; **their event signatures are byte-for-byte identical**, so every topic0 in §1.1 applies regardless of which impl emitted it.
@@ -166,7 +166,7 @@ All selectors recomputed locally on 2026-06-09 from the Sourcify ABIs and confir
 | `0x5a99719e` | `getMaster()` → `address` | = Multisig 2. |
 | `0xc727927f` | `securityCouncilAddress()` → `address` | = Multisig 1 (`0x92b1…2045`). |
 | `0xd4d543c5` | `upgradeStatus()` → `uint8` | 0=Idle,1=NoticePeriod,2=Preparation. |
-| `0xac0d925c` | `versionId()` → `uint256` | upgrade counter (60 on 2026-06-09). |
+| `0xac0d925c` | `versionId()` → `uint256` | upgrade counter (60 on 2026-06-09, 74 on 2026-10-05). |
 
 ### 2.8 ZkLighterVerifier / DesertVerifier (identical 3-fn ABI)
 
@@ -186,14 +186,14 @@ All verified via `eth_getCode` returning non-empty bytecode on `https://ethereum
 
 | Role | Address | One-liner |
 |------|---------|-----------|
-| **ZkLighter** (proxy) | `0x3B4D794a66304F130a4Db8F2551B0070dfCf5ca7` | Main rollup entrypoint; custodies funds, holds the state root, emits all §1.1 events. Live impl `0x831E…7008`. |
-| **ZkLighter impl** (live) | `0x831EF69BaB8AF8B1037a4961B8d0674b124E7008` | `ZkLighter` logic (24,462 B). |
-| **AdditionalZkLighter impl** | `0x22F05515497ce8D78f3898088C474403Ac9C668f` | second logic contract (24,523 B), delegatecall fallback. |
-| **ZkLighterVerifier** (proxy) | `0xac3Ce44B6ff4E402858C99D5699ff63131572BaA` | Main zk-SNARK verifier. Impl `0xAa0b…f5D6`. |
-| **ZkLighterVerifier impl** | `0xAa0b5b65890162C5C96D82F088822247EC5Df5D6` | |
+| **ZkLighter** (proxy) | `0x3B4D794a66304F130a4Db8F2551B0070dfCf5ca7` | Main rollup entrypoint; custodies funds, holds the state root, emits all §1.1 events. Live impl `0xE16c…E5A7` (2026-10-05). |
+| **ZkLighter impl** (live) | `0xE16c893252616dD49913969f145e733b96a3E5A7` | `ZkLighter` logic (24,421 B; slot re-read 2026-10-05). Retired: `0x831EF69BaB8AF8B1037a4961B8d0674b124E7008` (2026-06-09), `0x6e1433585b320880f488D0A7c1d2077D43B6Ca4E` (2026-09-29). |
+| **AdditionalZkLighter impl** | `0x22F05515497ce8D78f3898088C474403Ac9C668f` | second logic contract (24,523 B), delegatecall fallback. Value of 2026-06-09: an upgrade can replace it (`upgrade()` params), and it sits in internal storage, so it was not re-read after the 2026-10 upgrades. |
+| **ZkLighterVerifier** (proxy) | `0xac3Ce44B6ff4E402858C99D5699ff63131572BaA` | Main zk-SNARK verifier. Impl `0xc4c2…aE11` (2026-10-05). |
+| **ZkLighterVerifier impl** | `0xc4c2067ece6e33e50a30087ec14096715e56aE11` | 7,263 B (2026-10-05). Retired: `0xAa0b5b65890162C5C96D82F088822247EC5Df5D6` (2026-06-09), `0xd3E043d6E17Cb28d73BAa469Aa632411e1dE8046` (2026-09-29). |
 | **DesertVerifier** | `0x2aDBd91742B64105a097bC37D20Ebbca9a496085` | Forced-exit (desert-mode) verifier. **Non-proxy** (7,263 B). |
-| **Governance** (proxy) | `0xa464DA0B43f80EE3FfC4795cbbFC78472b5c81A1` | Validator registry + governor. Impl `0x46D3…1f08`. |
-| **Governance impl** | `0x46D3C0c01D5DAae4FE8e3f54f32901d9Fbde1f08` | |
+| **Governance** (proxy) | `0xa464DA0B43f80EE3FfC4795cbbFC78472b5c81A1` | Validator registry + governor. Impl `0xE935…6D43` (2026-10-05). |
+| **Governance impl** | `0xE935fa009Ae2F913A26B4411a901ECF6dBAb6D43` | 6,323 B (2026-10-05). Retired: `0x46D3C0c01D5DAae4FE8e3f54f32901d9Fbde1f08` (live 2026-06-09 to at least 2026-09-29). |
 
 ### 3.2 Governance, upgrade & treasury
 
@@ -280,16 +280,16 @@ Measured flow (pinned window 2026-09-28 00:00–12:00 UTC): `Deposit` 2,463, `Ne
 
 | Contract | Pattern | Detection | Upgrade auth |
 |----------|---------|-----------|--------------|
-| **ZkLighter** | **EIP-1967 transparent-style** (zkBNB/zkSync-Lite `Proxy`) | impl slot `0x3608…2bbc` = `0x831E…7008`; admin slot `0xb531…6103` = **UpgradeGatekeeper** `0x94da…6f67`; 1,367 B proxy. | UpgradeGatekeeper (21-day timelock); Security Council can cut to 0. |
-| **ZkLighterVerifier** | **EIP-1967** | impl slot = `0xAa0b…f5D6`; admin slot = UpgradeGatekeeper; 1,367 B. | UpgradeGatekeeper. |
-| **Governance** | **EIP-1967** | impl slot = `0x46D3…1f08`; admin slot = UpgradeGatekeeper; 1,367 B. | UpgradeGatekeeper. |
+| **ZkLighter** | **EIP-1967 transparent-style** (zkBNB/zkSync-Lite `Proxy`) | impl slot `0x3608…2bbc` = `0xE16c…E5A7` (2026-10-05); admin slot `0xb531…6103` = **UpgradeGatekeeper** `0x94da…6f67`; 1,367 B proxy. | UpgradeGatekeeper (21-day timelock); Security Council can cut to 0. |
+| **ZkLighterVerifier** | **EIP-1967** | impl slot = `0xc4c2…aE11`; admin slot = UpgradeGatekeeper; 1,367 B. | UpgradeGatekeeper. |
+| **Governance** | **EIP-1967** | impl slot = `0xE935…6D43`; admin slot = UpgradeGatekeeper; 1,367 B. | UpgradeGatekeeper. |
 | **DesertVerifier** | **Not a proxy** | impl/admin/beacon slots all `0x000…0`; 7,263 B full contract. | immutable (replaced only by a full ZkLighter upgrade pointing at a new verifier). |
 | **UpgradeGatekeeper** | **Not a proxy** | impl/admin/beacon slots `0x000…0`; 4,116 B. | n/a (`transferMastership`). |
 | **Lighter Multisig / Multisig 2** | **Gnosis Safe proxy** (EIP-1167-style Safe proxy) | 171 B; storage slot 0 = Safe singleton `0x41675C09…`; `VERSION()` = `1.4.1`. | Safe owners (4-of-7 / 3-of-5). |
 
 EIP-1967 slots used: impl `0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc`, admin `0xb53127684a568b3173ae13b9f8a6016e243e63b6e8ee1178d6a717850b5d6103`. The **beacon slot** `0xa3f0ad74…` is empty on every Lighter contract (no beacon proxies).
 
-**Live impls read from the slot on 2026-06-09:** ZkLighter → `0x831EF69BaB8AF8B1037a4961B8d0674b124E7008`; ZkLighterVerifier → `0xAa0b5b65890162C5C96D82F088822247EC5Df5D6`; Governance → `0x46D3C0c01D5DAae4FE8e3f54f32901d9Fbde1f08`. **Re-read on 2026-09-29:** ZkLighter → `0x6e1433585b320880f488d0a7c1d2077d43b6ca4e` (24,502 B); ZkLighterVerifier → `0xd3e043d6e17cb28d73baa469aa632411e1de8046` (7,263 B); Governance unchanged; `UpgradeGatekeeper.versionId()` = 72 (60 on 2026-06-09), `upgradeStatus()` = 0. **Robinhood Chain instance:** ZkLighter → `0x82DE5B1161C93afDFE21bA0D5343f01Cd7401d90`, ZkLighterVerifier → `0xCBF92533F5816c6Ee0e4250F4E138b3f49962EF2`, Governance → `0x3468Dcab5a2D81Af207B3e301DFA889321989a61`; admin slot of all three = its own UpgradeGatekeeper `0x43CfF77CD060A155dCe5deb12B93b875f69F2716`. The admin slot of all three holds the UpgradeGatekeeper, not a ProxyAdmin contract and not an EOA.
+**Live impls read from the slot on 2026-06-09:** ZkLighter → `0x831EF69BaB8AF8B1037a4961B8d0674b124E7008`; ZkLighterVerifier → `0xAa0b5b65890162C5C96D82F088822247EC5Df5D6`; Governance → `0x46D3C0c01D5DAae4FE8e3f54f32901d9Fbde1f08`. **Re-read on 2026-09-29:** ZkLighter → `0x6e1433585b320880f488d0a7c1d2077d43b6ca4e` (24,502 B); ZkLighterVerifier → `0xd3e043d6e17cb28d73baa469aa632411e1de8046` (7,263 B); Governance unchanged; `UpgradeGatekeeper.versionId()` = 72 (60 on 2026-06-09), `upgradeStatus()` = 0. **Re-read on 2026-10-05 (live):** ZkLighter → `0xE16c893252616dD49913969f145e733b96a3E5A7` (24,421 B); ZkLighterVerifier → `0xc4c2067ece6e33e50a30087ec14096715e56aE11` (7,263 B); Governance → `0xE935fa009Ae2F913A26B4411a901ECF6dBAb6D43` (6,323 B); `versionId()` = 74, `upgradeStatus()` = 0. Two gatekeeper cycles did it: `UpgradeComplete` in tx `0x1e9044695ebca965fdfcc1a837e73bc52bdbbc1b4b6a09dbc07196e03396378d` (block 26,093,171, 2026-09-30 22:05 UTC) and `0xa23c2cbf56da3c129a56b5691a289b621d81b0da8946983e0b33898501322723` (block 26,099,289, 2026-10-01 18:34 UTC), each about 25 minutes after its `NoticePeriodStart` — the notice period was cut, not the 21-day default. **Robinhood Chain instance:** ZkLighter → `0x82DE5B1161C93afDFE21bA0D5343f01Cd7401d90`, ZkLighterVerifier → `0xCBF92533F5816c6Ee0e4250F4E138b3f49962EF2`, Governance → `0x3468Dcab5a2D81Af207B3e301DFA889321989a61`; admin slot of all three = its own UpgradeGatekeeper `0x43CfF77CD060A155dCe5deb12B93b875f69F2716`. The admin slot of all three holds the UpgradeGatekeeper, not a ProxyAdmin contract and not an EOA.
 
 **There is NO `Upgraded(address)` topic0.** Track impl rotations via the gatekeeper's `UpgradeComplete` (`0x48bc8be4…`) / `NoticePeriodStart` (`0xabce7483…`) — not via `0xbc7cd75a…` (which does not appear in this protocol).
 
@@ -298,7 +298,7 @@ EIP-1967 slots used: impl `0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a
 ## 9. Detection invariants & gotchas
 
 1. **Lighter Core is on Ethereum L1 — nothing on Base/BNB/Avalanche/Arbitrum/Optimism/Polygon.** (Robinhood Chain runs a separate instance — gotcha 15.) If you scan Base/BNB/Avax/Arbitrum/Optimism/Polygon you will find `0x` for every address. "Lighter on Arbitrum" is stale marketing; the production rollup settles on L1.
-2. **Two implementation contracts, one proxy, identical events.** `ZkLighter` (`0x831E…7008`) and `AdditionalZkLighter` (`0x22F0…668f`) back the same proxy `0x3B4D…5ca7` (zkSync-Lite split-logic pattern). The **emitter is always the proxy**, never the impls — index events on `0x3B4D…5ca7` only.
+2. **Two implementation contracts, one proxy, identical events.** `ZkLighter` (`0xE16c…E5A7` since 2026-10-01) and `AdditionalZkLighter` (`0x22F0…668f`) back the same proxy `0x3B4D…5ca7` (zkSync-Lite split-logic pattern). The **emitter is always the proxy**, never the impls — index events on `0x3B4D…5ca7` only.
 3. **`Deposit` is Lighter's own 5-field event, not EIP-4626/Aave.** topic0 `0x493c3b82…` (`Deposit(uint48,address,uint16,uint8,uint128)`). Do not confuse with the generic `Deposit`/`Supply` topics; no collision here, but `toAddress` (field 2) is the **L1 owner** and `toAccountIndex` (field 1) is the **L2 account** — attribute to `toAddress`.
 4. **Withdrawals are two-phase.** `executeBatches` credits an L1 **claimable** balance → `WithdrawPending(owner, asset, amount)` (`0xef80235b…`, `owner` indexed); the user then calls `withdrawPendingBalance` to actually receive tokens. A `WithdrawPending` log is *not* a token transfer out yet.
 5. **`NewPriorityRequest` (`0xefdd379e…`) is the L1→L2 queue.** Each deposit / `changePubKey` / full-exit enqueues one. **`openPriorityRequestCount()` rising without matching `executeBatches` = censorship/liveness alert** and is the precondition for desert mode.
@@ -397,13 +397,13 @@ EIP1967_ADMIN_SLOT                = '\xb53127684a568b3173ae13b9f8a6016e243e63b6e
 
 -- ===== Addresses — Ethereum mainnet (chain ID 1) =====
 ETH_ZKLIGHTER_PROXY               = '\x3b4d794a66304f130a4db8f2551b0070dfcf5ca7'
-ETH_ZKLIGHTER_IMPL                = '\x831ef69bab8af8b1037a4961b8d0674b124e7008'
+ETH_ZKLIGHTER_IMPL                = '\xe16c893252616dd49913969f145e733b96a3e5a7'   -- live 2026-10-05
 ETH_ADDITIONAL_ZKLIGHTER_IMPL     = '\x22f05515497ce8d78f3898088c474403ac9c668f'
 ETH_ZKLIGHTER_VERIFIER_PROXY      = '\xac3ce44b6ff4e402858c99d5699ff63131572baa'
-ETH_ZKLIGHTER_VERIFIER_IMPL       = '\xaa0b5b65890162c5c96d82f088822247ec5df5d6'
+ETH_ZKLIGHTER_VERIFIER_IMPL       = '\xc4c2067ece6e33e50a30087ec14096715e56ae11'   -- live 2026-10-05
 ETH_DESERT_VERIFIER               = '\x2adbd91742b64105a097bc37d20ebbca9a496085'
 ETH_GOVERNANCE_PROXY              = '\xa464da0b43f80ee3ffc4795cbbfc78472b5c81a1'
-ETH_GOVERNANCE_IMPL               = '\x46d3c0c01d5daae4fe8e3f54f32901d9fbde1f08'
+ETH_GOVERNANCE_IMPL               = '\xe935fa009ae2f913a26b4411a901ecf6dbab6d43'   -- live 2026-10-05
 ETH_UPGRADE_GATEKEEPER            = '\x94da8a995d0d82ef0fe7e509c6d76c22603b6f67'
 ETH_MULTISIG_SECURITY_COUNCIL     = '\x92b12c9d85bf7bd2ef5d2f53f4cd4ce0be432045'   -- 4-of-7
 ETH_MULTISIG_GOVERNOR             = '\x97a90ec950b6bcd9b190b566525b2bb92a2c03a2'   -- 3-of-5
@@ -411,8 +411,7 @@ ETH_TREASURY                      = '\x3dd7c834eaa70c98e1c224808a3c62163b344dae'
 ETH_INSURANCE_FUND_OPERATOR       = '\x9cce444f8c60bd570986cd7d0ed7aec29f127310'
 ETH_SAFE_SINGLETON_141            = '\x41675c099f32341bf84bfc5382af534df5c7461a'
 ETH_USDC                          = '\xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48'   -- asset index 3
-ETH_ZKLIGHTER_IMPL_2026_09        = '\x6e1433585b320880f488d0a7c1d2077d43b6ca4e'   -- live impl re-read 2026-09-29
-ETH_ZKLIGHTER_VERIFIER_IMPL_2026_09 = '\xd3e043d6e17cb28d73baa469aa632411e1de8046'
+-- Retired impls (match historical traces only): ZkLighter 0x831ef69b... (2026-06), 0x6e143358... (2026-09-29); Verifier 0xaa0b5b65... (2026-06), 0xd3e043d6... (2026-09-29); Governance 0x46d3c0c0... (to 2026-09-29)
 -- ===== Robinhood Chain (4663) — separate Lighter instance (USDG-margined) =====
 RH_ZKLIGHTER_PROXY                = '\x94bab9693ba2f6358507effcbd372b0660afff9d'
 RH_ZKLIGHTER_IMPL                 = '\x82de5b1161c93afdfe21ba0d5343f01cd7401d90'
@@ -437,13 +436,13 @@ How every constant was verified (2026-06-09):
 
 - **Topic0 + selectors:** recomputed locally as `keccak256(canonical signature)` / `[0:4]` (pycryptodome) from the **Sourcify-verified ABIs** of `ZkLighter`, `AdditionalZkLighter`, `ZkLighterVerifier`, `DesertVerifier`, `Governance`, `UpgradeGatekeeper` (all solc 0.8.25+commit.b61c2a91, viaIR, optimizer runs 1000). Six event topic0s cross-checked against **live `eth_getLogs`** on the ZkLighter proxy `0x3B4D…5ca7` in blocks 25,276,511–25,279,511 (1,296 logs; `NewPriorityRequest`/`BatchVerification`/`Deposit`/`BatchCommit`/`BatchesExecuted`/`WithdrawPending` all matched the computed values exactly).
 - **Addresses:** existence-checked via `eth_getCode` on each of the seven chains' public RPCs — present on **Ethereum only**, `0x` on the other six. Proxy/impl wiring confirmed via `eth_call`: `UpgradeGatekeeper.zkLighterProxy()` = ZkLighter, `managedContracts(0..2)` = Governance / ZkLighterVerifier / ZkLighter, `getMaster()` = Multisig 2, `securityCouncilAddress()` = Multisig 1, `approvedUpgradeNoticePeriod()` = 1,814,400 s (21 d), `versionId()` = 60; `Governance.networkGovernor()` = Multisig 2, `usdc()` = Circle USDC; `ZkLighter.treasury()`/`insuranceFundOperator()`/`desertMode()` (false)/`stateRoot()`/counts read live; `tokenToAssetIndex(USDC)` = `USDC_ASSET_INDEX()` = 3.
-- **Proxy impls:** read live from the EIP-1967 implementation slot `0x3608…2bbc` (ZkLighter → `0x831E…7008`, ZkLighterVerifier → `0xAa0b…f5D6`, Governance → `0x46D3…1f08`); admin slot `0xb531…6103` holds the UpgradeGatekeeper on all three; beacon slot `0xa3f0…3d50` empty everywhere. `DesertVerifier` + `UpgradeGatekeeper` confirmed non-proxy (all three slots `0x000…0`). The two Safes' singleton read from storage slot 0 (`0x41675C09…`, Safe v1.4.1) with `VERSION()` = `1.4.1`, thresholds 4 and 3.
+- **Proxy impls:** read live from the EIP-1967 implementation slot `0x3608…2bbc` (2026-06-09: ZkLighter → `0x831E…7008`, ZkLighterVerifier → `0xAa0b…f5D6`, Governance → `0x46D3…1f08`; 2026-10-05: `0xE16c…E5A7`, `0xc4c2…aE11`, `0xE935…6D43`); admin slot `0xb531…6103` holds the UpgradeGatekeeper on all three; beacon slot `0xa3f0…3d50` empty everywhere. `DesertVerifier` + `UpgradeGatekeeper` confirmed non-proxy (all three slots `0x000…0`). The two Safes' singleton read from storage slot 0 (`0x41675C09…`, Safe v1.4.1) with `VERSION()` = `1.4.1`, thresholds 4 and 3.
 - **Architecture:** Lighter is a zkBNB/zkSync-Lite-lineage app-specific rollup; the dual `ZkLighter`/`AdditionalZkLighter` split-logic pattern was confirmed by both impls being ≈24.5 KB (near the EVM code-size limit) behind one proxy. zk circuits and the verifier-generation pipeline are in `elliottech/lighter-prover` (Plonky2).
 - **Re-checked 2026-09-29 (Robinhood Chain):** every Ethereum literal of §3 returns `0x` on Robinhood Chain (nonce 0). The Robinhood instance's addresses come from the Robinhood Chain docs ("Lighter Domains") and L2BEAT ("Lighter on Robinhood"); each one existence-checked with `eth_getCode`, proxy slots read, and the gatekeeper/governance/ZkLighter views of §6a read with `eth_call`. Pinned 12-hour window 2026-09-28 00:00–12:00 UTC: `Deposit` / `NewPriorityRequest` / `WithdrawPending` = Ethereum 337 / 363 / 169, Robinhood Chain 2,463 / 2,618 / 598; zero on the other six chains. All emitters on Robinhood Chain were the proxy of §6a.
 
 **Authoritative sources:**
 - Canonical repos: [`elliottech/lighter-contracts`](https://github.com/elliottech/lighter-contracts) · [`elliottech/lighter-prover`](https://github.com/elliottech/lighter-prover) (zk circuits → `ZkLighterVerifier`/`DesertVerifier`) · [`elliottech/lighter-python`](https://github.com/elliottech/lighter-python) / [`lighter-go`](https://github.com/elliottech/lighter-go) (SDKs)
 - Docs: [docs.lighter.xyz](https://docs.lighter.xyz/) · [security audits](https://docs.lighter.xyz/security/security-audits) · [whitepaper](https://assets.lighter.xyz/whitepaper.pdf)
-- Verified source: Sourcify `https://sourcify.dev/server/v2/contract/1/0x831EF69BaB8AF8B1037a4961B8d0674b124E7008`
+- Verified source: Sourcify `https://sourcify.dev/server/v2/contract/1/0x831EF69BaB8AF8B1037a4961B8d0674b124E7008` (the 2026-06-09 ZkLighter impl)
 - Risk/architecture registry: [L2BEAT — Lighter](https://l2beat.com/scaling/projects/lighter) · [L2BEAT — Lighter on Robinhood](https://l2beat.com/layer2s/projects/lighter-robinhood) · [Robinhood Chain docs — Lighter Domains](https://docs.robinhood.com/chain/lighter-domains/)
 - Explorer: [Etherscan — ZkLighter](https://etherscan.io/address/0x3b4d794a66304f130a4db8f2551b0070dfcf5ca7)

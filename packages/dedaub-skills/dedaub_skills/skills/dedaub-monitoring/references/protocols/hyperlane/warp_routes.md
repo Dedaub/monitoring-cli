@@ -346,6 +346,8 @@ The registry lists the full Hyperlane core on Robinhood Chain ([core.md](core.md
 
 Domain 2383 is not in the registry; its chain is unverified. Pinned window on Robinhood Chain: `SentTransferRemote` 1, `ReceivedTransferRemote` 0.
 
+**Arc (chain ID 5042):** the registry lists the core on Arc ([core.md](core.md) §10b) but no file in `deployments/warp_routes/` names Arc (registry commit `fe66faf5`, 2026-10-05).
+
 ---
 
 ## 11. Cross-chain summary (major registry routes; ✅ = route address with code, — = not in the route)

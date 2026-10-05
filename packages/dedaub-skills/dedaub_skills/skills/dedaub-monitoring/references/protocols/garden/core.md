@@ -1,7 +1,7 @@
-# Garden Finance — Topics, Selectors, Addresses (Ethereum + Base + Arbitrum + BNB + Robinhood; NOT Avalanche, Optimism, Polygon)
+# Garden Finance — Topics, Selectors, Addresses (Ethereum + Base + Arbitrum + BNB + Robinhood + Arc; NOT Avalanche, Optimism, Polygon)
 
-**Status:** verified on 2026-09-29 against live RPC on all eight target chains, the Garden API (`https://api.garden.finance/v2/chains` and `/v2/schemas`), the verified HTLC sources (Blockscout, Sourcify), `gardenfi/garden-sol` and `gardenfi/docs`. Topics and selectors recomputed as `keccak256(sig)`; every HTLC existence-checked with `eth_getCode` and identified with `token()` and `version()` by `eth_call`; sample receipts decoded.
-**Scope:** Garden's per-asset HTLC (hashed time-lock) contracts on Ethereum (1), Base (8453), Arbitrum One (42161), BNB Smart Chain (56) and Robinhood Chain (4663). Avalanche, OP Mainnet and Polygon have no Garden HTLC. The other leg of most swaps is Bitcoin (or Litecoin, Lightning, Solana, Starknet, Sui and others). Topics and selectors are chain-agnostic; addresses are network-specific.
+**Status:** verified on 2026-09-29 against live RPC on all eight target chains (Arc (5042) added and activity re-checked 2026-10-05), the Garden API (`https://api.garden.finance/v2/chains` and `/v2/schemas`), the verified HTLC sources (Blockscout, Sourcify), `gardenfi/garden-sol` and `gardenfi/docs`. Topics and selectors recomputed as `keccak256(sig)`; every HTLC existence-checked with `eth_getCode` and identified with `token()` and `version()` by `eth_call`; sample receipts decoded.
+**Scope:** Garden's per-asset HTLC (hashed time-lock) contracts on Ethereum (1), Base (8453), Arbitrum One (42161), BNB Smart Chain (56), Robinhood Chain (4663) and Arc (5042). Avalanche, OP Mainnet and Polygon have no Garden HTLC. The other leg of most swaps is Bitcoin (or Litecoin, Lightning, Solana, Starknet, Sui and others). Topics and selectors are chain-agnostic; addresses are network-specific.
 
 Garden swaps between Bitcoin and other chains with **atomic swaps**. Each EVM asset has its own small, immutable HTLC contract (one `token()` per contract). A swap locks funds on both chains under the same `sha256` secret hash: the user locks on the source chain, a solver (filler) locks on the destination chain, the user claims the solver's lock by revealing the secret, and the solver uses the revealed secret to claim the user's lock. If nobody claims before the timelock, the initiator refunds. There is no pool, no bridge mint and no relayer message.
 
@@ -11,7 +11,7 @@ Three facts a monitor must know before indexing:
 2. **`Redeemed` pays the redeemer, who is often the solver.** On an EVM → Bitcoin swap, the EVM `Redeemed` pays the solver; the user's BTC arrives on Bitcoin. On a Bitcoin → EVM swap, the EVM `Initiated` is the solver's lock and the EVM `Redeemed` pays the user.
 3. **Each token has its own HTLC, and the list changes.** Read the live list from `/v2/chains` (`assets[].htlc.address`). Old HTLCs stay deployed and can still hold or refund orders.
 
-**Incident.** On 26–27 July 2026 an attacker inserted fake records into an independent solver's off-chain database, and that solver released about 450,000 USD of USDT into HTLCs on Ethereum, Base, Arbitrum and BNB for swaps nobody had funded. Garden stated that the HTLC contracts worked as designed, and it took its app offline for an investigation. On 2026-09-29 the API lists no USDT HTLC except on Ethereum; the latest HTLC events on the explorers are dated 2026-09-19 (Ethereum WBTC, Base cbBTC) and 2026-09-20 (Arbitrum WBTC), and the pinned window had none.
+**Incident.** On 26–27 July 2026 an attacker inserted fake records into an independent solver's off-chain database, and that solver released about 450,000 USD of USDT into HTLCs on Ethereum, Base, Arbitrum and BNB for swaps nobody had funded. Garden stated that the HTLC contracts worked as designed, and it took its app offline for an investigation. On 2026-09-29 the API lists no USDT HTLC except on Ethereum; the latest HTLC events on the explorers are dated 2026-09-19 (Ethereum WBTC, Base cbBTC) and 2026-09-20 (Arbitrum WBTC), and the pinned window had none. On 2026-10-05 the API still marks every asset `is_active`, but there were no HTLC logs on Ethereum, Base, Arbitrum or Robinhood in the 7 days before, and none on Arc in the ~22 hours before.
 
 ---
 
@@ -25,7 +25,7 @@ Three facts a monitor must know before indexing:
 
 The v3 contract is an initialisable template: `initialise(address token)` sets the token once (`isInitialized`), and the EIP-712 domain is name "HTLC", version "3".
 
-**Garden chain names** (the API's `chain` field): `ethereum` (`evm:1`), `base` (`evm:8453`), `arbitrum` (`evm:42161`), `bnbchain` (`evm:56`), `robinhood` (`evm:4663`). Outside the eight targets the API also lists `arc` (`evm:5042`), `hypercore` (`evm:1337`), `hyperevm` (`evm:999`), `ink` (`evm:57073`), `tempo` (`evm:4217`), `bitcoin`, `lightning`, `litecoin`, `spark`, `solana` and `starknet`. Avalanche, OP Mainnet and Polygon are not listed.
+**Garden chain names** (the API's `chain` field): `ethereum` (`evm:1`), `base` (`evm:8453`), `arbitrum` (`evm:42161`), `bnbchain` (`evm:56`), `robinhood` (`evm:4663`), `arc` (`evm:5042`, §7a). Outside the targets the API also lists `hypercore` (`evm:1337`), `hyperevm` (`evm:999`), `ink` (`evm:57073`), `tempo` (`evm:4217`), `bitcoin`, `lightning`, `litecoin`, `spark`, `solana` and `starknet`. Avalanche, OP Mainnet and Polygon are not listed.
 
 ---
 
@@ -67,7 +67,7 @@ Emitter = an HTLC contract (§3–§7).
 | `0x9d6a890f` | `initialise(address _token)` | v3 one-time setter. |
 | `0x4882a380` | `instantRefundDigest(bytes32 orderID)` | View: EIP-712 digest the redeemer signs. |
 
-Timelocks are block counts relative to `initiatedAt` (API: Ethereum source 7,200 / destination 600; Base 43,200 / 3,600; Arbitrum 432,000 / 36,000; BNB 115,200 / 9,600; Robinhood 432,000 / 36,000).
+Timelocks are block counts relative to `initiatedAt` (API: Ethereum source 7,200 / destination 600; Base 43,200 / 3,600; Arbitrum 432,000 / 36,000; BNB 115,200 / 9,600; Robinhood 432,000 / 36,000; Arc 86,400 / 7,200).
 
 ---
 
@@ -77,7 +77,7 @@ Timelocks are block counts relative to `initiatedAt` (API: Ethereum source 7,200
 |------|---------|-------|-------|
 | **HTLC v3 WBTC** (API) | `0xD781a2abB3FCB9fC0D1Dd85697c237d06b75fe95` | WBTC `0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599` | 8,452 B; last events 2026-09-19. |
 | **HTLC v3 cbBTC** (API) | `0xe35d025d0f0d9492db4700FE8646f7F89150eC04` | cbBTC `0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf` | Same address on Base. |
-| **HTLC v3 USDC** (API) | `0x5fA58e4E89c85B8d678Ade970bD6afD4311aF17E` | USDC `0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48` | Same address on Base and BNB (other tokens there). |
+| **HTLC v3 USDC** (API) | `0x5fA58e4E89c85B8d678Ade970bD6afD4311aF17E` | USDC `0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48` | Same address on Base and BNB (other tokens there) and on Arc (USDC, §7a). |
 | **HTLC v3 USDT** (API) | `0xCF5E5e28848cFe779f7Fb711C57857Cb3b144A19` | USDT `0xdAC17F958D2ee523a2206206994597C13D831ec7` | Same address on Base and BNB (USDT, delisted there). |
 | HTLC iBTC (older family) | `0xDC74a45e86DEdf1fF7c6dac77e0c2F082f9E4F72` | iBTC `0x20157dbabb84e3bbfe68c349d0d44e48ae7b5ad2` | Not in the API; last events 2025-08-25. |
 | HTLC USDC (older family) | `0xd8a6e3fca403d79b6ad6216b60527f51cc967d39` | USDC | Not in the API; last events 2025-10-29. |
@@ -121,6 +121,12 @@ Not Garden on Arbitrum: `0xd8a6e3fca403d79b6ad6216b60527f51cc967d39` is a verifi
 
 The Robinhood explorer API was behind a challenge page, so these two were identified by RPC (`token()`, `version()`), not by verified source.
 
+## 7a. Addresses — Arc (chain ID 5042)
+
+| Role | Address | Token | Notes |
+|------|---------|-------|-------|
+| **HTLC v3 USDC** (API, schema `evm:htlc_erc20`) | `0x5fA58e4E89c85B8d678Ade970bD6afD4311aF17E` | USDC `0x3600000000000000000000000000000000000000` (Arc's native-gas USDC, ERC-20 interface, 6 decimals) | 8,452 B (same size as Ethereum v3); `token()` and `version()` = "3" by `eth_call` (2026-10-05). No logs in ~160,000 blocks (~22 h) to 2026-10-05. Same address as the Ethereum USDC HTLC. |
+
 ---
 
 ## 8. Cross-chain summary
@@ -132,6 +138,7 @@ The Robinhood explorer API was behind a challenge page, so these two were identi
 | Arbitrum One | 42161 | WBTC | USDC (v3); iBTC (older) | 0 / 0 / 0 |
 | BNB Smart Chain | 56 | BTCB | USDC, USDT (v3); USDC (0.8.28) | 0 / 0 / 0 |
 | Robinhood Chain | 4663 | cbBTC, USDG | — | 0 / 0 / 0 |
+| Arc | 5042 | USDC | — | not in the pinned window (no logs ~22 h to 2026-10-05) |
 | Avalanche C-Chain | 43114 | — (`0x` at every address of this file) | — | 0 / 0 / 0 (any emitter) |
 | OP Mainnet | 10 | — | — | 0 / 0 / 0 |
 | Polygon PoS | 137 | — | — | 0 / 0 / 0 |
@@ -158,9 +165,9 @@ There is no pause and no admin event. Operational control (quotes, solvers, the 
 4. **Decode `amount` per family.** v3 puts `amount` in topic3; the older families put it in `data`. The topic0 is the same.
 5. **`InitiatedWithDestinationData` duplicates `Initiated`.** Count locks on `Initiated` only.
 6. **`Refunded` collides.** LI.FI's escrow `0x00fc00edbe7c003b006f870068c548940000223e` emits the same topic0 on five of the eight chains. Filter on HTLC addresses.
-7. **Delisted HTLCs still matter.** Orders in an old HTLC can still be redeemed or refunded. Keep every address of §3–§7.
+7. **Delisted HTLCs still matter.** Orders in an old HTLC can still be redeemed or refunded. Keep every address of §3–§7a.
 8. **Large-transfer and drain triggers.** `Initiated.amount` per token (topic3 in v3) and the token balance of each HTLC. A burst of solver-side `Initiated` locks followed by `Redeemed` to unknown redeemers is the pattern of the July 2026 incident (solver funds released for unfunded swaps).
-9. **Quiet does not mean dead.** The window had 0 Garden events on all eight chains, but locks and claims occurred on 2026-09-19 and 2026-09-20.
+9. **Quiet does not mean dead.** The window had 0 Garden events on all eight chains, but locks and claims occurred on 2026-09-19 and 2026-09-20 (still the latest on 2026-10-05).
 
 ---
 
@@ -213,6 +220,8 @@ BNB_GARDEN_HTLC_USDC_OLD            = '\xd8a6e3fca403d79b6ad6216b60527f51cc967d3
 -- ===== Robinhood Chain (4663) =====
 RH_GARDEN_HTLC_CBBTC                = '\x147bf8d6fa3392d2376ef5f6738f3d2931bddb49'
 RH_GARDEN_HTLC_USDG                 = '\xd8bf1d34ae05b6f631de898ae9f8f91e08661b59'
+-- ===== Arc (5042) =====
+ARC_GARDEN_HTLC_USDC                = '\x5fa58e4e89c85b8d678ade970bd6afd4311af17e'
 -- Same Refunded topic, not Garden (exclude): LI.FI InputSettlerEscrowLIFI
 ETH_LIFI_INPUT_SETTLER_ESCROW       = '\x00fc00edbe7c003b006f870068c548940000223e'
 -- Avalanche (43114), OP Mainnet (10), Polygon (137): no Garden HTLC

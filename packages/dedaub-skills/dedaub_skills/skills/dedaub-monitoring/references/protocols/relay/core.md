@@ -1,13 +1,13 @@
-# Relay (relay.link) — Topics, Selectors, Addresses (Ethereum + Base + Arbitrum + Optimism + Polygon + BNB + Avalanche + Robinhood Chain)
+# Relay (relay.link) — Topics, Selectors, Addresses (Ethereum + Base + Arbitrum + Optimism + Polygon + BNB + Avalanche + Robinhood Chain + Arc)
 
-**Status:** verified on 2026-09-29 against live RPC on all eight chains, the official repositories `relayprotocol/relay-settlement` (depository source and `packages/networks`), `relayprotocol/relay-depository` (archived; its `addresses.prod.json` lists Robinhood Chain), `relayprotocol/relay-periphery` (router, approval proxy, receiver and their `deployments/*/addresses.json`), the Relay Chains API (`https://api.relay.link/chains`) and docs.relay.link. Every topic0 and selector was recomputed as `keccak256(signature)` and matched against live logs or deployed bytecode. Every address was existence-checked with `eth_getCode`.
-**Scope:** the EVM contracts of Relay: the RelayDepository escrow of the settlement protocol (production, staging and dev instances), the periphery that builds deposits and fills (RelayRouter and RelayApprovalProxy, generations v2, v2.1, v3.0 and v3.1), the RelayReceiver native forwarder, the public solver addresses, and the ids that link a deposit to its fill. All eight target chains have the production Depository and the v3.0 periphery at the same addresses. Robinhood Chain (4663) has no RelayReceiver. Topics and selectors are chain-agnostic; addresses are network-specific.
+**Status:** verified on 2026-09-29 against live RPC on all eight chains, the official repositories `relayprotocol/relay-settlement` (depository source and `packages/networks`), `relayprotocol/relay-depository` (archived; its `addresses.prod.json` lists Robinhood Chain), `relayprotocol/relay-periphery` (router, approval proxy, receiver and their `deployments/*/addresses.json`), the Relay Chains API (`https://api.relay.link/chains`) and docs.relay.link. Every topic0 and selector was recomputed as `keccak256(signature)` and matched against live logs or deployed bytecode. Every address was existence-checked with `eth_getCode`. Arc (5042) added on 2026-10-05 (`eth_getCode`, `owner()`/`allocator()` and `eth_getLogs` on `https://rpc.mainnet.arc.io`; the Chains API lists `arc`, id 5042).
+**Scope:** the EVM contracts of Relay: the RelayDepository escrow of the settlement protocol (production, staging and dev instances), the periphery that builds deposits and fills (RelayRouter and RelayApprovalProxy, generations v2, v2.1, v3.0 and v3.1), the RelayReceiver native forwarder, the public solver addresses, and the ids that link a deposit to its fill. All nine target chains (the eight above plus Arc, 5042) have the production Depository and the v3.0 periphery at the same addresses. Robinhood Chain (4663) and Arc (5042) have no RelayReceiver. Topics and selectors are chain-agnostic; addresses are network-specific.
 
 Relay is an intent bridge. The user deposits on the origin chain. A solver fills the request on the destination chain with its own funds. The Oracle then attests the deposit and the fill, and the Hub on Relay Chain (chain id 537713, outside the eight chains) credits the solver. Later the solver withdraws from the origin Depository with a CallRequest that the Allocator (MPC signer on Aurora) signs.
 
 Three facts to know before indexing:
 
-1. **One production Depository, `0x4cD00E387622C35bDDB9b4c962C136462338BC31`, on all eight chains.** It was deployed with CREATE2 through the factory `0x4e59b44847b379578588920ca78fbf26c0b4956c` (salt 1). It is not a proxy and it cannot be upgraded. Its runtime code is 8,628 bytes on every chain, but the code hash differs per chain, because the EIP-712 domain (chain id and address) is cached in immutables.
+1. **One production Depository, `0x4cD00E387622C35bDDB9b4c962C136462338BC31`, on all nine chains (incl. Arc).** It was deployed with CREATE2 through the factory `0x4e59b44847b379578588920ca78fbf26c0b4956c` (salt 1). It is not a proxy and it cannot be upgraded. Its runtime code is 8,628 bytes on every chain, but the code hash differs per chain, because the EIP-712 domain (chain id and address) is cached in immutables.
 2. **There is no payout event.** A fill is any action of the solver on the destination: a native transfer, an ERC-20 transfer, or a RelayRouter multicall. The deposit `id` (Relay calls it the `orderId`) is on chain only on the origin. The link from a deposit to its fill is off chain, in the Relay API.
 3. **`RelayCallExecuted` is the escrow release to the solver, not a payout to the user.** Its `id` is the EIP-712 struct hash of the CallRequest, not a deposit id. One withdrawal can release the funds of many deposits.
 
@@ -17,21 +17,21 @@ Three facts to know before indexing:
 
 | Contract | Address (same on every chain where present) | Chains | Role | Upgradeable? |
 |----------|---------------------------------------------|--------|------|--------------|
-| **RelayDepository** (production) | `0x4cD00E387622C35bDDB9b4c962C136462338BC31` | all 8 | Escrow. `depositNative` / `depositErc20` take user funds; `execute` releases funds with an allocator signature. | No. Plain contract with solady `Ownable`; the owner can only change the allocator and the ownership. |
-| RelayDepository (staging) | `0x9ddC6a541e8F8B50B0996786A3eC275AB4d3A76C` | all 8 | The `stag` depository of `relay-settlement/packages/networks`. Same 8,628-byte code, other owner (`0x71d8be89d9f2339f0fe9cba39496c6c9cbff9da6`) and allocator (`0x49103cbe01afa376ed2de1fc5e59c19e0bc53e71`). Emits the same events. | No |
+| **RelayDepository** (production) | `0x4cD00E387622C35bDDB9b4c962C136462338BC31` | all 9 (incl. Arc) | Escrow. `depositNative` / `depositErc20` take user funds; `execute` releases funds with an allocator signature. | No. Plain contract with solady `Ownable`; the owner can only change the allocator and the ownership. |
+| RelayDepository (staging) | `0x9ddC6a541e8F8B50B0996786A3eC275AB4d3A76C` | all 9 (incl. Arc) | The `stag` depository of `relay-settlement/packages/networks`. Same 8,628-byte code, other owner (`0x71d8be89d9f2339f0fe9cba39496c6c9cbff9da6`) and allocator (`0x49103cbe01afa376ed2de1fc5e59c19e0bc53e71`). Emits the same events. | No |
 | RelayDepository (dev) | `0x5CB1De3603A71Ac2f67b12bFbF095013FE4Ac299` | see §11 | The `dev` depository of the same config (Ethereum, Base, Arbitrum, Optimism, Polygon only). | No |
-| **RelayRouter v3.0** | `0xb92fe925dc43a0ecde6c8b1a2709c170ec4fff4f` | all 8 | Stateless multicall router. The Chains API names it `erc20Router`. Emits `FundsMovement`, `SolverCallExecuted`, `SolverNativeTransfer`. | No |
-| **RelayApprovalProxy v3.0** | `0xccc88a9d1b4ed6b0eaba998850414b24f1c315be` | all 8 | Pulls the user's tokens (approval, ERC-2612, Permit2 or ERC-3009) into the router, then calls `multicall`. The Chains API names it `approvalProxy`. | No. `owner()` can `withdraw` stranded tokens. |
-| RelayRouter v3.1 | `0xe6b730e58088884704cdf11cbe95c224d4d34154` | all 8 | Newest router in `relay-periphery` (`VERSION()` = "3.1", recorded 2026-08-28). Not yet in the Chains API. | No |
-| RelayApprovalProxy v3.1 | `0x5a0fa369d634f49c76b08dc6c299800c1a2af977` | all 8 | Newest approval proxy. Adds EIP-712 multicall authorization; code hash differs per chain. | No |
+| **RelayRouter v3.0** | `0xb92fe925dc43a0ecde6c8b1a2709c170ec4fff4f` | all 9 (incl. Arc) | Stateless multicall router. The Chains API names it `erc20Router`. Emits `FundsMovement`, `SolverCallExecuted`, `SolverNativeTransfer`. | No |
+| **RelayApprovalProxy v3.0** | `0xccc88a9d1b4ed6b0eaba998850414b24f1c315be` | all 9 (incl. Arc) | Pulls the user's tokens (approval, ERC-2612, Permit2 or ERC-3009) into the router, then calls `multicall`. The Chains API names it `approvalProxy`. | No. `owner()` can `withdraw` stranded tokens. |
+| RelayRouter v3.1 | `0xe6b730e58088884704cdf11cbe95c224d4d34154` | all 9 (incl. Arc) | Newest router in `relay-periphery` (`VERSION()` = "3.1", recorded 2026-08-28). Not yet in the Chains API. | No |
+| RelayApprovalProxy v3.1 | `0x5a0fa369d634f49c76b08dc6c299800c1a2af977` | all 9 (incl. Arc) | Newest approval proxy. Adds EIP-712 multicall authorization; code hash differs per chain. | No |
 | RelayRouter v2.1 / RelayApprovalProxy v2.1 | `0x3ec130b627944cad9b2750300ecb0a695da522b6` / `0x58cc3e0aa6cd7bf795832a225179ec2d848ce3e7` | see §11 | Legacy generation (2025-10). The router emits `SolverCallExecuted` and `SolverNativeTransfer` only. | No |
 | RelayRouter v2 / ApprovalProxy v2 | `0xf5042e6ffac5a625d4e7848e0b01373d8eb9e222` / `0xbbbfd134e9b44bfb5123898ba36b01de7ab93d98` | see §11 | Legacy generation (2025-06). | No |
-| v1 periphery (historical) | ERC20Router `0xE0B062D028236FA09Fe33dB8019FFEEEe6bF79Ed`, ApprovalProxy `0xfD06C0018318BF78705ccFf2b961Ef8eBC0bacA0`, RelayReceiver v1 `0xa06e1351E2fD2D45b5D35633ca7eCF328684a109` | 7 (not Robinhood) | The expected addresses in the old `relay-periphery` deployer script (`script/BaseDeployer.s.sol` at commit `1957475c95`). Kept for older incidents; their events are not covered here. | No |
-| **RelayReceiver** | `0xa5f565650890fba1824ee0f21ebbbf660a179934` | 7 (not Robinhood) | Native-currency forwarder. It sends `msg.value` at once to the immutable `SOLVER` (`0xf70da97812cb96acdf810712aa562db8dfa3dbef`, read from the bytecode) and emits the calldata. It is an origin-side deposit path to the solver, with no escrow. | No |
-| Multicaller / OnlyOwnerMulticaller | `0x0000000000002bdbf1bf3279983603ec279cc6df` / `0xb90ed4c123843cbfd66b11411ee7694ef37e6e72` | see §11 | Helper contracts that the Chains API lists (empty for Robinhood Chain). No Relay event; not covered further. | No |
-| **Solver** (EOA) | `0xf70da97812cb96acdf810712aa562db8dfa3dbef` | all 8 | The only address in the Chains API `solverAddresses` of every target chain. It fills, withdraws (`execute`) and receives RelayReceiver forwards. | — |
+| v1 periphery (historical) | ERC20Router `0xE0B062D028236FA09Fe33dB8019FFEEEe6bF79Ed`, ApprovalProxy `0xfD06C0018318BF78705ccFf2b961Ef8eBC0bacA0`, RelayReceiver v1 `0xa06e1351E2fD2D45b5D35633ca7eCF328684a109` | 7 (not Robinhood, not Arc) | The expected addresses in the old `relay-periphery` deployer script (`script/BaseDeployer.s.sol` at commit `1957475c95`). Kept for older incidents; their events are not covered here. | No |
+| **RelayReceiver** | `0xa5f565650890fba1824ee0f21ebbbf660a179934` | 7 (not Robinhood, not Arc) | Native-currency forwarder. It sends `msg.value` at once to the immutable `SOLVER` (`0xf70da97812cb96acdf810712aa562db8dfa3dbef`, read from the bytecode) and emits the calldata. It is an origin-side deposit path to the solver, with no escrow. | No |
+| Multicaller / OnlyOwnerMulticaller | `0x0000000000002bdbf1bf3279983603ec279cc6df` / `0xb90ed4c123843cbfd66b11411ee7694ef37e6e72` | see §11 | Helper contracts that the Chains API lists (empty for Robinhood Chain and Arc). No Relay event; not covered further. | No |
+| **Solver** (EOA) | `0xf70da97812cb96acdf810712aa562db8dfa3dbef` | all 9 (incl. Arc) | The only address in the Chains API `solverAddresses` of every target chain. It fills, withdraws (`execute`) and receives RelayReceiver forwards. | — |
 
-**Settlement contracts outside the eight chains** (from docs.relay.link and `relay-settlement/packages/networks`; not checked on chain here): Hub `0xDDD361727C22A01EB137880678A20b0BEaE69318` and Oracle `0xd4b9fdB83C723c096d7fBE72da252aa23f1387aa` on Relay Chain (537713); Allocator `0x7EdA04920F22ba6A2b9f2573fd9a6F6F1946Ff9f` and Security Council multisig `0xb538ee6515F9d16eBD0BACD0503733815c9b070c` on Aurora.
+**Settlement contracts outside the target chains** (from docs.relay.link and `relay-settlement/packages/networks`; not checked on chain here): Hub `0xDDD361727C22A01EB137880678A20b0BEaE69318` and Oracle `0xd4b9fdB83C723c096d7fBE72da252aa23f1387aa` on Relay Chain (537713); Allocator `0x7EdA04920F22ba6A2b9f2573fd9a6F6F1946Ff9f` and Security Council multisig `0xb538ee6515F9d16eBD0BACD0503733815c9b070c` on Aurora.
 
 **RelayGatewayDepository** (Circle Gateway-backed, in `relay-settlement`): the source exists, but no deployment address is in the Chains API, the network config or the deployment files. No deployment was found. §1.2 lists its extra events.
 
@@ -318,11 +318,31 @@ All verified with `eth_getCode` on 2026-09-29. Relay uses the EVM chain id (4663
 
 Pinned window 2026-09-28 00:00–12:00 UTC: `RelayErc20Deposit` 44,012, `RelayNativeDeposit` 12,476, `RelayCallExecuted` 1,427 (all at the production Depository); `FundsMovement` 230,287 (router v3.0 123,452; ApprovalProxy v3.0 106,834); `FundsForwardedWithData` 0; 0 at the staging depository.
 
+## 10a. Addresses — Arc (chain ID 5042)
+
+All verified with `eth_getCode` on `https://rpc.mainnet.arc.io` on 2026-10-05. The Chains API lists the chain as `arc` (id 5042, `depositEnabled: true`); its gas currency is native USDC (18 decimals in the API), so `RelayNativeDeposit.amount` on Arc is USDC, not ETH. The addresses are the same literal addresses as on Ethereum.
+
+| Role | Address | Code / note |
+|------|---------|-------------|
+| **RelayDepository** (production) | `0x4cD00E387622C35bDDB9b4c962C136462338BC31` | 8,628 B; EIP-1967 slot empty. `owner()` = `0xf61a305199fa1135d76ffab3752d42f55cbd775a`, `allocator()` = `0x63c1d3e9c646184529c5694630a01c00df171b56` (same as on Ethereum). |
+| RelayDepository (staging) | `0x9ddC6a541e8F8B50B0996786A3eC275AB4d3A76C` | 8,628 B. |
+| **RelayRouter v3.0** | `0xb92fe925dc43a0ecde6c8b1a2709c170ec4fff4f` | 4,720 B. Chains API `erc20Router`. |
+| **RelayApprovalProxy v3.0** | `0xccc88a9d1b4ed6b0eaba998850414b24f1c315be` | 7,746 B. Chains API `approvalProxy`; `owner()` = `0x463cb782c8dd0a1887b77336dff74d60f006f56e`. |
+| RelayRouter v3.1 | `0xe6b730e58088884704cdf11cbe95c224d4d34154` | 5,373 B. |
+| RelayApprovalProxy v3.1 | `0x5a0fa369d634f49c76b08dc6c299800c1a2af977` | 10,923 B. |
+| RelayRouter v2 | `0xf5042e6ffac5a625d4e7848e0b01373d8eb9e222` | 8,925 B. |
+| RelayApprovalProxy v2 | `0xbbbfd134e9b44bfb5123898ba36b01de7ab93d98` | 11,652 B. |
+| **Solver** (EOA) | `0xf70da97812cb96acdf810712aa562db8dfa3dbef` | No code; nonce 179,099. |
+
+**Not deployed here** (`eth_getCode` = `0x`): RelayReceiver `0xa5f565650890fba1824ee0f21ebbbf660a179934` (Chains API `relayReceiver` empty), the v2.1 pair (`0x3ec130b627944cad9b2750300ecb0a695da522b6`, `0x58cc3e0aa6cd7bf795832a225179ec2d848ce3e7`), Multicaller and OnlyOwnerMulticaller, the v1 periphery, and the dev depository `0x5CB1De3603A71Ac2f67b12bFbF095013FE4Ac299`.
+
+Window: Arc blocks 24,366,836–24,375,835 (about 76 minutes on 2026-10-05, `eth_getLogs` per emitter): `RelayErc20Deposit` 109, `RelayNativeDeposit` 32, `RelayCallExecuted` 18 (production Depository); router v3.0 `SolverCallExecuted` 334, `FundsMovement` 129, `SolverNativeTransfer` 10; ApprovalProxy v3.0 `FundsMovement` 73; 0 at the staging depository, the v3.1 pair and the v2 pair.
+
 ---
 
 ## 11. Cross-chain summary
 
-✅ = code at the address (checked with `eth_getCode` on 2026-09-29); ❌ = `eth_getCode` returns `0x`. Every contract has the **same literal address** on each chain where it exists (CREATE2 through `0x4e59b44847b379578588920ca78fbf26c0b4956c`), so always key on `(chain id, address)`.
+✅ = code at the address (checked with `eth_getCode` on 2026-09-29; Arc on 2026-10-05); ❌ = `eth_getCode` returns `0x`. Every contract has the **same literal address** on each chain where it exists (CREATE2 through `0x4e59b44847b379578588920ca78fbf26c0b4956c`), so always key on `(chain id, address)`.
 
 | Chain | ID | Depository (prod) `0x4cD00E387622C35bDDB9b4c962C136462338BC31` | Depository (staging) `0x9ddC6a541e8F8B50B0996786A3eC275AB4d3A76C` | Depository (dev) `0x5CB1De3603A71Ac2f67b12bFbF095013FE4Ac299` | Router + ApprovalProxy v3.0 | v3.1 pair | v2 / v2.1 pairs | RelayReceiver `0xa5f565650890fba1824ee0f21ebbbf660a179934` | Solver `0xf70da97812cb96acdf810712aa562db8dfa3dbef` |
 |-------|----|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|
@@ -334,31 +354,32 @@ Pinned window 2026-09-28 00:00–12:00 UTC: `RelayErc20Deposit` 44,012, `RelayNa
 | BNB Smart Chain | 56 | ✅ | ✅ | ❌ | ✅ | ✅ | ✅ | ✅ | EOA |
 | Avalanche C-Chain | 43114 | ✅ | ✅ | ❌ | ✅ | ✅ | ✅ | ✅ | EOA |
 | **Robinhood Chain** | 4663 | ✅ | ✅ | ❌ | ✅ | ✅ | ❌ | ❌ | EOA |
+| **Arc** | 5042 | ✅ | ✅ | ❌ | ✅ | ✅ | v2 ✅ / v2.1 ❌ | ❌ | EOA |
 
-**Chains outside the eight.** The Chains API lists 60 chains (EVM and others). Relay uses EVM chain ids for EVM chains and its own ids for the others, for example Solana `792703809` (seen as `destinationChainId` in the status API) and Bitcoin `8253038` (in the Chains API list). Some EVM chains use another Depository address (for example `0x59916da825d2d2ec1bf878d71c88826f6633ecca` on Cronos, Metis, Linea, Mantle and Taiko per the docs address table); none of those is one of the eight chains.
+**Chains outside the target set.** The Chains API lists 60 chains (EVM and others). Relay uses EVM chain ids for EVM chains and its own ids for the others, for example Solana `792703809` (seen as `destinationChainId` in the status API) and Bitcoin `8253038` (in the Chains API list). Some EVM chains use another Depository address (for example `0x59916da825d2d2ec1bf878d71c88826f6633ecca` on Cronos, Metis, Linea, Mantle and Taiko per the docs address table); none of those is one of the nine target chains.
 
 ### 11.1 Solver addresses published by the Chains API
 
-The Chains API field `solverAddresses` (2026-09-29) lists 42 distinct addresses over the eight chains. Transactions from these addresses are fills, refunds or withdrawals. All 42 are EOAs (no code) on every chain where the API lists them (`eth_getCode`, 2026-09-29). Only `0xf70da97812cb96acdf810712aa562db8dfa3dbef` is listed on all eight chains.
+The Chains API field `solverAddresses` (2026-09-29) lists 42 distinct addresses over the eight chains. Transactions from these addresses are fills, refunds or withdrawals. All 42 are EOAs (no code) on every chain where the API lists them (`eth_getCode`, 2026-09-29). Only `0xf70da97812cb96acdf810712aa562db8dfa3dbef` is listed on all eight chains. On 2026-10-05 the API lists 16 of these addresses for Arc (5042); all 16 have no code on Arc (marked `Arc` below).
 
 | Address | Listed on | `eth_getCode` on the listed chains |
 |---------|-----------|-------------------------------------|
-| `0xf70da97812cb96acdf810712aa562db8dfa3dbef` | ETH, Base, Arb, OP, Poly, BNB, Avax, Robin | EOA on every listed chain |
-| `0x18dd3c14e34c1bc379f7538068c59160d9f68e25` | ETH, Base, Poly, BNB, Robin | EOA on every listed chain |
-| `0x331d9a049d496385998067abf6cbb6371c8d2466` | ETH, Base, Poly, BNB, Robin | EOA on every listed chain |
-| `0x370a7e2d300c14d79d4a7ee07aaca46c4b3012cf` | ETH, Base, Poly, BNB, Robin | EOA on every listed chain |
-| `0x56c262027e0de4aea31d2489529cb25d23e58a8b` | ETH, Base, Poly, BNB, Robin | EOA on every listed chain |
-| `0xa5a5491bca93dd4c076e4906e79e7673f4a5a142` | ETH, Base, Poly, BNB, Robin | EOA on every listed chain |
-| `0xa67d7eb4dc68fa6ce8e34ef8cadaf075b9893fbb` | ETH, Base, Poly, BNB, Robin | EOA on every listed chain |
-| `0xabb2acd3be814a80e502575d6c1dc5f789e9cd10` | ETH, Base, Poly, BNB, Robin | EOA on every listed chain |
-| `0xada5bb90d0de0bd1b6f3938708f49295a8d1f7cb` | ETH, Base, Poly, BNB, Robin | EOA on every listed chain |
-| `0xca7ded7e4f4ba8ab3b10009236ae6d1b95094589` | ETH, Base, Poly, BNB, Robin | EOA on every listed chain |
-| `0x2bb27b73c602643f42471d4751fe4fc4eebefbd1` | Base, Poly, BNB, Robin | EOA on every listed chain |
-| `0x0ec4e45f9ce3020024c0418a74cd31fbc487038f` | Base, BNB, Robin | EOA on every listed chain |
-| `0xcc4bc7882d5ec4a3716e589ab3d816b61ae47a1a` | Base, BNB, Robin | EOA on every listed chain |
+| `0xf70da97812cb96acdf810712aa562db8dfa3dbef` | ETH, Base, Arb, OP, Poly, BNB, Avax, Robin, Arc  | EOA on every listed chain |
+| `0x18dd3c14e34c1bc379f7538068c59160d9f68e25` | ETH, Base, Poly, BNB, Robin, Arc  | EOA on every listed chain |
+| `0x331d9a049d496385998067abf6cbb6371c8d2466` | ETH, Base, Poly, BNB, Robin, Arc  | EOA on every listed chain |
+| `0x370a7e2d300c14d79d4a7ee07aaca46c4b3012cf` | ETH, Base, Poly, BNB, Robin, Arc  | EOA on every listed chain |
+| `0x56c262027e0de4aea31d2489529cb25d23e58a8b` | ETH, Base, Poly, BNB, Robin, Arc  | EOA on every listed chain |
+| `0xa5a5491bca93dd4c076e4906e79e7673f4a5a142` | ETH, Base, Poly, BNB, Robin, Arc  | EOA on every listed chain |
+| `0xa67d7eb4dc68fa6ce8e34ef8cadaf075b9893fbb` | ETH, Base, Poly, BNB, Robin, Arc  | EOA on every listed chain |
+| `0xabb2acd3be814a80e502575d6c1dc5f789e9cd10` | ETH, Base, Poly, BNB, Robin, Arc  | EOA on every listed chain |
+| `0xada5bb90d0de0bd1b6f3938708f49295a8d1f7cb` | ETH, Base, Poly, BNB, Robin, Arc  | EOA on every listed chain |
+| `0xca7ded7e4f4ba8ab3b10009236ae6d1b95094589` | ETH, Base, Poly, BNB, Robin, Arc  | EOA on every listed chain |
+| `0x2bb27b73c602643f42471d4751fe4fc4eebefbd1` | Base, Poly, BNB, Robin, Arc  | EOA on every listed chain |
+| `0x0ec4e45f9ce3020024c0418a74cd31fbc487038f` | Base, BNB, Robin, Arc  | EOA on every listed chain |
+| `0xcc4bc7882d5ec4a3716e589ab3d816b61ae47a1a` | Base, BNB, Robin, Arc  | EOA on every listed chain |
 | `0x059df16bdcf8a6bd20bb4814518ff6a2df3c7b11` | Base, Robin | EOA on every listed chain |
 | `0x1cd9d560440aab96f7b0a007ced7c2191cac5baf` | Base, Robin | EOA on every listed chain |
-| `0x344daadde53a81f95bcc46a99d39107a509251a1` | Base, Robin | EOA on every listed chain |
+| `0x344daadde53a81f95bcc46a99d39107a509251a1` | Base, Robin, Arc  | EOA on every listed chain |
 | `0x4381045063b19a615a272733fa6b5f169b622646` | Base, Robin | EOA on every listed chain |
 | `0x511808449be470efaf4131838b2d4998500a6f72` | Base, Robin | EOA on every listed chain |
 | `0x6085932878d587332419ac976fc13d98eba6fdab` | Base, Robin | EOA on every listed chain |
@@ -367,12 +388,12 @@ The Chains API field `solverAddresses` (2026-09-29) lists 42 distinct addresses 
 | `0x698dd6c03b50c3d4af12932a0388338bcdd3aaed` | Base, Robin | EOA on every listed chain |
 | `0x728f51950ff096dc03a48f5e83f45ac8bb75f500` | Base, Robin | EOA on every listed chain |
 | `0x81adf99fcc6073157008e25010967d307875c13c` | Base, Robin | EOA on every listed chain |
-| `0x919968a4238a54b381f022a360260ef5d7e015ac` | Base, Robin | EOA on every listed chain |
+| `0x919968a4238a54b381f022a360260ef5d7e015ac` | Base, Robin, Arc  | EOA on every listed chain |
 | `0x9bc462bce2acd6fbe2ef5470d55b439453451083` | Base, Robin | EOA on every listed chain |
 | `0xd460b4182ed80992d498290bcbc6b60e95de181b` | Base, Robin | EOA on every listed chain |
 | `0xd782268f600403843484b70710daee6846fc0db8` | Base, Robin | EOA on every listed chain |
 | `0xd9497b53abcd6972b6370cb195b6bfd6b280e607` | Base, Robin | EOA on every listed chain |
-| `0xe209e0047731aa494289e1af9a0d03da19c5ef08` | Base, Robin | EOA on every listed chain |
+| `0xe209e0047731aa494289e1af9a0d03da19c5ef08` | Base, Robin, Arc  | EOA on every listed chain |
 | `0xf42b73d2e4d3912eade2a5f7ab39b54064c2acec` | Base, Robin | EOA on every listed chain |
 | `0x035239dd57a4716e14e4a00f84b8fa7ee03e152e` | Base | EOA on every listed chain |
 | `0x53939cb0b8b5d8ebc8f8208273a04a12f21c7346` | Base | EOA on every listed chain |
@@ -392,7 +413,7 @@ The Chains API field `solverAddresses` (2026-09-29) lists 42 distinct addresses 
 
 | Contract | Pattern | Detection | Upgrade / admin authority |
 |----------|---------|-----------|---------------------------|
-| **RelayDepository** (prod, staging, dev) | **Not a proxy; immutable logic.** | EIP-1967 implementation and beacon slots empty on all eight chains; full 8,628-byte runtime; docs: "Each contract is non-upgradable". | `owner()` (`0xf61a305199fa1135d76ffab3752d42f55cbd775a` on all eight chains, an EOA) can only `setAllocator`, transfer or renounce ownership. The docs describe the owner as the Security Council multisig, but on these chains the address has no code. |
+| **RelayDepository** (prod, staging, dev) | **Not a proxy; immutable logic.** | EIP-1967 implementation and beacon slots empty on all eight chains and on Arc; full 8,628-byte runtime; docs: "Each contract is non-upgradable". | `owner()` (`0xf61a305199fa1135d76ffab3752d42f55cbd775a` on all nine chains, an EOA) can only `setAllocator`, transfer or renounce ownership. The docs describe the owner as the Security Council multisig, but on these chains the address has no code. |
 | RelayRouter (all generations) | Not a proxy; no owner. | Implementation slot empty. | None. `cleanup*` functions are permissionless by design (the router holds no balance at rest). |
 | RelayApprovalProxy (all generations) | Not a proxy; solady `Ownable`. | Implementation slot empty. `ROUTER` and `PERMIT2` are immutables (v3.x). | `owner()` = `0x463cb782c8dd0a1887b77336dff74d60f006f56e` (EOA, the canonical owner named in `relay-periphery`) for v3.0; the owner can only `withdraw` stranded balances. |
 | RelayReceiver | Not a proxy. | Implementation slot empty; `SOLVER` immutable in the bytecode. | None (only `SOLVER` may call `makeCalls`). |
@@ -410,9 +431,9 @@ There is no `Upgraded(address)` event to watch. The privileged changes are `setA
 5. **No Relay event parameter is indexed.** Filter on topic0 + emitter and decode the data. Topic0 alone is not enough: `SolverNativeTransfer(address,uint256)` also had 18 logs from an unrelated contract (`0xbe139dd142823119dff7222f3da22eb923aeb875`) on Base in the pinned window.
 6. **`from` in the deposit events is the credited depositor, not the payer.** Routers call `depositErc20(depositor, token, id)` with the user as `depositor`; the token `Transfer` into the Depository then comes from the router. With `depositor` = zero, `from` = `msg.sender`. Native deposits have no ERC-20 row: the amount is `msg.value` (equal to the event `amount`).
 7. **Three depositories emit the same events.** Production `0x4cD00E387622C35bDDB9b4c962C136462338BC31`, staging `0x9ddC6a541e8F8B50B0996786A3eC275AB4d3A76C` (1 deposit on Ethereum and 3 on Base in the pinned window) and dev `0x5CB1De3603A71Ac2f67b12bFbF095013FE4Ac299`. The staging and dev instances have their own owner and allocator. Key on the production address unless you want test traffic.
-8. **`setAllocator` emits nothing.** A change of the allocator (the only key that can release escrowed funds) is visible only as a transaction with selector `0xbf83f2a2` to the Depository, or by polling `allocator()` (`0x63c1d3e9c646184529c5694630a01c00df171b56` on all eight chains on 2026-09-29).
+8. **`setAllocator` emits nothing.** A change of the allocator (the only key that can release escrowed funds) is visible only as a transaction with selector `0xbf83f2a2` to the Depository, or by polling `allocator()` (`0x63c1d3e9c646184529c5694630a01c00df171b56` on all eight chains on 2026-09-29 and on Arc on 2026-10-05).
 9. **Robinhood Chain is the busiest chain in the pinned window** (44,012 ERC-20 and 12,476 native deposits; 230,287 `FundsMovement`). The Robinhood Chain and Arbitrum deposit samples read here came through ERC-4337 bundles (`handleOps` on `0x4337084d9e255ff0702461cf8895ce9e3b5ff108` and on `0x0000000071727de22e5e9d8baf0edac6f37da032`), so `tx.from` was a bundler, not the user.
-10. **The RelayReceiver is a deposit path, not a payout path.** `forward` / `fallback` send the native value straight to the solver and log the calldata (the request id). It is not an escrow and has no Robinhood Chain deployment. `FundsForwardedWithData` had 0 logs in the pinned window.
+10. **The RelayReceiver is a deposit path, not a payout path.** `forward` / `fallback` send the native value straight to the solver and log the calldata (the request id). It is not an escrow and has no Robinhood Chain or Arc deployment. `FundsForwardedWithData` had 0 logs in the pinned window.
 11. **Two periphery generations are live at the same time.** The Chains API returns v3.0 (`0xb92fe925dc43a0ecde6c8b1a2709c170ec4fff4f`, `0xccc88a9d1b4ed6b0eaba998850414b24f1c315be`); `relay-periphery` already records v3.1 (`0xe6b730e58088884704cdf11cbe95c224d4d34154`, `0x5a0fa369d634f49c76b08dc6c299800c1a2af977`), which had 0 `FundsMovement` logs on all eight chains in the pinned window. The v3.0 and v3.1 ApprovalProxy selectors differ for `permitTransferAndMulticall`, `permit3009TransferAndMulticall` and `withdraw` (§2.3).
 12. **The Depository code hash differs per chain** (same 8,628-byte size) because the EIP-712 domain is cached in immutables. A code-hash match across chains fails; match on the address, the size and the selectors instead. The v3.1 ApprovalProxy has the same property; the routers, the v3.0 ApprovalProxy and the RelayReceiver have one hash on every chain.
 13. **Admin actions to alert on:** `OwnershipTransferred` / `OwnershipHandoverRequested` on the Depository or the ApprovalProxy; a transaction to the Depository with selector `0xbf83f2a2` (`setAllocator`); `withdraw` on an ApprovalProxy; a `RelayCallExecuted` whose `call.to` is not a token or a known solver (a release to an unexpected address).
@@ -587,6 +608,18 @@ RH_RELAY_APPROVAL_PROXY_V31     = '\x5a0fa369d634f49c76b08dc6c299800c1a2af977'
 RH_RELAY_SOLVER_EOA             = '\xf70da97812cb96acdf810712aa562db8dfa3dbef'
 RH_RELAY_DEPOSITORY_OWNER_EOA   = '\xf61a305199fa1135d76ffab3752d42f55cbd775a'
 RH_RELAY_ALLOCATOR_EOA          = '\x63c1d3e9c646184529c5694630a01c00df171b56'
+-- Arc (5042)
+ARC_RELAY_DEPOSITORY            = '\x4cd00e387622c35bddb9b4c962c136462338bc31'
+ARC_RELAY_DEPOSITORY_STAGING    = '\x9ddc6a541e8f8b50b0996786a3ec275ab4d3a76c'
+ARC_RELAY_ROUTER_V30            = '\xb92fe925dc43a0ecde6c8b1a2709c170ec4fff4f'
+ARC_RELAY_APPROVAL_PROXY_V30    = '\xccc88a9d1b4ed6b0eaba998850414b24f1c315be'
+ARC_RELAY_ROUTER_V31            = '\xe6b730e58088884704cdf11cbe95c224d4d34154'
+ARC_RELAY_APPROVAL_PROXY_V31    = '\x5a0fa369d634f49c76b08dc6c299800c1a2af977'
+ARC_RELAY_ROUTER_V2             = '\xf5042e6ffac5a625d4e7848e0b01373d8eb9e222'
+ARC_RELAY_APPROVAL_PROXY_V2     = '\xbbbfd134e9b44bfb5123898ba36b01de7ab93d98'
+ARC_RELAY_SOLVER_EOA            = '\xf70da97812cb96acdf810712aa562db8dfa3dbef'
+ARC_RELAY_DEPOSITORY_OWNER_EOA  = '\xf61a305199fa1135d76ffab3752d42f55cbd775a'
+ARC_RELAY_ALLOCATOR_EOA         = '\x63c1d3e9c646184529c5694630a01c00df171b56'
 ```
 
 ---

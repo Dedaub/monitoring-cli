@@ -242,7 +242,7 @@
 
 ### Access Control & Admin
 ```
-0x3176f6E4Be2448C53EDD59C27651EDFaA74bf483  AccessHub         (EIP-1967 proxy; impl 0x97301276…; proxy-admin 0x3B91972c… ✓)
+0x3176f6E4Be2448C53EDD59C27651EDFaA74bf483  AccessHub         (EIP-1967 proxy; impl 0xe5be021d… since ≤2026-10, was 0x97301276…; proxy-admin 0x3B91972c… ✓)
 0x3B91972c1Ff63296cb824a30997C7e4a982B7ee6  ProxyAdmin        (OZ ProxyAdmin; owner()→Team Multisig ✓)
 0xd1b27ccAF2A4dDcA0Ac32181374C70282492d843  Team Multisig
 0x12d54ad6daf65d55b029df1b34b260c68fc0ddcf  Timelock
@@ -285,7 +285,7 @@ Pharaoh is **Avalanche-exclusive**. Any address appearing in these contracts on 
 |----------|---------|---------|---------------|-------------|
 | Voter | 0x922b9Ca8… | EIP-1967 transparent | 0x5363e33b… | 0x68ee9459… |
 | VotingEscrow | 0xfe99e92d… | EIP-1967 transparent | 0x9b8afab3… | 0x6a66483b… |
-| AccessHub | 0x3176f6E4… | EIP-1967 transparent | 0x97301276… | 0x3B91972c… (ProxyAdmin) |
+| AccessHub | 0x3176f6E4… | EIP-1967 transparent | 0xe5be021d… (2026-10; was 0x97301276…) | 0x3B91972c… (ProxyAdmin) |
 | TreasuryHelper | 0x660862D4… | EIP-1967 transparent | 0xf03ce48d… | 0xba40a2e5… |
 | PairFactory | 0x85448bF2… | **immutable** — no impl slot | — | — |
 | Minter | 0xd23F124b… | **immutable** — no impl slot | — | — |
@@ -368,7 +368,7 @@ Pharaoh is **Avalanche-exclusive**. Any address appearing in these contracts on 
 ## 8. Verification & sources
 
 **On-chain verification (Avalanche C-Chain, 2026-06):**
-- `eth_getCode` non-zero confirmed for all 15 known addresses plus VotingEscrow proxy `0xfe99…`, Voter impl `0x5363…`, AccessHub impl `0x9730…`, TreasuryHelper impl `0xf03c…`
+- `eth_getCode` non-zero confirmed for all 15 known addresses plus VotingEscrow proxy `0xfe99…`, Voter impl `0x5363…`, AccessHub impl `0x9730…` (replaced by `0xe5be…` by 2026-10), TreasuryHelper impl `0xf03c…`
 - `PairFactory.allPairsLength()` → 182
 - `PHAR.symbol()` → "PHAR"; `PHAR.minter()` → Minter `0xd23f…`
 - `xPHAR.symbol()` → "xPHAR"; `p33.symbol()` → "p33"

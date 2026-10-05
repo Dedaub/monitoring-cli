@@ -1,14 +1,14 @@
-# Socket / Bungee — reference index (Ethereum + Base + Arbitrum + Optimism + Polygon + BNB + Avalanche + Robinhood Chain)
+# Socket / Bungee — reference index (Ethereum + Base + Arbitrum + Optimism + Polygon + BNB + Avalanche + Robinhood Chain + Arc)
 
 **Socket** (the product was called **Bungee** for most of its life; `docs.bungee.exchange` now serves the Socket docs) is a bridge aggregator and intent router. It moves value across chains through third-party bridges (Across, CCTP, Stargate, Mayan, Relay, native rollup bridges and others) and through its own solver network. Three contract generations are on chain; each has its own events and its own link key.
 
-**Status:** verified on 2026-09-29 against live RPC on all eight chains, the official docs (`docs.socket.tech`: contract addresses, chain support, OpenRouter reference, destination payload guide), the `SocketDotTech/bungee-contracts-public` repository (SocketGateway sources and `deployments/<network>.json`), and the explorer-verified sources of the deployed contracts. Topics and selectors recomputed as `keccak256(signature)`; every address existence-checked with `eth_getCode`.
+**Status:** verified on 2026-09-29 against live RPC on all eight chains, the official docs (`docs.socket.tech`: contract addresses, chain support, OpenRouter reference, destination payload guide), the `SocketDotTech/bungee-contracts-public` repository (SocketGateway sources and `deployments/<network>.json`), and the explorer-verified sources of the deployed contracts. Topics and selectors recomputed as `keccak256(signature)`; every address existence-checked with `eth_getCode`. Extended on 2026-10-05 with Arc (5042): the OpenRouter generation only.
 
 | File | Generation | Contracts | Link key | Chains (of the 8) | Activity in the pinned window |
 |------|-----------|-----------|----------|-------------------|-------------------------------|
-| [openrouter.md](openrouter.md) | **Socket v3 / OpenRouter** (current API routes) | AllowanceHolder, OpenRouter, RFQVaultExecutor, BungeeReceiver, CalldataExecutor | `quoteId` (the request hash) | all 8, same addresses | 2,315 `RequestExecuted` on the eight chains |
-| [gateway.md](gateway.md) | **SocketGateway** (Socket v2, "legacy routes") | SocketGateway, route implementations, SocketDeployFactory | none on chain (the underlying bridge's id) | 7 (not Robinhood Chain) | 270 `SocketBridge` on the seven chains |
-| [bungee-auto.md](bungee-auto.md) | **Bungee Auto** (inbox and solver auctions) | BungeeInbox, BungeeGateway, request routers, Switchboard | `requestHash` | 7 (not Robinhood Chain) | 0 logs; last logs on Ethereum 2026-08-27 (BungeeGateway) and 2026-08-25 (BungeeInbox) |
+| [openrouter.md](openrouter.md) | **Socket v3 / OpenRouter** (current API routes) | AllowanceHolder, OpenRouter, RFQVaultExecutor, BungeeReceiver, CalldataExecutor | `quoteId` (the request hash) | all 8 + Arc, same addresses | 2,315 `RequestExecuted` on the eight chains |
+| [gateway.md](gateway.md) | **SocketGateway** (Socket v2, "legacy routes") | SocketGateway, route implementations, SocketDeployFactory | none on chain (the underlying bridge's id) | 7 (not Robinhood Chain, not Arc) | 270 `SocketBridge` on the seven chains |
+| [bungee-auto.md](bungee-auto.md) | **Bungee Auto** (inbox and solver auctions) | BungeeInbox, BungeeGateway, request routers, Switchboard | `requestHash` | 7 (not Robinhood Chain, not Arc) | 0 logs; last logs on Ethereum 2026-08-27 (BungeeGateway) and 2026-08-25 (BungeeInbox) |
 
 ## The flow per generation
 
@@ -27,23 +27,23 @@
 
 ## Chain ids
 
-Socket uses EVM chain ids on the eight chains (1, 8453, 42161, 10, 137, 56, 43114, 4663). For other chains the Socket docs list: Solana `89999`, Tron `728126428`, Sui `1110006`, Stellar `1110002`, Hypercore `1337`, Citrea `4114`, Tempo `4217`, Arc `5042`.
+Socket uses EVM chain ids on the eight chains and Arc (1, 8453, 42161, 10, 137, 56, 43114, 4663, 5042). For other chains the Socket docs list: Solana `89999`, Tron `728126428`, Sui `1110006`, Stellar `1110002`, Hypercore `1337`, Citrea `4114`, Tempo `4217`.
 
 ## Addresses at a glance
 
 | Contract | Address | Chains |
 |----------|---------|--------|
-| AllowanceHolder (`tx.to` of OpenRouter routes) | `0x50c4E75a512F2A14A7b304787Adf79C4531A5909` | ETH·Base·Arb·OP·Poly·BNB·Avax·RH |
-| OpenRouter | `0x50cFe7c1938dB66A1a6D2e86D36F39FBef3d5c4a` | ETH·Base·Arb·OP·Poly·BNB·Avax·RH |
-| RFQVaultExecutor | `0x97caCa78AC2a94c67643d07843F85AFAa44a3ea5` | ETH·Base·Arb·OP·Poly·BNB·Avax·RH |
-| BungeeReceiver | `0x8a774c1b73998a54ff09341f3cff8a0010bba7f1` | ETH·Base·Arb·OP·Poly·BNB·Avax·RH |
+| AllowanceHolder (`tx.to` of OpenRouter routes) | `0x50c4E75a512F2A14A7b304787Adf79C4531A5909` | ETH·Base·Arb·OP·Poly·BNB·Avax·RH·Arc |
+| OpenRouter | `0x50cFe7c1938dB66A1a6D2e86D36F39FBef3d5c4a` | ETH·Base·Arb·OP·Poly·BNB·Avax·RH·Arc |
+| RFQVaultExecutor | `0x97caCa78AC2a94c67643d07843F85AFAa44a3ea5` | ETH·Base·Arb·OP·Poly·BNB·Avax·RH·Arc |
+| BungeeReceiver | `0x8a774c1b73998a54ff09341f3cff8a0010bba7f1` | ETH·Base·Arb·OP·Poly·BNB·Avax·RH·Arc |
 | SocketGateway | `0x3a23F943181408EAC424116Af7b7790c94Cb97a5` | ETH·Base·Arb·OP·Poly·BNB·Avax |
 | BungeeInbox | `0x5e0f8e7337c8955d2124b8e85ca74af884b3e124` | ETH·Base·Arb·OP·Poly·BNB·Avax |
 | BungeeGateway | one address per chain | see [bungee-auto.md](bungee-auto.md) |
 
 ## Cross-cutting facts
 
-1. **Robinhood Chain has only the OpenRouter generation.** SocketGateway and the Bungee Auto contracts have no code there; OpenRouter, the RFQ vault and BungeeReceiver are deployed and active.
+1. **Robinhood Chain and Arc have only the OpenRouter generation.** SocketGateway and the Bungee Auto contracts have no code there; OpenRouter, the RFQ vault and BungeeReceiver are deployed and active (Arc checked 2026-10-05).
 2. **`tx.from` is often not the user.** OpenRouter routes arrive through the AllowanceHolder (`tx.to`), and payouts are sent by solver accounts; SocketGateway calls are often made by integrator contracts. Take the user from the event fields and the token transfers (`SocketBridge.sender`, the `input.user` of the OpenRouter call, the source of the `Transfer` into the OpenRouter).
 3. **Same address, different contract on another chain.** Bungee Auto deployments reuse deployer nonces per chain, so one address can be, for example, the BungeeGateway on Base and the SwapExecutor on Optimism. Always key on `(chain, address)`.
 4. **Admin signals.** SocketGateway: `NewRouteAdded`, `RouteDisabled`, `OwnerNominated`, `OwnerClaimed`. OpenRouter family: `OwnerNominated`, `OwnerClaimed`, `SolverSignerUpdated`, `RoleGranted`, `RoleRevoked`. Bungee Auto: `ImplAdded`, `ImplRemoved`, `RoleGranted`, `RoleRevoked`.

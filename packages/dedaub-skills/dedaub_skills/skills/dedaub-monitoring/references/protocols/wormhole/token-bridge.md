@@ -1,4 +1,4 @@
-# Wormhole Token Bridge (Portal / Wrapped Token Transfers) — Topics, Selectors, Addresses (Ethereum, Base, Arbitrum, Optimism, Polygon, BNB, Avalanche; NOT Robinhood Chain)
+# Wormhole Token Bridge (Portal / Wrapped Token Transfers) — Topics, Selectors, Addresses (Ethereum, Base, Arbitrum, Optimism, Polygon, BNB, Avalanche; NOT Robinhood Chain, NOT Arc)
 
 **Status:** verified on 2026-09-29 against live RPC on all eight chains, the canonical `wormhole-foundation/wormhole` repo (`ethereum/contracts/bridge/`), `wormhole-foundation/example-token-bridge-relayer`, the Wormhole docs contract-address page, the `wormhole-foundation/wormhole-sdk-ts` constants and the Executor deployment registry. Topics and selectors recomputed as `keccak256(signature)`; addresses existence-checked with `eth_getCode`; implementations read from the EIP-1967 slot and scanned for each topic and selector.
 **Scope:** the **Token Bridge** (branded Portal; the docs now call it Wrapped Token Transfers, WTT), its wrapped-asset tokens, and the relayer contracts that call it: the legacy `TokenBridgeRelayer` (Connect automatic route) and the Executor-era Token Bridge relayers. The Token Bridge is deployed on **seven of the eight target chains; Robinhood Chain (4663) has none**. Topics and selectors are chain-agnostic; addresses are network-specific. The Core contract and its `LogMessagePublished` are in [core.md](core.md).
@@ -196,6 +196,8 @@ On every chain measured, `tokenBridge()` of both relayers returned the local Tok
 
 `eth_getCode` = `0x` (nonce 0) on Robinhood for the Ethereum and Base Token Bridge addresses, the shared `0x3Ff72741fd67D6AD0668d93B41a09248F4700560` (Berachain, Unichain, Ink), both relayers with referrer and the legacy relayer. Neither the docs WTT list nor `tokenBridge.ts` of the SDK has a Robinhood entry, and no `TransferRedeemed` log was seen on Robinhood in the window. Robinhood's Core exists ([core.md](core.md)); Wormhole value on Robinhood moves through NTT ([ntt.md](ntt.md)).
 
+**Arc (chain ID 5042, Wormhole id 71): no Token Bridge.** `eth_getCode` = `0x` on 2026-10-05 for the Ethereum and Base Token Bridge addresses, `0x3Ff72741fd67D6AD0668d93B41a09248F4700560`, both relayers with referrer and both legacy relayers; no Arc entry in `tokenBridge.ts`.
+
 ---
 
 ## 5. Cross-chain summary
@@ -284,7 +286,7 @@ OP_TOKEN_BRIDGE               = '\x1d68124e65fafc907325e3edbf8c4d84499daa8b'
 POLY_TOKEN_BRIDGE             = '\x5a58505a96d1dbf8df91cb21b54419fc36e93fde'
 BNB_TOKEN_BRIDGE              = '\xb6f6d86a8f9879a9c87f643768d9efc38c1da6e7'
 AVAX_TOKEN_BRIDGE             = '\x0e082f06ff657d94310cb8ce8b0d9a04541d8052'
--- Robinhood (4663): no Token Bridge
+-- Robinhood (4663) and Arc (5042): no Token Bridge
 
 -- ===== Executor Token Bridge relayer per chain (emits TransferRedeemed too) =====
 ETH_EXEC_TB_RELAYER           = '\xa8969f3f8d97b3ed89d4e2ec19b6b0cfd504b212'

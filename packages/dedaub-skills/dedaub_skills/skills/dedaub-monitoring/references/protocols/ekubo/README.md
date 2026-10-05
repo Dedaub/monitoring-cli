@@ -6,7 +6,7 @@ EVM deployments are **versioned** (a new version = a brand-new contract set, nev
 
 | Version | File | Status | Chains | Naming |
 |---------|------|--------|--------|--------|
-| **V3** | [`v3.md`](./v3.md) | **current** (release v3.1.1, 2026-05-03) | Ethereum, Base, BNB, Arbitrum, Optimism, Polygon (+ MegaETH, Monad, Ink, Unichain). **NOT Avalanche.** | `MEVCapture` |
+| **V3** | [`v3.md`](./v3.md) | **current** (addresses from v3.1.1 and v3.2.0; latest release v3.4.0, 2026-09-15) | Ethereum, Base, BNB, Arbitrum, Optimism, Polygon, Robinhood Chain (+ Gnosis, Monad, Ink, Unichain; MegaETH and World Chain await EIP-7939). **NOT Avalanche, NOT Arc.** | `MEVCapture` |
 | **V2** | [`v2.md`](./v2.md) | **deprecated** | Ethereum + Sepolia only | `MEVResist` |
 
 > There is no public **V1** EVM mainnet deployment; the EVM line begins at V2 (the numbering tracks the Starknet protocol generations). V2 and V3 differ at the **event-signature level** (V2 uses explicit `(salt, bounds)` position-key tuples; V3 packs a `PositionId` bytes32 and adds `PoolState`/`PoolBalanceUpdate`), so do **not** reuse V2 topics for V3.
@@ -22,7 +22,7 @@ EVM deployments are **versioned** (a new version = a brand-new contract set, nev
 1. **Swaps have no topic.** `address == Core AND topics == [] AND length(data) == 116` (V3). See `v3.md §1.2`, `§7.1`.
 2. **`swap` and the lock callback both have selector `0x00000000`** (mined names). `v3.md §2.1`.
 3. **Native token = `address(0)`**, first-class; no per-swap ERC-20 `Transfer`. `v3.md §7`.
-4. **Avalanche is not deployed; BNB/OP/Polygon lack TWAMM + the Positions/Orders NFT managers.** `v3.md §5`.
-5. **Requires EIP-7939 (`CLZ`, Fusaka/Osaka EVM)** on the target chain — gates *functionality*, not just deployment. As of 2026-06-05 only **Ethereum** had meaningful V3 volume; Base/BNB/Arb/OP/Polygon `Core` were deployed but ~dormant (OP-Stack chains still awaiting CLZ). Treat `eth_getCode ✓` as "deployed," not "trading." `v3.md §3`, `§7` (#13).
+4. **Avalanche and Arc are not deployed. The Positions/Orders managers have two address generations** (original on ETH/Base/Arb/Robinhood, 192-bit IDs on all six non-Robinhood targets); TWAMM is on all seven targets. `v3.md §4.2`, `§5`.
+5. **Requires EIP-7939 (`CLZ`, Fusaka/Osaka EVM)** on the target chain — gates *functionality*, not just deployment. The Ekubo docs list all seven targets as Live, but on 2026-10-05 only **Ethereum** and **Robinhood Chain** had steady V3 volume; Base/BNB/Arb/OP/Polygon `Core` were near-idle. Treat `eth_getCode ✓` as "deployed," not "trading." `v3.md §3`, `§7` (#13).
 
 See also: [`../uniswap/v4.md`](../uniswap/v4.md) (the closest architectural sibling — singleton + hooks + flash accounting).

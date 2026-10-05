@@ -1,7 +1,7 @@
-# TeleSwap (TeleportDAO) — Topics, Selectors, Addresses (Ethereum, Base, Arbitrum, Optimism connectors; Polygon and BNB home chains; NOT Avalanche, NOT Robinhood)
+# TeleSwap (TeleportDAO) — Topics, Selectors, Addresses (Ethereum, Base, Arbitrum, Optimism connectors; Polygon and BNB home chains; NOT Avalanche, NOT Robinhood, NOT Arc)
 
-**Status:** verified on 2026-09-29 against live RPC on all eight target chains, the official contract list `TeleportDAO/teleswap-cli` (`assets/config/contracts.json`, from `@teleportdao/configs@4.1.0`), the verified sources on the Blockscout explorers (`EthConnectorLogic`, `PolyConnectorLogic`, `CcTransferRouterLogic`, `CcExchangeRouterLogic`, `BurnRouterLogic`, `LockersManagerLogic`, `BitcoinRelay`, `TeleBTCLogic`) and sample receipts. Every topic0 and selector was recomputed as `keccak256(signature)` from those verified ABIs. Every address was existence-checked with `eth_getCode`; proxy implementations and admins were read from the EIP-1967 slots.
-**Scope:** TeleSwap, the Bitcoin bridge of TeleportDAO. Two layers: (1) the **home chains** Polygon PoS (137) and BNB Smart Chain (56), where teleBTC is minted and burned against Bitcoin through the Bitcoin light-client relay, the lockers and the routers; (2) the **EVM connectors** on Ethereum (1), Base (8453), Arbitrum One (42161) and Optimism (10), which move a user's tokens to a home chain over Across to swap them into BTC, and deliver BTC-funded swaps back. **Avalanche C-Chain (43114) and Robinhood Chain (4663) have no TeleSwap contract.** Topics and selectors are chain-agnostic. Addresses are network-specific.
+**Status:** verified on 2026-09-29 against live RPC on all eight target chains, the official contract list `TeleportDAO/teleswap-cli` (`assets/config/contracts.json`, from `@teleportdao/configs@4.1.0`), the verified sources on the Blockscout explorers (`EthConnectorLogic`, `PolyConnectorLogic`, `CcTransferRouterLogic`, `CcExchangeRouterLogic`, `BurnRouterLogic`, `LockersManagerLogic`, `BitcoinRelay`, `TeleBTCLogic`) and sample receipts. Every topic0 and selector was recomputed as `keccak256(signature)` from those verified ABIs. Every address was existence-checked with `eth_getCode`; proxy implementations and admins were read from the EIP-1967 slots. **Re-checked 2026-10-05:** all four EthConnectors, both PolyConnectors and the BNB BurnRouter were upgraded (Ethereum and Polygon on 2026-10-04; the others observed by 2026-10-05; new implementations in §3 to §6); the new connector events and functions (the filler path) are in §1 and §2.
+**Scope:** TeleSwap, the Bitcoin bridge of TeleportDAO. Two layers: (1) the **home chains** Polygon PoS (137) and BNB Smart Chain (56), where teleBTC is minted and burned against Bitcoin through the Bitcoin light-client relay, the lockers and the routers; (2) the **EVM connectors** on Ethereum (1), Base (8453), Arbitrum One (42161) and Optimism (10), which move a user's tokens to a home chain over Across to swap them into BTC, and deliver BTC-funded swaps back. **Avalanche C-Chain (43114), Robinhood Chain (4663) and Arc (5042) have no TeleSwap contract.** Topics and selectors are chain-agnostic. Addresses are network-specific.
 
 TeleSwap keeps BTC with **lockers**: operators that hold BTC on Bitcoin and post collateral on the home chain. A BTC deposit to a locker's Bitcoin script is proven to the home chain through the `BitcoinRelay` light client; the `CcTransferRouter` then mints teleBTC (`NewWrap`), or the `CcExchangeRouter` mints and swaps it (`NewWrapAndSwapV2`). A withdrawal to Bitcoin burns teleBTC through the `BurnRouter` (`NewUnwrap`); the locker pays on Bitcoin, and the proof of that payment closes the request (`PaidUnwrap`, with the Bitcoin transaction id).
 
@@ -47,6 +47,12 @@ Three facts to know before you index:
 | `0x06e5f2ca1234f717a2031f662608c02182d4f8bdc3dab013ec4c04eb97553132` | `AcrossUpdated(address oldAcross, address newAcross)` |
 | `0xbac4f45eeeeb3c9688d046eddcdd28783777a2aa7beffcdf0acb76487d796364` | `TargetChainConnectorUpdated(address oldTargetChainConnector, address newTargetChainConnector)` |
 | `0xffd9582901c27177dbd18194ae8017f10d8b21f98a0da2ea5197e0b20dc13d70` | `WrappedNativeTokenUpdated(address oldWrappedNativeToken, address newWrappedNativeToken)` |
+| `0x5b235585c88679791b06b0e19dcfc3447956b7cb8d3e6d0dd6519b1f62a9bc7f` | `NewSwapAndUnwrapViaFiller(bytes32 indexed fingerprint, uint256 uniqueCounter, address inputToken, uint256 inputAmount, address intermediaryTokenOnInputChain, uint256 intermediaryTokenOnInputChainAmount, bytes userScript, uint8 scriptType, uint256 minBtcOutputAmount, uint256 thirdParty, address refundAddress)` |
+| `0x7d080a3a97e39e0900baa146db1d7aba54f27b3babaead258b351ac13584ee9e` | `FillsClaimed(bytes32[] fingerprints, address intermediaryTokenOnInputChain, uint256 intermediaryTokenOnInputChainAmount, int64 bridgePercentageFee)` |
+| `0xea36fd8824e3a6b55c7d6c31f0f1c14e100461af72103498abddfdbc9df65179` | `FillsClaimRetried(bytes32[] fingerprints, address intermediaryTokenOnInputChain, uint256 intermediaryTokenOnInputChainAmount, int64 bridgePercentageFee)` |
+| `0x43d89f9712aec80f15f6fbffce105a51a655a511170e4a251acbf979bb67b587` | `UnfilledSwapAndUnwrapRefunded(bytes32 indexed fingerprint, address refundAddress, address intermediaryTokenOnInputChain, uint256 intermediaryTokenOnInputChainAmount)` |
+| `0x794454db33e02ae5d0f48c7815f4eeac46e5b836766949ed362cda805aedebf1` | `FillerUpdated(address oldFiller, address newFiller)` |
+| `0x70f752aa5d8bd2bde0f68a81c233171d6c3fb73c9f8509bff85495a20bb1d1f3` | `MaxClaimFillsBridgeFeeUpdated(uint256 oldMaxClaimFillsBridgeFee, uint256 newMaxClaimFillsBridgeFee)` |
 
 Meaning and value:
 
@@ -54,6 +60,8 @@ Meaning and value:
 - `MsgReceived` — an Across fill arrived and was decoded; `functionName` is `wrapAndSwapUniversal` (BTC-to-EVM payout; `uniqueCounter` then holds the Bitcoin transaction id) or `swapBackAndRefund` (refund). Status plus decode; the value moves in the same transaction.
 - `WrappedAndSwappedToDestChain` — **destination leg (BTC to EVM).** `destTokenAmount` of the last path token goes to `targetAddress` (ERC-20 `Transfer` connector to target).
 - `SwappedBackAndRefundedToSourceChain` / `RefundedFailedSwapAndUnwrapUniversal` — **refund** of a failed EVM-to-BTC request to `refundAddress`. The `Failed*` events mean that the funds stay in the connector until the admin acts.
+- **Filler path (implementation of 2026-10-04).** `swapAndUnwrapViaFiller` keeps the user's tokens in the connector and emits `NewSwapAndUnwrapViaFiller` (key `fingerprint`, topic1); no Across deposit happens in that transaction. A filler pays the BTC side on the home chain (PolyConnector `SwapAndUnwrapFilled`, same `fingerprint`). The connector later sends the batched funds over Across with `claimFills` / `retryClaimFills` (`FillsClaimed` / `FillsClaimRetried`), or refunds an unfilled request (`UnfilledSwapAndUnwrapRefunded`). `FillerUpdated` and `MaxClaimFillsBridgeFeeUpdated` are admin changes; both were emitted on Ethereum right after the upgrade.
+- `MsgSentRune` and `swapAndUnwrapRune` are not in the Ethereum implementation of 2026-10-04; treat them as historical.
 
 ### 1.2 PolyConnector (Polygon, BNB)
 
@@ -72,6 +80,9 @@ Meaning and value:
 | `0x5b663d57fa8cf393f8c8019f514b25c1b3223c9324a2ce3efe28ce5aef0e62fe` | `BurnRouterUpdated(address oldBurnRouter, address newBurnRouter)` |
 | `0x9f40e28e043a1925964408adad733d35097d026af4bfae3a434c062b4179bae1` | `EthConnectorUpdated(address oldEthConnector, address newEthConnector)` |
 | `0x8bc9ede9ad39ea60ab72790a66580450bf8c540a19f0e2b54afdd1d7be28ee09` | `LockersProxyUpdated(address oldLockersProxy, address newLockersProxy)` |
+| `0xdb18ace285ac81dfb11228b778d46dd29841b5e536fa01bb0616d12fc5379143` | `SwapAndUnwrapFilled(bytes32 indexed fingerprint, uint256 inputChainId, uint256 uniqueCounter, address filler, address intermediaryTokenOnInputChain, uint256 teleBTCAmount, uint256 burntAmount)` (implementation of 2026-10-04) |
+| `0x9c42caed57866039a04ac9fe339f746549dc727ea54579b01f87b5ea30d5caee` | `FillsRefunded(bytes32[] fingerprints, address intermediaryTokenOnIntermediaryChain, address filler, uint256 refundedToFiller)` (implementation of 2026-10-04) |
+| `0x72ca618d6b1478954424f1c82d42e7b44cb03787bde71f7aad7ca8825ea96c10` | `ClaimFillsRejected(address intermediaryTokenOnIntermediaryChain, uint256 sentToAcrossAdmin)` (implementation of 2026-10-04) |
 
 `NewSwapAndUnwrap*` is the home-chain record of an EVM-to-BTC request: `uniqueCounter` and `chainId` (the source chain) are the join key to `MsgSent`, `userTargetAddress` is the user (topic1), and `lockerTargetAddress` + `requestIdOfLocker` are the join key to the BurnRouter's `NewUnwrap` and `PaidUnwrap`. `WithdrawnFundsToSourceChain*` is the **refund path** (funds go back over Across to the source chain). The PolyConnector also emits `MsgSent` (same topic0 as §1.1) when it bridges funds back.
 
@@ -143,7 +154,13 @@ Meaning and value:
 | `0x201c527c` | `swapAndUnwrap(address _token, address _exchangeConnector, uint256[] _amounts, bool _isInputFixed, address[] _path, (bytes userScript, uint8 scriptType, bytes lockerLockingScript) _userAndLockerScript, int64 _bridgePercentageFee, uint256 _thirdParty)` | `payable`. EVM to BTC; refund address = `tx.origin`. Emits `MsgSent`. |
 | `0x628270eb` | `swapAndUnwrapV2(address _token, address _exchangeConnector, uint256[] _amounts, bool _isInputFixed, address[] _path, (bytes userScript, uint8 scriptType, bytes lockerLockingScript) _userAndLockerScript, int64 _bridgePercentageFee, uint256 _thirdParty, address _refundAddress)` | `payable`. Emits `MsgSent`. |
 | `0x966ca0ac` | `swapAndUnwrapUniversal((address[] _pathFromInputToIntermediaryOnSourceChain, uint256[2] _amountsFromInputToIntermediaryOnSourceChain, address[] _pathFromIntermediaryToOutputOnIntermediaryChain, uint256 _minOutputAmount, int64 _bridgePercentageFee) _arguments, address _exchangeConnector, bool _isInputFixed, (bytes userScript, uint8 scriptType, bytes lockerLockingScript) _userAndLockerScript, uint256 _thirdParty, address _refundAddress)` | `payable`. Swaps on the source chain first when the path is longer than one. Emits `MsgSent`. |
-| `0xfa4df506` | `swapAndUnwrapRune(address _token, uint256 _appId, address _exchangeConnector, uint256[] _amounts, uint256 _internalId, address[] _path, (bytes userScript, uint8 scriptType) _userScript, int64 _bridgePercentageFee, uint256 _thirdParty)` | `payable`. EVM to Runes. Emits `MsgSentRune`. |
+| `0xfa4df506` | `swapAndUnwrapRune(address _token, uint256 _appId, address _exchangeConnector, uint256[] _amounts, uint256 _internalId, address[] _path, (bytes userScript, uint8 scriptType) _userScript, int64 _bridgePercentageFee, uint256 _thirdParty)` | `payable`. EVM to Runes. Emits `MsgSentRune`. Not in the Ethereum implementation of 2026-10-04 (historical). |
+| `0x2bd3fe8c` | `swapAndUnwrapViaFiller(address[] _pathFromInputToIntermediaryOnInputChain, uint256[2] _amountsFromInputToIntermediaryOnInputChain, (bytes userScript, uint8 scriptType) _userScript, uint256 _minBtcOutputAmount, uint256 _thirdParty, address _refundAddress)` | Implementation of 2026-10-04. EVM to BTC through a filler. Emits `NewSwapAndUnwrapViaFiller`; the tokens stay in the connector. |
+| `0x8ea75fa6` | `claimFills(bytes32[] _fingerprints, address _exchangeConnector, int64 _bridgePercentageFee)` | Sends the funds of filled requests over Across. Emits `FillsClaimed`. |
+| `0x2b2ce364` | `retryClaimFills(bytes32[] _fingerprints, address _exchangeConnector, int64 _bridgePercentageFee)` | Emits `FillsClaimRetried`. |
+| `0x6e12d58b` | `refundUnfilledSwapAndUnwrap(bytes32[] _fingerprints)` | Emits `UnfilledSwapAndUnwrapRefunded`. |
+| `0x18bbee8d` | `setFiller(address _filler)` | Owner. Emits `FillerUpdated`. |
+| `0xd6009793` | `setMaxClaimFillsBridgeFee(uint256 _maxClaimFillsBridgeFee)` | Owner. Emits `MaxClaimFillsBridgeFeeUpdated`. |
 | `0x3a5be8cb` | `handleV3AcrossMessage(address _tokenSent, uint256 _amount, address, bytes _message)` | Only the Across SpokePool can call it. Emits `MsgReceived`, then the payout or refund event. |
 | `0x59eb422d` | `refundFailedSwapAndUnwrapUniversal(uint256 _uniqueCounter, address _refundAddress, address _inputToken, address[] _pathFromIntermediaryToInputOnSourceChain, uint256[] _amountsFromIntermediaryToInputOnSourceChain)` | Owner or `acrossAdmin`. Emits `RefundedFailedSwapAndUnwrapUniversal`. |
 | `0xbb8fc8d6` | `swapBackAndRefundBTCByAdmin((address targetAddress, address destToken, address tokenSent, bytes32 bitcoinTxId, address exchangeConnector, uint256 minOutputAmount, (bytes userScript, uint8 scriptType, bytes lockerLockingScript) userAndLockerScript, address[] path, uint256[] amounts, int64 bridgePercentageFee, uint256 intermediaryChainId) _args)` | Owner or `acrossAdmin`. Emits `SwappedBackAndRefundedBTCUniversal`. |
@@ -173,6 +190,8 @@ Meaning and value:
 | `0x5f6b6fc4` | `withdrawFundsToSourceChainByAdminUniversal((bytes32 refundAddress, uint256 chainId, uint256 uniqueCounter, address token, int64 bridgePercentageFee, bytes32[] pathFromIntermediaryToInputOnSourceChain, uint256[] amountsFromIntermediaryToInputOnSourceChain, address exchangeConnector, bytes jupiterInstructionData) args)` | Admin refund, universal route. |
 | `0xcf75dfd2` | `swapBackAndRefundBTCByAdmin(bytes32 _bitcoinTxId, address _token, bytes32 _refundAddress, address _exchangeConnector, uint256 _minOutputAmount, (bytes userScript, uint8 scriptType, bytes lockerLockingScript) _userAndLockerScript, address[] _path, uint256[] _amounts)` | Admin. |
 | `0xe63ea408` | `emergencyWithdraw(address _token, address _to, uint256 _amount)` | **Owner only; no event.** |
+| `0x7a9d3080` | `fillSwapAndUnwrap(uint256 _inputChainId, uint256 _uniqueCounter, address _intermediaryTokenOnInputChain, uint256 _intermediaryTokenOnInputChainAmount, (bytes userScript, uint8 scriptType) _userScript, uint256 _minBtcOutputAmount, uint256 _thirdParty, uint256 _teleBTCAmount, bytes _lockerLockingScript)` | Implementation of 2026-10-04. The filler pays a `NewSwapAndUnwrapViaFiller` request with teleBTC and starts the BTC unwrap. Emits `SwapAndUnwrapFilled`. |
+| `0x18bbee8d` | `setFiller(address _filler)` | Owner. |
 | `0x4d6e8f9d` | `setBurnRouterProxy(address _burnRouterProxy)` | Owner. Emits `BurnRouterUpdated`. |
 | `0x59841888` | `setLockersProxy(address _lockersProxy)` | Owner. Emits `LockersProxyUpdated`. |
 
@@ -200,8 +219,9 @@ Meaning and value:
 
 | Role | Address | One-liner |
 |------|---------|-----------|
-| **EthConnector** (proxy) | `0xFA1B28052Bd8087B1CF64eE9429FEB324e95B0ff` | Official connector (`connectors.ethereum`). 2,118 B proxy; implementation `0xe5a2357b7e6f2fd1f21d6aa7880084c2cf828548` (verified `EthConnectorLogic`). `across()` = Across SpokePool `0x5c7BCd6E7De5423a257D81B442095A1a6ced35C5`; `currChainId()` = 1. |
+| **EthConnector** (proxy) | `0xFA1B28052Bd8087B1CF64eE9429FEB324e95B0ff` | Official connector (`connectors.ethereum`). 2,118 B proxy; implementation `0x756B770b38c03B0A249Aef5FE6e06F9B34a3D431` (verified `EthConnectorLogic`, set by `Upgraded` at block 26,121,906, 2026-10-04 22:13 UTC). Previous implementation `0xe5a2357b7e6f2fd1f21d6aa7880084c2cf828548`, retired at that block (observed 2026-10-05). `across()` = Across SpokePool `0x5c7BCd6E7De5423a257D81B442095A1a6ced35C5`; `currChainId()` = 1. |
 | Old `EthConnectorLogic` implementation | `0xec4A7D93750BbcE2A07fd1bc748507ea645e9d52` | 5,967 B, not a proxy, same deployer `0x2D3E4AeB9347C224DAe7F1dc1213bE082F6FddEC`. **Not the connector on Ethereum** (it is the connector address on Base, Arbitrum and Optimism). |
+| Filler | `0x4a00edf7F07Ecb48a4A3FD798e0fb79D90ef21a9` | `filler()` of the Ethereum and Base EthConnectors (set by `FillerUpdated` after the upgrade); 23 B code = an EIP-7702 delegated account. `filler()` is zero on Arbitrum and Optimism. |
 | Across depositor / refund operator (EOA) | `0x144c5fb302dbaa789fc59bbec301169eaa56c5fc` | `acrossAdmin()` of every EthConnector; the `depositor` in the Across `FundsDeposited` logs. |
 | Proxy admin (EOA) | `0x4565ae5c90e52c058410fc7f05711ffed9b6e62a` | EIP-1967 admin of every TeleSwap proxy. |
 | Owner (EOA) | `0x24004f4f6d2e75b039d528e82b100355d8b1d4fb` | `owner()` of every TeleSwap proxy. |
@@ -212,9 +232,9 @@ One official connector address on all three chains (`connectors.base`, `connecto
 
 | Chain | EthConnector (proxy) | Implementation (EIP-1967) | `across()` (Across SpokePool) | `currChainId()` |
 |-------|----------------------|----------------------------|-------------------------------|-----------------|
-| Base | `0xec4A7D93750BbcE2A07fd1bc748507ea645e9d52` | `0x19f5775779628063066f53f509c9cc26cb91c2b5` | `0x09aea4b2242abc8bb4bb78d537a67a245a7bec64` | 8453 |
-| Arbitrum One | `0xec4A7D93750BbcE2A07fd1bc748507ea645e9d52` | `0xe93bd2f610153932e6c3ac28ad9d93f912d39c05` | `0xe35e9842fceaca96570b734083f4a58e8f7c5f2a` | 42161 |
-| Optimism | `0xec4A7D93750BbcE2A07fd1bc748507ea645e9d52` | `0x8b3d6e8b0d2a55db1fb435472c52277a223b13c7` | `0x6f26bf09b1c792e3228e5467807a900a503c0281` | 10 |
+| Base | `0xec4A7D93750BbcE2A07fd1bc748507ea645e9d52` | `0xd3685A1Ad6A3A1eE65871d8716661BDa4448dA06` (was `0x19f5775779628063066f53f509c9cc26cb91c2b5`, retired by 2026-10-05) | `0x09aea4b2242abc8bb4bb78d537a67a245a7bec64` | 8453 |
+| Arbitrum One | `0xec4A7D93750BbcE2A07fd1bc748507ea645e9d52` | `0x5EbF7A3b782270f264cdc0Cf9aE188fB19Cf4047` (was `0xe93bd2f610153932e6c3ac28ad9d93f912d39c05`, retired by 2026-10-05) | `0xe35e9842fceaca96570b734083f4a58e8f7c5f2a` | 42161 |
+| Optimism | `0xec4A7D93750BbcE2A07fd1bc748507ea645e9d52` | `0xc04B61E67f963680fcfd98c3b98355aCBFb82F7A` (was `0x8b3d6e8b0d2a55db1fb435472c52277a223b13c7`, retired by 2026-10-05) | `0x6f26bf09b1c792e3228e5467807a900a503c0281` | 10 |
 
 `0xFA1B28052Bd8087B1CF64eE9429FEB324e95B0ff` has no code on Base, Arbitrum or Optimism.
 
@@ -222,7 +242,7 @@ One official connector address on all three chains (`connectors.base`, `connecto
 
 | Role | Address | One-liner |
 |------|---------|-----------|
-| **PolyConnector** (proxy) | `0xE0166434A2ad67536B5FdAFCc9a6C1B41CC5e085` | `connectors.polygon`. Implementation `0xE7341c485a60C94B7caB74dF00eADc45Ff3f6a51` (`PolyConnectorLogic`). |
+| **PolyConnector** (proxy) | `0xE0166434A2ad67536B5FdAFCc9a6C1B41CC5e085` | `connectors.polygon`. Implementation `0x58733ad7414d01aB28c6845E2B4872bCC10a4E42` (verified `PolyConnectorLogic`, set by `Upgraded` at block 94,964,751 on 2026-10-04). Previous implementation `0xE7341c485a60C94B7caB74dF00eADc45Ff3f6a51`, retired at that block (observed 2026-10-05). |
 | **CcTransferRouter** (proxy) | `0x04367D74332137908BEF9acc0Ab00a299A823707` | Implementation `0x5F3886D988a4735e6650aD45e32e704645bA73Ae`. |
 | **CcExchangeRouter** (proxy) | `0xD1E9Ff33EC28f9Dd8D99E685a2B0F29dCaa095a3` | Implementation `0x470934D226121354AD3986c8762A453764858334`. |
 | **BurnRouter** (proxy) | `0x0009876C47F6b2f0BCB41eb9729736757486c75f` | Implementation `0x5d9a6365B0758B84f1301D405957317ea6eC4dBE`. |
@@ -237,10 +257,10 @@ One official connector address on all three chains (`connectors.base`, `connecto
 
 | Role | Address | One-liner |
 |------|---------|-----------|
-| **PolyConnector** (proxy) | `0x9b95Dc17acFD8E028F192971165aE7Be76e6a954` | `connectors.bsc`. 2,109 B proxy; implementation `0xc252d5d0a99f96bfbf02700b7ac25ae54888cd06`. |
+| **PolyConnector** (proxy) | `0x9b95Dc17acFD8E028F192971165aE7Be76e6a954` | `connectors.bsc`. 2,109 B proxy; implementation `0xf7781910540B040dd9dC5a802113016db6F4da94` (read 2026-10-05; previous implementation `0xc252d5d0a99f96bfbf02700b7ac25ae54888cd06`, retired). |
 | **CcTransferRouter** (proxy) | `0xA38aD0d52B89C20c2229E916358D2CeB45BeC5FF` | Implementation `0x98ba75cc7003f2d46dd84db9aa017f7ec0687c70`. |
 | **CcExchangeRouter** (proxy) | `0xcA5416364720c7324A547d39b1db496A2DCd4F0D` | Implementation `0xb6e6f1a7d07aba1764c1e9e9deccfc754fecd85a`. |
-| **BurnRouter** (proxy) | `0x2787D48e0B74125597DD479978a5DE09Bb9a3C15` | Implementation `0xbf41e780cab6772be91e9b425cac1b08c11626a0`. |
+| **BurnRouter** (proxy) | `0x2787D48e0B74125597DD479978a5DE09Bb9a3C15` | Implementation `0xE4EAF0EEc126B063cF5BCaBd01ee7c6A329F2A02` (read 2026-10-05; previous implementation `0xbf41e780cab6772be91e9b425cac1b08c11626a0`, retired). |
 | **LockersManager** (proxy) | `0x84F74e97ebab432CeE185d601290cE0A483987A5` | Implementation `0x713e333ae88dcd0881a427371efc0d76267e8cae`. |
 | **teleBTC** (proxy) | `0xc58c1117da964aebe91fef88f6f5703e79bda574` | Implementation `0x467e5a869b1d0435ef56335ef296687e01032bb9`; burned by the LockersManager in the sample. |
 | BitcoinRelay (proxy) | `0xFcd688999c25D5493571543137cEeb4fbDb44D02` | Implementation `0x013f6d7b4c6aa1a0573c7151d397695376676a29`. |
@@ -250,9 +270,9 @@ One official connector address on all three chains (`connectors.base`, `connecto
 
 Same-address traps on BNB: `0xFA1B28052Bd8087B1CF64eE9429FEB324e95B0ff` is a 23,549 B contract with BurnRouter topics (an old BurnRouter implementation, not a connector), and `0xec4A7D93750BbcE2A07fd1bc748507ea645e9d52` is a 6,438 B contract with no TeleSwap topic. Neither is in the official list.
 
-### 6.1 Avalanche C-Chain (43114) and Robinhood Chain (4663) — NO TeleSwap deployment
+### 6.1 Avalanche C-Chain (43114), Robinhood Chain (4663) and Arc (5042) — NO TeleSwap deployment
 
-`eth_getCode` returns `0x` at `0xFA1B28052Bd8087B1CF64eE9429FEB324e95B0ff`, `0xec4A7D93750BbcE2A07fd1bc748507ea645e9d52`, `0xE0166434A2ad67536B5FdAFCc9a6C1B41CC5e085` and `0x9b95Dc17acFD8E028F192971165aE7Be76e6a954` on both chains, and the official list names neither chain.
+`eth_getCode` returns `0x` at `0xFA1B28052Bd8087B1CF64eE9429FEB324e95B0ff`, `0xec4A7D93750BbcE2A07fd1bc748507ea645e9d52`, `0xE0166434A2ad67536B5FdAFCc9a6C1B41CC5e085` and `0x9b95Dc17acFD8E028F192971165aE7Be76e6a954` on Avalanche and Robinhood Chain (and on Arc, checked 2026-10-05), and the official list names none of these chains.
 
 ---
 
@@ -268,6 +288,7 @@ Same-address traps on BNB: `0xFA1B28052Bd8087B1CF64eE9429FEB324e95B0ff` is a 23,
 | BNB Smart Chain | 56 | — | `0x9b95Dc17acFD8E028F192971165aE7Be76e6a954` | ✓ (§6) | `MsgReceived` 82, `NewUnwrap` 192 |
 | Avalanche C-Chain | 43114 | — (`0x`) | — (`0x`) | — | — |
 | Robinhood Chain | 4663 | — (`0x`) | — (`0x`) | — | — |
+| Arc | 5042 | — (`0x`) | — (`0x`) | — | — |
 
 **Outside the eight (official list):** Unichain connector `0x45e4d542c570fb6194467FFEDF7cc09867279a96`; home chains BOB and BSquared (their own routers, lockers and relays; on BSquared the CcExchangeRouter shares the address `0xE0166434A2ad67536B5FdAFCc9a6C1B41CC5e085` with the Polygon PolyConnector); a TON swap router; and Bitcoin itself (the lockers' scripts).
 
@@ -298,6 +319,7 @@ The EthConnector ABI has `paused()` but no `pause()` function, so the connectors
 8. **Admin actions without events:** `emergencyWithdraw` on the connectors and the CcExchangeRouter, `setAcrossAdmin`, `setBridgeConnectorMapping` and `setBridgeTokenMapping` emit nothing. Key on the selectors (§2) in transactions to these proxies from the owner EOA. `Upgraded` and `AdminChanged` on any proxy, and `MinterAdded` on teleBTC or the LockersManager, are critical.
 9. **Home chains are Polygon and BNB inside the eight.** A TeleSwap flow from Ethereum, Base, Arbitrum or Optimism always passes through one of them before it reaches Bitcoin; teleBTC is minted only on the home chains; `NewWrapV2` can send it over the teleBTC OFT adapter to a LayerZero peer chain (the peer set was not checked here: unverified).
 10. **`MsgReceived` has the same topic0 on both connector types.** On an EthConnector it is a BTC-to-EVM payout or a refund; on a PolyConnector it is an incoming EVM-to-BTC request. Decode `functionName` and filter by emitter.
+11. **Filler requests skip the per-request Across deposit.** Since the 2026-10-04 upgrade an EVM-to-BTC request can be `NewSwapAndUnwrapViaFiller` on the EthConnector (no `MsgSent`, no `FundsDeposited` in that transaction) and `SwapAndUnwrapFilled` on the PolyConnector, joined by `fingerprint` (topic1 on both). The value crosses later in a batch (`FillsClaimed`). Index both paths.
 
 ---
 
@@ -315,6 +337,12 @@ TOPIC_TELESWAP_FAILED_SWAP_BACK         = '\xb1219c96b80275564b7ed58d5b5441a0b51
 TOPIC_TELESWAP_REFUNDED_UNIVERSAL       = '\xf80ecdf6aa6c07f5546ab513d82f65f80c6617334130dc5b4fe6e60a59b08ffc'
 TOPIC_TELESWAP_REFUNDED_BTC_UNIVERSAL   = '\x3f6072bef585d7ef7134e48bedfc939cd73c5d5b6d8f7c127f3083636505cdd0'
 TOPIC_TELESWAP_ACROSS_UPDATED           = '\x06e5f2ca1234f717a2031f662608c02182d4f8bdc3dab013ec4c04eb97553132'
+TOPIC_TELESWAP_NEW_SWAP_UNWRAP_FILLER   = '\x5b235585c88679791b06b0e19dcfc3447956b7cb8d3e6d0dd6519b1f62a9bc7f'
+TOPIC_TELESWAP_FILLS_CLAIMED            = '\x7d080a3a97e39e0900baa146db1d7aba54f27b3babaead258b351ac13584ee9e'
+TOPIC_TELESWAP_FILLS_CLAIM_RETRIED      = '\xea36fd8824e3a6b55c7d6c31f0f1c14e100461af72103498abddfdbc9df65179'
+TOPIC_TELESWAP_UNFILLED_REFUNDED        = '\x43d89f9712aec80f15f6fbffce105a51a655a511170e4a251acbf979bb67b587'
+TOPIC_TELESWAP_FILLER_UPDATED           = '\x794454db33e02ae5d0f48c7815f4eeac46e5b836766949ed362cda805aedebf1'
+TOPIC_TELESWAP_MAX_CLAIM_FEE_UPDATED    = '\x70f752aa5d8bd2bde0f68a81c233171d6c3fb73c9f8509bff85495a20bb1d1f3'
 -- ===== PolyConnector topics =====
 TOPIC_TELESWAP_NEW_SWAP_AND_UNWRAP      = '\x124f82fb68081b8c772a74ce98c0c92b659dd79e4fd3f03cf49988818eb04e8b'
 TOPIC_TELESWAP_NEW_SWAP_AND_UNWRAP_UNIV = '\x33d28a02b6f25171e40ef509e2b97bfd82260ef601512c16c75e032dd9d88aa0'
@@ -322,6 +350,9 @@ TOPIC_TELESWAP_NEW_SWAP_AND_UNWRAP_RUNE = '\x13a9049471d86bfc267b825d08be20c5ebf
 TOPIC_TELESWAP_FAILED_SWAP_AND_UNWRAP   = '\xa79aee2abfa3037b36c3689636c9932b113a82cebda0057ac4ce2386371fc969'
 TOPIC_TELESWAP_WITHDRAWN_TO_SOURCE      = '\xf43f17a174cd55d7d75e934475f1cec7890c2bf3fabbf376de3868f0d8ce6897'
 TOPIC_TELESWAP_WITHDRAWN_TO_SOURCE_V2   = '\x73f04e25d893c427907bd37b5f4a3f289020af48582a9647567c143376c571e5'
+TOPIC_TELESWAP_SWAP_AND_UNWRAP_FILLED   = '\xdb18ace285ac81dfb11228b778d46dd29841b5e536fa01bb0616d12fc5379143'
+TOPIC_TELESWAP_FILLS_REFUNDED           = '\x9c42caed57866039a04ac9fe339f746549dc727ea54579b01f87b5ea30d5caee'
+TOPIC_TELESWAP_CLAIM_FILLS_REJECTED     = '\x72ca618d6b1478954424f1c82d42e7b44cb03787bde71f7aad7ca8825ea96c10'
 -- ===== Router, locker, teleBTC, relay topics =====
 TOPIC_TELESWAP_NEW_WRAP                 = '\xdebe45dc811f213ee5572218ab9c9e7d78fac393b0ca5c50ea9edbe5c8bcb617'
 TOPIC_TELESWAP_NEW_WRAP_V2              = '\x17ca0df5e76383e7d49ba70b93df7e5e530906b8c9a35f3a913fe01a369814bc'
@@ -351,7 +382,11 @@ TOPIC_OWNERSHIP_TRANSFERRED             = '\x8be0079c531659141344cd1fd0a4f284194
 SEL_TELESWAP_SWAP_AND_UNWRAP            = '\x201c527c'
 SEL_TELESWAP_SWAP_AND_UNWRAP_V2         = '\x628270eb'
 SEL_TELESWAP_SWAP_AND_UNWRAP_UNIVERSAL  = '\x966ca0ac'
-SEL_TELESWAP_SWAP_AND_UNWRAP_RUNE       = '\xfa4df506'
+SEL_TELESWAP_SWAP_AND_UNWRAP_RUNE       = '\xfa4df506'   -- historical (not in the 2026-10-04 implementation)
+SEL_TELESWAP_SWAP_AND_UNWRAP_VIA_FILLER = '\x2bd3fe8c'
+SEL_TELESWAP_CLAIM_FILLS                = '\x8ea75fa6'
+SEL_TELESWAP_FILL_SWAP_AND_UNWRAP       = '\x7a9d3080'   -- PolyConnector
+SEL_TELESWAP_SET_FILLER                 = '\x18bbee8d'
 SEL_TELESWAP_HANDLE_ACROSS_MESSAGE      = '\x3a5be8cb'
 SEL_TELESWAP_CONNECTOR_EMERGENCY_WDRAW  = '\xe63ea408'
 SEL_TELESWAP_EXCHANGE_EMERGENCY_WDRAW   = '\x95ccea67'
@@ -391,6 +426,7 @@ BNB_TELESWAP_BITCOIN_RELAY              = '\xfcd688999c25d5493571543137ceeb4fbdb
 ETH_TELESWAP_PROXY_ADMIN_EOA            = '\x4565ae5c90e52c058410fc7f05711ffed9b6e62a'
 ETH_TELESWAP_OWNER_EOA                  = '\x24004f4f6d2e75b039d528e82b100355d8b1d4fb'
 ETH_TELESWAP_ACROSS_ADMIN_EOA           = '\x144c5fb302dbaa789fc59bbec301169eaa56c5fc'
+ETH_TELESWAP_FILLER                     = '\x4a00edf7f07ecb48a4a3fd798e0fb79d90ef21a9'   -- also Base; EIP-7702 delegated account
 -- Avalanche (43114) and Robinhood (4663): no TeleSwap contract
 ```
 
@@ -400,7 +436,7 @@ ETH_TELESWAP_ACROSS_ADMIN_EOA           = '\x144c5fb302dbaa789fc59bbec301169eaa5
 
 How every constant was verified (2026-09-29):
 
-- **Topic0 / selectors:** recomputed as `keccak256(canonical signature)` from the verified ABIs on Blockscout: `EthConnectorLogic` (Ethereum implementation `0xe5a2357b7e6f2fd1f21d6aa7880084c2cf828548`), `PolyConnectorLogic`, `CcTransferRouterLogic`, `CcExchangeRouterLogic`, `BurnRouterLogic`, `LockersManagerLogic`, `BitcoinRelay` and `TeleBTCLogic` (the Polygon implementations of §5). The table rows were generated from those ABIs with their parameter names. `MsgSent`, `MsgReceived`, `NewSwapAndUnwrap`, `NewSwapAndUnwrapUniversal`, `FailedSwapAndUnwrap`, `WithdrawnFundsToSourceChain`, `NewUnwrap`, `PaidUnwrap`, `NewWrapAndSwapV2`, `RequestFilledV2`, `FillerRefunded`, `FailedWrapAndSwapV2`, `RefundProcessed`, `MintByLocker`, `BurnByLocker` and teleBTC `Burn` were also seen in live logs (below).
+- **Topic0 / selectors:** recomputed as `keccak256(canonical signature)` from the verified ABIs on Blockscout: `EthConnectorLogic` (Ethereum implementation `0xe5a2357b7e6f2fd1f21d6aa7880084c2cf828548`; the new filler-path events and functions from the implementation `0x756B770b38c03B0A249Aef5FE6e06F9B34a3D431`, verified 2026-10-04, and the Polygon `PolyConnectorLogic` `0x58733ad7414d01aB28c6845E2B4872bCC10a4E42`), `PolyConnectorLogic`, `CcTransferRouterLogic`, `CcExchangeRouterLogic`, `BurnRouterLogic`, `LockersManagerLogic`, `BitcoinRelay` and `TeleBTCLogic` (the Polygon implementations of §5). The table rows were generated from those ABIs with their parameter names. `MsgSent`, `MsgReceived`, `NewSwapAndUnwrap`, `NewSwapAndUnwrapUniversal`, `FailedSwapAndUnwrap`, `WithdrawnFundsToSourceChain`, `NewUnwrap`, `PaidUnwrap`, `NewWrapAndSwapV2`, `RequestFilledV2`, `FillerRefunded`, `FailedWrapAndSwapV2`, `RefundProcessed`, `MintByLocker`, `BurnByLocker` and teleBTC `Burn` were also seen in live logs (below).
 - **Addresses:** from `TeleportDAO/teleswap-cli` `assets/config/contracts.json` (connectors per chain; Polygon and BSC `contracts` blocks), the teleBTC addresses from the tokens that the BurnRouters move, and `eth_getCode` on all eight chains. Implementations and admins read from the EIP-1967 slots; `owner()`, `across()`, `acrossAdmin()`, `currChainId()` read live; `eth_getCode` of the admin, owner and `acrossAdmin` = `0x` (EOAs).
 - **Activity, pinned 12-hour window 2026-09-28 00:00–12:00 UTC** (all logs of each address):
   - EthConnector: Ethereum 135 `MsgSent`; Base 11 `MsgSent`; Arbitrum 13 `MsgSent`; Optimism 0 logs. No `MsgReceived` or `WrappedAndSwappedToDestChain` on any EthConnector.
@@ -412,5 +448,5 @@ How every constant was verified (2026-09-29):
 Authoritative sources:
 - [TeleportDAO/teleswap-cli `assets/config/contracts.json`](https://github.com/TeleportDAO/teleswap-cli/blob/HEAD/assets/config/contracts.json) — official addresses per chain.
 - [TeleportDAO/btc-evm-bridge-contracts](https://github.com/TeleportDAO/btc-evm-bridge-contracts) — BitcoinRelay source and deployments.
-- Verified sources — [EthConnectorLogic (Ethereum)](https://eth.blockscout.com/address/0xe5a2357b7e6f2fd1f21d6aa7880084c2cf828548) · [PolyConnectorProxy (Polygon)](https://polygon.blockscout.com/address/0xE0166434A2ad67536B5FdAFCc9a6C1B41CC5e085) · [BurnRouterProxy (Polygon)](https://polygon.blockscout.com/address/0x0009876C47F6b2f0BCB41eb9729736757486c75f) · [teleBTC (Polygon)](https://polygon.blockscout.com/address/0x3BF668Fe1ec79a84cA8481CEAD5dbb30d61cC685).
+- Verified sources — [EthConnectorLogic (Ethereum)](https://eth.blockscout.com/address/0x756b770b38c03b0a249aef5fe6e06f9b34a3d431) · [previous EthConnectorLogic](https://eth.blockscout.com/address/0xe5a2357b7e6f2fd1f21d6aa7880084c2cf828548) · [PolyConnectorLogic (Polygon)](https://polygon.blockscout.com/address/0x58733ad7414d01ab28c6845e2b4872bcc10a4e42) · [PolyConnectorProxy (Polygon)](https://polygon.blockscout.com/address/0xE0166434A2ad67536B5FdAFCc9a6C1B41CC5e085) · [BurnRouterProxy (Polygon)](https://polygon.blockscout.com/address/0x0009876C47F6b2f0BCB41eb9729736757486c75f) · [teleBTC (Polygon)](https://polygon.blockscout.com/address/0x3BF668Fe1ec79a84cA8481CEAD5dbb30d61cC685).
 - Explorers — [Etherscan connector](https://etherscan.io/address/0xfa1b28052bd8087b1cf64ee9429feb324e95b0ff) · [BscScan PolyConnector](https://bscscan.com/address/0x9b95dc17acfd8e028f192971165ae7be76e6a954).

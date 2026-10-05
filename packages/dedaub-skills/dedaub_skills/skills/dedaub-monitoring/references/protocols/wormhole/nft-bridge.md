@@ -1,4 +1,4 @@
-# Wormhole NFT Bridge — Topics, Selectors, Addresses (Ethereum, Base, Arbitrum, Optimism, Polygon, BNB, Avalanche; NOT Robinhood Chain)
+# Wormhole NFT Bridge — Topics, Selectors, Addresses (Ethereum, Base, Arbitrum, Optimism, Polygon, BNB, Avalanche; NOT Robinhood Chain, NOT Arc)
 
 **Status:** verified on 2026-09-29 against live RPC on all eight chains, the canonical `wormhole-foundation/wormhole` repo (`ethereum/contracts/nft/`) and `core/base/src/constants/contracts/nftBridge.ts` of `wormhole-foundation/wormhole-sdk-ts`. Topics and selectors recomputed as `keccak256(signature)`; addresses existence-checked with `eth_getCode`; implementations read from the EIP-1967 slot.
 **Scope:** the Wormhole **NFT Bridge** (ERC-721 lock-and-mint over Wormhole messages) and its wrapped NFT contracts. It is deployed on **seven of the eight target chains; Robinhood Chain (4663) has none**. Topics and selectors are chain-agnostic; addresses are network-specific. The NFT Bridge is not on the current docs contract-address page; the SDK constants are its address source.
@@ -79,6 +79,8 @@ The NFT Bridge follows the Token Bridge model for ERC-721 tokens. An NFT keeps i
 
 **Robinhood Chain (4663):** no NFT Bridge. No entry in `nftBridge.ts`; `eth_getCode` = `0x` at the Ethereum NFT Bridge address.
 
+**Arc (5042):** no NFT Bridge. No entry in `nftBridge.ts`; `eth_getCode` = `0x` at the Ethereum NFT Bridge address (2026-10-05).
+
 ---
 
 ## 5. Cross-chain summary
@@ -137,7 +139,7 @@ OP_NFT_BRIDGE                 = '\xfe8cd454b4a1ca468b57d79c0cc77ef5b6f64585'
 POLY_NFT_BRIDGE               = '\x90bbd86a6fe93d3bc3ed6335935447e75fab7fcf'
 BNB_NFT_BRIDGE                = '\x5a58505a96d1dbf8df91cb21b54419fc36e93fde'
 AVAX_NFT_BRIDGE               = '\xf7b6737ca9c4e08ae573f75a97b73d7a813f5de5'
--- Robinhood (4663): no NFT Bridge
+-- Robinhood (4663) and Arc (5042): no NFT Bridge
 ```
 
 ---

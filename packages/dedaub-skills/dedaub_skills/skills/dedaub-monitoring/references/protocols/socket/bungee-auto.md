@@ -1,4 +1,4 @@
-# Bungee Auto — Topics, Selectors, Addresses (Ethereum + Base + Arbitrum + Optimism + Polygon + BNB + Avalanche; not Robinhood Chain)
+# Bungee Auto — Topics, Selectors, Addresses (Ethereum + Base + Arbitrum + Optimism + Polygon + BNB + Avalanche; not Robinhood Chain, not Arc)
 
 **Status:** verified on 2026-09-29 against live RPC on all eight chains, the `SocketDotTech/bungee-contracts-public` deployment files (`deployments/<network>.json`) and the explorer-verified sources of BungeeInbox, BungeeGateway and the request routers. Topics and selectors recomputed as `keccak256(signature)` from the verified ABIs; addresses existence-checked with `eth_getCode`.
 **Scope:** the Bungee Auto contracts (the solver-auction generation of Bungee, before the OpenRouter of [openrouter.md](openrouter.md)): the BungeeInbox for on-chain requests, the per-chain BungeeGateway where solvers extract, fulfil and settle requests, the request implementations and routers, and the Switchboard messaging that settles across chains. Topics and selectors are chain-agnostic; addresses are network-specific.
@@ -309,6 +309,7 @@ From `deployments/avalanche.json`; existence-checked with `eth_getCode` on 2026-
 | BNB Smart Chain | 56 | `0x5E0f8E7337C8955D2124b8e85Ca74aF884b3E124` | `0x9aF2b913679049c966b77934af4CbE7Bb36Cf9D3` | 0 / 0 |
 | Avalanche C-Chain | 43114 | `0x5E0f8E7337C8955D2124b8e85Ca74aF884b3E124` | `0xfe191a43dc4F3d57d7D942717D259005967e4e0D` | 0 / 0 |
 | Robinhood Chain | 4663 | — (no code) | — | not deployed |
+| Arc | 5042 | — (no code, 2026-10-05) | — | not deployed |
 
 **Robinhood Chain (4663): no Bungee Auto deployment.** No `deployments/robinhood.json` exists, and `eth_getCode` returns `0x` at the addresses that the other chains share (BungeeInbox, RFQ router, SocketDeployFactory, staked routers, CalldataExecutor).
 
