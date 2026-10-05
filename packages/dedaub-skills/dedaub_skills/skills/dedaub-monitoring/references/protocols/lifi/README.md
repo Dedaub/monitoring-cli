@@ -1,14 +1,14 @@
-# LI.FI — reference index (Ethereum + Base + Arbitrum + Optimism + Polygon + BNB + Avalanche + Robinhood Chain)
+# LI.FI — reference index (Ethereum + Base + Arbitrum + Optimism + Polygon + BNB + Avalanche + Robinhood Chain + Arc)
 
 **LI.FI** is a bridge and DEX aggregator. One contract, the **LiFiDiamond** (EIP-2535), takes the user's funds, runs optional swaps, takes fees and calls an underlying bridge (Across, Relay, Mayan, NEAR Intents, Stargate, deBridge DLN, Glacis, Gas.zip, CCTP through Polymer, and others) in the same transaction. LI.FI runs no bridge of its own: the value crosses chains through the underlying bridge, whose own reference doc covers the second leg.
 
-**Status:** verified on 2026-09-29 against live RPC on all eight chains, the canonical `lifinance/contracts` repository (`deployments/*.json`, `src/`) and the explorer-verified sources. Topics and selectors recomputed as `keccak256(signature)`; every address existence-checked with `eth_getCode`; the live facet table of every diamond read with `facets()`.
+**Status:** verified on 2026-09-29 against live RPC on all eight chains (Arc added 2026-10-05), the canonical `lifinance/contracts` repository (`deployments/*.json`, `src/`) and the explorer-verified sources. Topics and selectors recomputed as `keccak256(signature)`; every address existence-checked with `eth_getCode`; the live facet table of every diamond read with `facets()`.
 
-| File | Covers | Pattern | Chains (of the 8) |
+| File | Covers | Pattern | Chains (of the 9) |
 |------|--------|---------|-------------------|
-| [diamond.md](diamond.md) | The LiFiDiamond: source-leg events (`LiFiTransferStarted` and its companions), same-chain swap events, admin and security events, admin and swap selectors, the diamond, owner timelock and pauser on each chain | EIP-2535 diamond, owned by a 3-hour timelock | all 8 |
-| [facets.md](facets.md) | The bridge facets: entry selectors, data structs, facet addresses per chain, measured `bridge` strings | Facets behind the diamond | all 8 |
-| [periphery.md](periphery.md) | Destination side (Executor and the bridge receivers), Permit2Proxy, ERC20Proxy, fee contracts, utilities, LiFiTimelockController | Immutable contracts, per-chain addresses | all 8 |
+| [diamond.md](diamond.md) | The LiFiDiamond: source-leg events (`LiFiTransferStarted` and its companions), same-chain swap events, admin and security events, admin and swap selectors, the diamond, owner timelock and pauser on each chain | EIP-2535 diamond, owned by a 3-hour timelock | all 9 |
+| [facets.md](facets.md) | The bridge facets: entry selectors, data structs, facet addresses per chain, measured `bridge` strings | Facets behind the diamond | all 9 |
+| [periphery.md](periphery.md) | Destination side (Executor and the bridge receivers), Permit2Proxy, ERC20Proxy, fee contracts, utilities, LiFiTimelockController | Immutable contracts, per-chain addresses | all 9 |
 
 ## The flow of one transfer
 
@@ -29,7 +29,7 @@
 
 ## Chain and domain ids
 
-`destinationChainId` in `LiFiTransferStarted` is the EVM chain id for EVM chains: Ethereum 1, Base 8453, Arbitrum 42161, Optimism 10, Polygon 137, BNB 56, Avalanche 43114, Robinhood Chain 4663. LI.FI uses its own ids for other chains: Solana `1151111081099710`, Bitcoin `20000000000001`, Bitcoin Cash `20000000000002`, Litecoin `20000000000003`, Dogecoin `20000000000004`, Sui `9270000000000000`, Aptos `9271000000000010`, Tron `1885080386571452`, Stellar `1201081091099710`, HyperCore `1337`.
+`destinationChainId` in `LiFiTransferStarted` is the EVM chain id for EVM chains: Ethereum 1, Base 8453, Arbitrum 42161, Optimism 10, Polygon 137, BNB 56, Avalanche 43114, Robinhood Chain 4663, Arc 5042. LI.FI uses its own ids for other chains: Solana `1151111081099710`, Bitcoin `20000000000001`, Bitcoin Cash `20000000000002`, Litecoin `20000000000003`, Dogecoin `20000000000004`, Sui `9270000000000000`, Aptos `9271000000000010`, Tron `1885080386571452`, Stellar `1201081091099710`, HyperCore `1337`.
 
 ## Addresses at a glance
 
@@ -43,8 +43,9 @@
 | BNB Smart Chain | 56 | `0x1231DEB6f5749EF6cE6943a275A1D3E7486F4EaE` | `0x2dfaDAB8266483beD9Fd9A292Ce56596a2D1378D` | `0x33b255b5db44A78c34381f89f1a454bc0Ef49871` | `0x1493e7B8d4DfADe0a178dAD9335470337A3a219A` | `0x55117ECcC867Db72aEb25f728CCf57C3C3B4faEe` |
 | Avalanche C-Chain | 43114 | `0x1231DEB6f5749EF6cE6943a275A1D3E7486F4EaE` | `0x2dfaDAB8266483beD9Fd9A292Ce56596a2D1378D` | — | `0x1493e7B8d4DfADe0a178dAD9335470337A3a219A` | `0x5604A94A3438C3074EFFF803fab14B7244fe4E29` |
 | Robinhood Chain | 4663 | `0xB477751B76CF82d00a686A1232f5fCD772414Af3` | `0x464fC28B9CbC1781286c8626B6E925275c8C14F1` | `0x90dd81bD07763f39dF31D0089B61520461557D71` | — | `0x6E9Beb6997dAE04122f1f8f8980f3dc8225443F3` |
+| Arc | 5042 | `0xA4072583658Fae592A3506A42431cb6316a8d40b` | `0x7cfA0f3A811AEb3aC454F344aacaBA16aaFe828c` | `0x5C6295F5CB620DBAC1A3C41397dee25db79ceBa5` | — | `0x50Ad2949DBCF80B4019fA9cA01Cc38AB7cE2ED8C` |
 
-Every contract of the table has code on its chain (checked with `eth_getCode` on 2026-09-29). **The diamond address `0x1231DEB6f5749EF6cE6943a275A1D3E7486F4EaE` is shared by seven chains; Robinhood Chain uses `0xB477751B76CF82d00a686A1232f5fCD772414Af3`.** On Ethereum that second address holds an unrelated LI.FI recovery contract (RobinhoodEthRecovery), not a diamond.
+Every contract of the table has code on its chain (checked with `eth_getCode` on 2026-09-29; Arc on 2026-10-05). **The diamond address `0x1231DEB6f5749EF6cE6943a275A1D3E7486F4EaE` is shared by seven chains; Robinhood Chain uses `0xB477751B76CF82d00a686A1232f5fCD772414Af3` and Arc uses `0xA4072583658Fae592A3506A42431cb6316a8d40b`.** On Ethereum that second address holds an unrelated LI.FI recovery contract (RobinhoodEthRecovery), not a diamond.
 
 ## Cross-cutting facts
 
@@ -54,3 +55,4 @@ Every contract of the table has code on its chain (checked with `eth_getCode` on
 4. **The upgrade path is slow, the pause path is fast.** Facet changes go through the LiFiTimelockController (10,800 s minimum delay: watch `CallScheduled`). The pauser wallet `0xf9d8ba34a51750cf6abfa9de7acd37f182081a4a` can pause the diamond or remove a facet at once (`EmergencyPaused`, `EmergencyFacetRemoved`).
 5. **Topics change with facet versions.** `NEARIntentsBridgeStarted` changed from 7 to 8 fields on 2026-09-29 ([diamond.md](diamond.md) §1.2). Index both versions.
 6. **Robinhood Chain is live.** Its diamond emitted 3,139 `LiFiTransferStarted` logs in the pinned window 2026-09-28 00:00–12:00 UTC, and Robinhood Chain (4663) was the most frequent destination of the Ethereum and Base diamonds in that window ([facets.md](facets.md) §0).
+7. **Arc is live.** Its diamond emitted 133 `LiFiTransferStarted` logs in blocks 24,335,947–24,375,947 (2026-10-05 04:48–10:26 UTC) ([diamond.md](diamond.md) §10a).

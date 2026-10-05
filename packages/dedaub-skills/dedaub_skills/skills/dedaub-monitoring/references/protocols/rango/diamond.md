@@ -1,13 +1,13 @@
-# RangoDiamond — Topics, Selectors, Addresses (Ethereum + Base + Arbitrum + Optimism + Polygon + BNB + Avalanche + Robinhood Chain)
+# RangoDiamond — Topics, Selectors, Addresses (Ethereum + Base + Arbitrum + Optimism + Polygon + BNB + Avalanche + Robinhood Chain + Arc)
 
-**Status:** verified on 2026-09-29 against live RPC on all eight chains, `rango-exchange/rango-contracts-v2` (`contracts/rango/RangoDiamond.sol`, `contracts/facets/`, `contracts/libraries/LibSwapper*.sol`, `contracts/interfaces/IRango*.sol`), the Rango docs (architecture, deployment addresses) and the explorer-verified sources of the live facets. The facet table of every diamond was read with `facets()`, and every live selector was matched to a verified facet ABI or to the repository source. Topics and selectors recomputed as `keccak256(signature)`; addresses existence-checked with `eth_getCode`.
-**Scope:** the RangoDiamond (EIP-2535) at `0x69460570c93f9DE5E2edbC3052bf10125f0Ca22d` on all eight chains: its source-leg and swap events, its per-bridge events, its admin events, the entry selectors of every live facet, and its owner and facet set per chain. The destination middlewares are in [middlewares.md](middlewares.md). Topics and selectors are chain-agnostic; addresses are network-specific.
+**Status:** verified on 2026-09-29 against live RPC on the eight original chains (Arc added on 2026-10-05 with the same checks), `rango-exchange/rango-contracts-v2` (`contracts/rango/RangoDiamond.sol`, `contracts/facets/`, `contracts/libraries/LibSwapper*.sol`, `contracts/interfaces/IRango*.sol`), the Rango docs (architecture, deployment addresses) and the explorer-verified sources of the live facets. The facet table of every diamond was read with `facets()`, and every live selector was matched to a verified facet ABI or to the repository source. Topics and selectors recomputed as `keccak256(signature)`; addresses existence-checked with `eth_getCode`.
+**Scope:** the RangoDiamond (EIP-2535) at `0x69460570c93f9DE5E2edbC3052bf10125f0Ca22d` on all nine chains: its source-leg and swap events, its per-bridge events, its admin events, the entry selectors of every live facet, and its owner and facet set per chain. The destination middlewares are in [middlewares.md](middlewares.md). Topics and selectors are chain-agnostic; addresses are network-specific.
 
 The user calls the diamond. A bridge facet takes the user's tokens (ERC-20 `Transfer` user → diamond, or native `msg.value`), pays fees (`FeeInfo`, `SendToken` to the fee receivers), runs optional swaps (`CallResult`, `RangoSwap`), and calls the underlying bridge in the same transaction. The diamond then emits `RangoBridgeInitiated`, the source-leg record of the route. All facet events come from the diamond address (facets run by `DELEGATECALL`).
 
 Three facts to know before indexing:
 
-1. **Same address on all eight chains, one runtime code (5,208 bytes), a different owner per chain, and a different facet set per chain** (§3–§11). Robinhood Chain has only 7 facets.
+1. **Same address on all nine chains, one runtime code (5,208 bytes), a different owner per chain, and a different facet set per chain** (§3–§12). Robinhood Chain and Arc have only 7 facets (the same seven facet addresses).
 2. **`RangoBridgeInitiated` indexes `requestId`, `bridgeId` and `dAppTag`.** `bridgeId` names the bridge only for values 0–23 (`IRango.BridgeType`); the `genericBridge` facet takes any `bridgeId` from the API (measured: 51–60).
 3. **There is no diamond event on the destination chain.** Routes with an interchain message end at a middleware with `RangoBridgeCompleted` (same `requestId`); other routes end with the bridge's own payout.
 
@@ -17,13 +17,13 @@ Three facts to know before indexing:
 
 | Contract | Chains | Role | Upgradeable? |
 |----------|--------|------|--------------|
-| **RangoDiamond** `0x69460570c93f9DE5E2edbC3052bf10125f0Ca22d` | all 8 | Entry point; emits every facet event. | Yes: `diamondCut`, owner only (EIP-2535, not EIP-1967). |
-| Core facets (DiamondCut, DiamondLoupe, Ownership, RangoAccessManager) | all 8 | Upgrade, introspection, ownership, whitelist of DEX / bridge targets and pause. | Replaced by `diamondCut`. |
-| RangoSwapperFacet | all 8 | Same-chain swaps (`onChainSwaps`), refunds, fee receiver. | Replaced by `diamondCut`. |
-| RangoGenericBridgeFacet | all 8 | `genericBridge`: runs whitelisted calls to any bridge target; `bridgeId` comes from the request. | Replaced by `diamondCut`. |
+| **RangoDiamond** `0x69460570c93f9DE5E2edbC3052bf10125f0Ca22d` | all 9 | Entry point; emits every facet event. | Yes: `diamondCut`, owner only (EIP-2535, not EIP-1967). |
+| Core facets (DiamondCut, DiamondLoupe, Ownership, RangoAccessManager) | all 9 | Upgrade, introspection, ownership, whitelist of DEX / bridge targets and pause. | Replaced by `diamondCut`. |
+| RangoSwapperFacet | all 9 | Same-chain swaps (`onChainSwaps`), refunds, fee receiver. | Replaced by `diamondCut`. |
+| RangoGenericBridgeFacet | all 9 | `genericBridge`: runs whitelisted calls to any bridge target; `bridgeId` comes from the request. | Replaced by `diamondCut`. |
 | Bridge facets | per chain | Across, AllBridge, Arbitrum bridge, cBridge, CCTP, ChainFlip, Connext, deBridge, Hyphen, Multichain, Nitro, Optimism bridge, Orbiter, Poly, Satellite (Axelar), Stargate, Stargate V2, Swft, Symbiosis, Synapse, THORChain, Voyager, Wormhole, YBridge. | Replaced by `diamondCut`. |
 
-Facets live on 2026-09-29 (loupe `facets()`): Ethereum 42 / 152, Base 26 / 105, Arbitrum 38 / 141, Optimism 36 / 135, Polygon 36 / 135, BNB 36 / 126, Avalanche 34 / 116, Robinhood Chain 7 / 34 (facets / selectors).
+Facets live on 2026-09-29 (loupe `facets()`): Ethereum 42 / 152, Base 26 / 105, Arbitrum 38 / 141, Optimism 36 / 135, Polygon 36 / 135, BNB 36 / 126, Avalanche 34 / 116, Robinhood Chain 7 / 34, Arc 7 / 34 (2026-10-05) (facets / selectors).
 
 ---
 
@@ -356,7 +356,20 @@ Checked with `eth_getCode` on 2026-09-29.
 
 ---
 
-## 11. Cross-chain summary
+## 11. Addresses — Arc (chain ID 5042)
+
+Checked with `eth_getCode` on `https://rpc.mainnet.arc.io` on 2026-10-05.
+
+| Role | Address | One-liner |
+|------|---------|-----------|
+| **RangoDiamond** | `0x69460570c93f9DE5E2edbC3052bf10125f0Ca22d` | 5,208-byte runtime, same code hash as Ethereum. 7 facets / 34 selectors live, the same seven facet addresses as Robinhood Chain. EIP-1967 implementation slot empty. |
+| Owner | `0xB1D330f5f1c467B76d5DB02315fEAA17CAbCBD01` | `owner()` of the diamond; 123-byte contract: a Safe 1.5.0 proxy, 3-of-5 (`getThreshold()`, `getOwners()`, `VERSION()` read on 2026-10-05). |
+
+In ~40,000 Arc blocks (about 5.7 h) to 2026-10-05 the diamond emitted `RangoBridgeInitiated` 3, `RangoSwap` 5, `CallResult` 7, `SendToken` 13, `FeeInfo` 3 and `FeeInfo` (old) 5 (`eth_getLogs`).
+
+---
+
+## 12. Cross-chain summary
 
 | Chain | ID | RangoDiamond | Owner | Facets / selectors |
 |-------|----|--------------|-------|--------------------|
@@ -368,21 +381,22 @@ Checked with `eth_getCode` on 2026-09-29.
 | BNB Smart Chain | 56 | `0x69460570c93f9DE5E2edbC3052bf10125f0Ca22d` | `0x4BE54063df659898625fC48C8161432CDD793E9b` | 36 / 126 |
 | Avalanche C-Chain | 43114 | `0x69460570c93f9DE5E2edbC3052bf10125f0Ca22d` | `0xFd8AB8F12c17E0C4f2d701931Bc4825626482bc2` | 34 / 116 |
 | Robinhood Chain | 4663 | `0x69460570c93f9DE5E2edbC3052bf10125f0Ca22d` | `0x5C449b48Ec0f94B63CF1FF828D19A8C6758EB4ad` | 7 / 34 |
+| Arc | 5042 | `0x69460570c93f9DE5E2edbC3052bf10125f0Ca22d` | `0xB1D330f5f1c467B76d5DB02315fEAA17CAbCBD01` | 7 / 34 |
 
-The Rango docs list the diamond on Ethereum, Polygon, Optimism, Arbitrum, BNB, Avalanche and Base among other networks. Robinhood Chain is not in that list, but `eth_getCode` shows the same 5,208-byte runtime at `0x69460570c93f9DE5E2edbC3052bf10125f0Ca22d`, the loupe returns 7 facets, and the diamond emitted Rango events there in the pinned window (§15).
+The Rango docs list the diamond on Ethereum, Polygon, Optimism, Arbitrum, BNB, Avalanche and Base among other networks. Robinhood Chain and Arc are not in that list, but `eth_getCode` shows the same 5,208-byte runtime at `0x69460570c93f9DE5E2edbC3052bf10125f0Ca22d` on both, the loupe returns 7 facets on both, and the diamond emitted Rango events on Robinhood Chain in the pinned window (§16) and on Arc on 2026-10-05 (§11).
 
 ---
 
-## 12. Proxies (old & new)
+## 13. Proxies (old & new)
 
 | Contract | Pattern | Detection | Upgrade auth |
 |----------|---------|-----------|--------------|
-| **RangoDiamond** | EIP-2535 diamond | `facets()` returns the facet table; the EIP-1967 implementation slot is empty. Watch `DiamondCut` (topic0 `0x8faa70878671ccd212d20771b795c50af8fd3ff6cf27f4bde57e5d4de0aeb673`). | `owner()` (per chain, §3–§10); two-step transfer (`OwnershipTransferRequested`, `OwnershipTransferred`); `burnOwnership()` exists. |
+| **RangoDiamond** | EIP-2535 diamond | `facets()` returns the facet table; the EIP-1967 implementation slot is empty. Watch `DiamondCut` (topic0 `0x8faa70878671ccd212d20771b795c50af8fd3ff6cf27f4bde57e5d4de0aeb673`). | `owner()` (per chain, §3–§11); two-step transfer (`OwnershipTransferRequested`, `OwnershipTransferred`); `burnOwnership()` exists. |
 | Facets | Plain contracts | Run only through `DELEGATECALL` from the diamond. | Replaced by `diamondCut`. |
 
 ---
 
-## 13. Detection invariants & gotchas
+## 14. Detection invariants & gotchas
 
 1. **Source leg = `RangoBridgeInitiated` at the diamond.** Pair it with the underlying bridge's deposit event in the same transaction for the bridge's own id.
 2. **Non-EVM destinations are encoded in ASCII.** `destinationChainId` `1414680398` = "TRON", `1279348289` = "LANA" (Solana), `4346947` = "BTC", `5461321` = "SUI"; `receiver` then holds the first 20 characters of the destination address as ASCII bytes. In the pinned window 464 of the 842 Ethereum logs and 74 of the 284 Base logs had such an ASCII `receiver`. The full destination address is only in the bridge's own data.
@@ -393,7 +407,7 @@ The Rango docs list the diamond on Ethereum, Polygon, Optimism, Arbitrum, BNB, A
 
 ---
 
-## 14. Quick-copy detection constants (bytea-ready for PG)
+## 15. Quick-copy detection constants (bytea-ready for PG)
 
 ```
 -- ===== Topics (chain-agnostic) =====
@@ -429,7 +443,7 @@ SEL_DIAMOND_CUT                       = '\x1f931c1c'
 SEL_CHANGE_PAUSE_STATE                = '\xd95b3221'
 SEL_TRANSFER_OWNERSHIP                = '\xf2fde38b'
 
--- ===== Addresses (same diamond on all eight chains) =====
+-- ===== Addresses (same diamond on all nine chains) =====
 ETH_RANGO_DIAMOND                     = '\x69460570c93f9de5e2edbc3052bf10125f0ca22d'
 BASE_RANGO_DIAMOND                    = '\x69460570c93f9de5e2edbc3052bf10125f0ca22d'
 ARB_RANGO_DIAMOND                     = '\x69460570c93f9de5e2edbc3052bf10125f0ca22d'
@@ -438,6 +452,7 @@ POLY_RANGO_DIAMOND                    = '\x69460570c93f9de5e2edbc3052bf10125f0ca
 BNB_RANGO_DIAMOND                     = '\x69460570c93f9de5e2edbc3052bf10125f0ca22d'
 AVAX_RANGO_DIAMOND                    = '\x69460570c93f9de5e2edbc3052bf10125f0ca22d'
 RH_RANGO_DIAMOND                      = '\x69460570c93f9de5e2edbc3052bf10125f0ca22d'
+ARC_RANGO_DIAMOND                     = '\x69460570c93f9de5e2edbc3052bf10125f0ca22d'
 ETH_RANGO_OWNER                       = '\xafd5b23f8e84a8b77f01d5f73d5207e28dad71eb'
 BASE_RANGO_OWNER                      = '\xe4a00993c9dee173526a30d417ce5c8f1ef67a3f'
 ARB_RANGO_OWNER                       = '\x741ae1fcf519671cdf467ca9cf764c2492a95cfa'
@@ -446,11 +461,12 @@ POLY_RANGO_OWNER                      = '\xe12989ae0f1d8068af0e8d0cf26f5f8e7b615
 BNB_RANGO_OWNER                       = '\x4be54063df659898625fc48c8161432cdd793e9b'
 AVAX_RANGO_OWNER                      = '\xfd8ab8f12c17e0c4f2d701931bc4825626482bc2'
 RH_RANGO_OWNER                        = '\x5c449b48ec0f94b63cf1ff828d19a8c6758eb4ad'
+ARC_RANGO_OWNER                       = '\xb1d330f5f1c467b76d5db02315feaa17cabcbd01'
 ```
 
 ---
 
-## 15. Verification & sources
+## 16. Verification & sources
 
 - **Topic0 / selectors:** recomputed as `keccak256(canonical signature)` from the explorer-verified ABIs of the live facets; the facets of Robinhood Chain and one BNB facet are not verified on an explorer, and their selectors matched the verified ABIs of the same facets on other chains or the repository source. The loupe `facets()` returned Ethereum 42 facets / 152 selectors, Base 26 facets / 105 selectors, Arbitrum 38 facets / 141 selectors, Optimism 36 facets / 135 selectors, Polygon 36 facets / 135 selectors, BNB 36 facets / 126 selectors, Avalanche 34 facets / 116 selectors, Robinhood Chain 7 facets / 34 selectors.
 - **Addresses:** the diamond from the Rango docs deployment page and from the loupe; owners read with `owner()` on each chain and existence-checked with `eth_getCode`.

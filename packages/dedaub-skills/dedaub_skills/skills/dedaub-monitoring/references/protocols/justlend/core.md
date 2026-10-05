@@ -198,7 +198,7 @@ The canonical JustLend deployment. Addresses below are the official **base58** f
 |------|---------------|---------------|-----------|
 | **Unitroller** (Comptroller proxy) | `TGjYzgCyPobsNS9n6WcbdLVR9dH7mWqFx7` | `0x4a33bf2666f2e75f3d6ad3b9ad316685d5c668d4` | The risk engine. `comptrollerImplementation()` → live impl below; `oracle()` → PriceOracleProxy. Point all market-policy monitors here. |
 | Comptroller (impl — **per docs**) | `TB23wYojvAsSx6gR8ebHiBqwSeABiBMPAr` | `0x0b81cf71fc58313e1b379797cf39afab33d3f7ab` | The impl the docs list — **stale**, see drift note. |
-| Comptroller (impl — **live 2026-06-08**) | `TCtzg2CQsAuLkSxrGjFGbHVwKvv95W9C8e` | `0x201c6c23426f8c1e62fde0c78af9328d62f29628` | Read live from `Unitroller.comptrollerImplementation()` — the rotated, currently-active logic. |
+| Comptroller (impl — **live 2026-10-05**) | `TETm1bMHUm9135d5NmUgfkvqZQ4bk6DgWs` | `0x3146deb8bb8edfddc22f85e9a0e752edb7c8b878` | Read live from `Unitroller.comptrollerImplementation()` — the rotated, currently-active logic. Previous impl `TCtzg2CQsAuLkSxrGjFGbHVwKvv95W9C8e` / `0x201c6c23…29628` (live 2026-06-08) is retired. |
 | **PriceOracleProxy** | `TCKp2AzuhzV4B4Ahx1ej4mvQgHZ1kH7F7k` | `0x19d5cda987533693ffbd7a5eb77acd209042acbb` | `getUnderlyingPrice(jToken)`; forwards to PriceOracle. |
 | PriceOracle (impl) | `TMiNCmvD3zdsv6mk7niBU6NPBzVNjYMQTV` | `0x80d2f390957701fb7c80de8767203ea1673f83db` | Underlying USD price source. |
 
@@ -255,7 +255,7 @@ Legacy/deprecated markets (still returned by `getAllMarkets()` — distinguish b
 
 | Contract | Pattern | How to read the impl | Detection |
 |----------|---------|----------------------|-----------|
-| **Unitroller** (Comptroller) | **Compound Unitroller** — NOT EIP-1967. Impl in **storage slot 2** (`comptrollerImplementation`), pending in slot 3; `admin` slot 0, `pendingAdmin` slot 1. | `comptrollerImplementation()` (`0xbb82aa5e`). EIP-1967 impl slot is **empty**. | live read returns `0x201c6c23…29628` (rotated from the docs' `0x0b81cf71…`). |
+| **Unitroller** (Comptroller) | **Compound Unitroller** — NOT EIP-1967. Impl in **storage slot 2** (`comptrollerImplementation`), pending in slot 3; `admin` slot 0, `pendingAdmin` slot 1. | `comptrollerImplementation()` (`0xbb82aa5e`). EIP-1967 impl slot is **empty**. | live read returns `0x3146deb8…b878` (2026-10-05; rotated from `0x201c6c23…29628` at 2026-06-08 and from the docs' `0x0b81cf71…`). |
 | **jToken** (CErc20Delegator) | **Compound delegator** — NOT EIP-1967. `implementation` is a plain storage var; upgraded via `_setImplementation(address,bool,bytes)`, emits `NewImplementation`. | `implementation()` (`0x5c60da1b`). | jUSDT live `implementation()` = `0x761f2a87105fef1e84fd5279e333e69f1e49cc58` (`TLjn59xNM7VEK6VZ3VQ8Y1ipxsdsFka5wZ`); `comptroller()` = Unitroller ✓. |
 | **PriceOracleProxy** | proxy → `PriceOracle` impl | call the proxy; it forwards. | — |
 | **GovernorBravoDelegator** | **Compound GovernorBravo delegator** — NOT EIP-1967 (`implementation` storage var). | `implementation()` getter. | — |
@@ -281,7 +281,7 @@ EIP-1967 impl slot 0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d3
 6. **No supply/borrow caps.** This fork uses the older `maxAssets` (max # markets a user can enter; `NewMaxAssets` `0x7093cf1e…`), not Compound's `borrowCaps`/`NewBorrowCap`. Risk-cap monitors must target collateral factor / pause events instead.
 7. **Per-block accrual** (`accrualBlockNumber()`/`borrowRatePerBlock()`/`supplyRatePerBlock()`) — unlike timestamp forks (Moonwell). APR uses TRON's ~3 s block time × blocks/year.
 8. **`Mint`/`Transfer`/`Approval` topic0s collide** with UniV2 / every ERC-20 — always filter by emitter (a jToken).
-9. **Comptroller impl drifts from docs.** Live `comptrollerImplementation()` = `0x201c6c23…29628`, **not** the docs' `0x0b81cf71…f7ab`. Read the impl live; treat the docs address as a snapshot.
+9. **Comptroller impl drifts from docs.** Live `comptrollerImplementation()` = `0x3146deb8…b878` (2026-10-05; it was `0x201c6c23…29628` on 2026-06-08), **not** the docs' `0x0b81cf71…f7ab`. Read the impl live; treat the docs address as a snapshot.
 10. **Proxies are Compound delegators, not EIP-1967.** EIP-1967 impl slot is empty on the Unitroller and jTokens; use `comptrollerImplementation()` / `implementation()` (§7).
 11. **jTRX is the native-TRX market** — payable `mint()`/`repayBorrow()`/`liquidateBorrow(address,address)` overloads, no `underlying()`. Distinguish from TRC-20 jTokens.
 12. **Markets are enumerated, not derived** — each jToken is a separately-deployed `CErc20Delegator` (no CREATE2 salt). Read `getAllMarkets()`; the array retains deprecated `*OLD`/`jWBTT` markets.
@@ -365,7 +365,7 @@ SEL_GET_UNDERLYING_PRICE     = '\xfc57d4df'
 
 -- ===== Addresses (off-target TRON; EVM-form hash — EMPTY on all 7 EVM targets) =====
 TRON_UNITROLLER              = '\x4a33bf2666f2e75f3d6ad3b9ad316685d5c668d4'  -- TGjYzgCyPobsNS9n6WcbdLVR9dH7mWqFx7
-TRON_COMPTROLLER_IMPL_LIVE   = '\x201c6c23426f8c1e62fde0c78af9328d62f29628'  -- TCtzg2CQsAuLkSxrGjFGbHVwKvv95W9C8e (live)
+TRON_COMPTROLLER_IMPL_LIVE   = '\x3146deb8bb8edfddc22f85e9a0e752edb7c8b878'  -- TETm1bMHUm9135d5NmUgfkvqZQ4bk6DgWs (live 2026-10-05; prior 0x201c6c23…)
 TRON_COMPTROLLER_IMPL_DOCS   = '\x0b81cf71fc58313e1b379797cf39afab33d3f7ab'  -- TB23wYojvAsSx6gR8ebHiBqwSeABiBMPAr (stale)
 TRON_PRICE_ORACLE_PROXY      = '\x19d5cda987533693ffbd7a5eb77acd209042acbb'  -- TCKp2AzuhzV4B4Ahx1ej4mvQgHZ1kH7F7k
 TRON_JST                     = '\x18fd0626daf3af02389aef3ed87db9c33f638ffa'  -- TCFLL5dx5ZJdKnWuesXxi1VPwjLVmWZZy9
@@ -391,7 +391,7 @@ How constants in this doc were verified (2026-06-08):
 - **Reward-model absence:** `contracts/Comptroller.sol` defines **no** `claimComp`/`compSpeeds`/`DistributedSupplierComp`/`MarketComped` and the docs confirm JST mining is an off-core, frozen-vesting distribution — recorded as a headline gotcha.
 - **Addresses:** ground truth = `docs.justlend.org` Deployed Contracts + `justlend/justlend-protocol`. Every base58 address checksum-verified locally and converted to its EVM-form 20-byte hash. The TRON addresses are **off-target reference only** (TRON is not an `eth_*`-RPC EVM target here).
 - **Absence on the 7 EVM targets:** `eth_getCode` for the JustLend Unitroller, Comptroller impl, jTRX and jUSDT literals returned `0x` on **all of** Ethereum, Base, BNB, Avalanche, Arbitrum, Optimism, Polygon (publicnode RPCs) — 28 checks, 28 empty.
-- **Live TRON proxy wiring (TronGrid `triggerconstantcontract`):** Unitroller `comptrollerImplementation()` → `0x201c6c23…29628` (rotated from the docs' `0x0b81cf71…`, recorded as drift); jUSDT `implementation()` → `0x761f2a87…cc58` (Compound delegator pattern, not EIP-1967); jUSDT `comptroller()` → the Unitroller `0x4a33bf26…668d4` ✓.
+- **Live TRON proxy wiring (TronGrid `triggerconstantcontract`):** Unitroller `comptrollerImplementation()` → `0x3146deb8…b878` on 2026-10-05 (it was `0x201c6c23…29628` on 2026-06-08; the docs list `0x0b81cf71…`, recorded as drift); jUSDT `implementation()` → `0x761f2a87…cc58` (Compound delegator pattern, not EIP-1967); jUSDT `comptroller()` → the Unitroller `0x4a33bf26…668d4` ✓.
 
 Authoritative sources:
 - [`justlend/justlend-protocol`](https://github.com/justlend/justlend-protocol) — Compound-V2-fork contracts (`CToken`/`CErc20`/`CEther`/`Comptroller`/`Unitroller`, `Governance/WJST`, `Timelock`, `PriceOracle`); fork ancestor [`compound-finance/compound-protocol`](https://github.com/compound-finance/compound-protocol).

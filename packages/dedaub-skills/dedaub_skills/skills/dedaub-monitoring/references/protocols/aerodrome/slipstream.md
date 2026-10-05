@@ -51,17 +51,33 @@
 
 > ✓ = on-chain verified this run. Shared ve(3,3) governance (Voter/VotingEscrow/AERO/VELO): see [`amm.md`](amm.md).
 
+**Several CL factories are live at the same time on each chain.** Each Slipstream deployment generation has its own CLFactory, NFPM and SwapRouter; all of them point at the same Voter, all keep creating pools, and pools of every generation keep trading. Watch **every** factory below, not only the first one. (Re-checked 2026-10-05: `eth_getCode`, `voter()`, `allPoolsLength()`, NFPM `symbol()`, router `factory()`, and `PoolCreated` counts from indexed chain data.)
+
 ### Aerodrome Slipstream — Base (chain ID 8453)
 ```
-0x5e7BB104d84c7CB9B682AaC2F3d509f5F406809A -> CLFactory (voter()→Aerodrome Voter ✓)
+-- Initial deployment (2024-05)
+0x5e7BB104d84c7CB9B682AaC2F3d509f5F406809A -> CLFactory (voter()→Aerodrome Voter ✓; 3,650 pools; last PoolCreated 2026-10-04)
 0x827922686190790b37229fd06084350E74485b72 -> NonfungiblePositionManager (symbol "AERO-CL-POS" ✓)
 0xBE6D8f0d05cC4be24d5167a3eF062215bE6D18a5 -> CL SwapRouter (factory()→CLFactory ✓)
+-- Gauge Caps deployment (first PoolCreated 2025-10-27)
+0xaDe65c38CD4849aDBA595a4323a8C7DdfE89716a -> CLFactory (voter()→Aerodrome Voter ✓; 2,260 pools; last PoolCreated 2026-09-30)
+0xa990C6a764b73BF43cee5Bb40339c3322FB9D55F -> NonfungiblePositionManager (symbol "AERO-CL-POS" ✓)
+0xcbBb8035cAc7D4B3Ca7aBb74cF7BdF900215Ce0D -> CL SwapRouter (factory()→this CLFactory ✓)
+-- Gauges V3 deployment (first PoolCreated 2026-04-08; most active)
+0xf8f2eB4940CFE7d13603DDDD87f123820Fc061Ef -> CLFactory (voter()→Aerodrome Voter ✓; 3,227 pools; last PoolCreated 2026-10-05)
+0xe1f8cd9AC4e4A65F54f38a5CdAfCA44f6dD68b53 -> NonfungiblePositionManager (symbol "AERO-CL-POS" ✓)
+0x698Cb2b6dd822994581fEa6eA4Fc755d1363A92F -> CL SwapRouter (factory()→this CLFactory ✓)
 ```
 
 ### Velodrome Slipstream — Optimism (chain ID 10)
 ```
-0xCc0bDDB707055e04e497aB22a59c2aF4391cd12F -> CLFactory (voter()→Velodrome Voter ✓)
+-- Initial deployment
+0xCc0bDDB707055e04e497aB22a59c2aF4391cd12F -> CLFactory (voter()→Velodrome Voter ✓; 136 pools; last log 2026-09-09 — low rate)
 0x416b433906b1B72FA758e166e239c43d68dC6F29 -> NonfungiblePositionManager (symbol "VELO-CL-POS" ✓)
+-- Gauges V2 deployment (deployed at block 150,584,109, 2026-04)
+0xe13Dd1fbA721Aa81a1826D9523AC9BC7d260c879 -> CLFactory (voter()→Velodrome Voter ✓; 29 pools; last PoolCreated 2026-10)
+0xf7f8ccce99Ca2896eC75D3A399D152dB96808399 -> NonfungiblePositionManager (symbol "VELO-CL-POS" ✓)
+0xbA3aEe516399388C779463183d00bB579f5041Ca -> CL SwapRouter (factory()→this CLFactory ✓)
 ```
 
 ---
@@ -76,7 +92,7 @@
 
 ## Detection invariants & gotchas
 
-1. **Core CL events share Uniswap V3 topic0s** — a Slipstream `Swap` is indistinguishable from a Uniswap-V3 / Sushi-V3 `Swap` by topic0 alone; disambiguate by the **pool/factory address** (CLFactory above).
+1. **Core CL events share Uniswap V3 topic0s** — a Slipstream `Swap` is indistinguishable from a Uniswap-V3 / Sushi-V3 `Swap` by topic0 alone; disambiguate by the **pool/factory address** (all CLFactories above).
 2. **`CollectFees` (`0x205860e6…`) is Slipstream-only** — gauge withdrawal of accrued pool fees; no Uniswap V3 equivalent. Useful to attribute fee flow to the ve(3,3) gauge.
 3. **Pools are tickSpacing-keyed, not fee-tier-keyed.** `PoolCreated` (`0xab0d57f0…`) carries `tickSpacing` and differs from Uniswap V3's `PoolCreated` topic0; `getPool` takes `int24 tickSpacing`, not `uint24 fee`.
 4. **CL LP fees route to gauges**, not just the LP — Slipstream integrates emissions/fees with the ve(3,3) Voter (see [`amm.md`](amm.md)).
@@ -87,4 +103,5 @@
 
 - topic0/selectors: `cast keccak`/`cast sig` this session; core CL events re-confirmed identical to verified `uniswap/v3.md`; `CollectFees` + tickSpacing `PoolCreated` read from `aerodrome-finance/slipstream` (`contracts/core/interfaces/pool/ICLPoolEvents.sol`).
 - Addresses: on-chain verified via `cast` vs `publicnode` — CLFactory `voter()` (→ the chain's Voter), NFPM `symbol()` ("AERO-CL-POS" / "VELO-CL-POS"), Aerodrome SwapRouter `factory()` (→ CLFactory).
+- Newer generations: the `Deployments` tables of both repository READMEs (Base: "Gauge Caps", "Gauges V3"; Optimism: "Gauges V2"), each address checked on chain 2026-10-05.
 - Source: [`aerodrome-finance/slipstream`](https://github.com/aerodrome-finance/slipstream) · [`velodrome-finance/slipstream`](https://github.com/velodrome-finance/slipstream). AMM + governance: [`amm.md`](amm.md).

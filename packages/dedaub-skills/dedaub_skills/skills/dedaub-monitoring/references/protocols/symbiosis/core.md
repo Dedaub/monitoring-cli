@@ -1,16 +1,16 @@
-# Symbiosis Finance — Topics, Selectors, Addresses (Ethereum, Base, BNB, Avalanche, Arbitrum, Optimism, Polygon, Robinhood Chain)
+# Symbiosis Finance — Topics, Selectors, Addresses (Ethereum, Base, BNB, Avalanche, Arbitrum, Optimism, Polygon, Robinhood Chain, Arc)
 
-**Status:** verified against live RPC on every listed chain and the canonical `symbiosis-finance/core-contracts` + `symbiosis-finance/js-sdk` repos on 2026-06-09. Extended and re-verified on 2026-09-29 against live RPC on all eight chains and `symbiosis-finance/sdk-types` (the SDK config that replaced the archived `js-sdk`): Robinhood Chain (4663), the intents contracts, the new MetaRouter gateway + executor, the BTC-refund `Depository`, the 2026-09 Portal and Synthesis upgrades, and the daily MPC rotation.
-**Scope:** the full Symbiosis cross-chain AMM/bridge core — **MetaRouter** + **MetaRouterGateway** + **Portal** + **Synthesis** + **SyntFabric** + **BridgeV2** + **MulticallRouter** — plus the **intents** system (**DepositorySrc**, **DepositoryDst**, **DeadlineUnlocker** / **DirectUnlocker**, the v1 intent **Bridge**), the new **MetaRouterGateway + MetaRouterExecutorDontApprove** pair and the BTC-refund **Depository**, across the eight target chains (ETH 1, Base 8453, BNB 56, Avalanche 43114, Arbitrum 42161, Optimism 10, Polygon 137, Robinhood Chain 4663). Topics/selectors are **chain-agnostic** (keccak of the canonical signature); addresses are **network-specific**. Symbiosis connects ~50 chains in total; counterparty chains outside the eight (zkSync Era, Linea, Scroll, Mantle, TON, Bitcoin, Tron, Solana, Gnosis, …) and the dedicated **Symbiosis hub chain (chainId 13863860)** are noted in §7 — they are findings, not omissions.
+**Status:** verified against live RPC on every listed chain and the canonical `symbiosis-finance/core-contracts` + `symbiosis-finance/js-sdk` repos on 2026-06-09. Extended and re-verified on 2026-09-29 against live RPC on all eight chains and `symbiosis-finance/sdk-types` (the SDK config that replaced the archived `js-sdk`): Robinhood Chain (4663), the intents contracts, the new MetaRouter gateway + executor, the BTC-refund `Depository`, the 2026-09 Portal and Synthesis upgrades, and the daily MPC rotation. Re-read on 2026-10-05: the 2026-10-01 Portal/Synthesis/BridgeV2 upgrade on every chain (§9) and the Arc (5042) deployment (§6.1).
+**Scope:** the full Symbiosis cross-chain AMM/bridge core — **MetaRouter** + **MetaRouterGateway** + **Portal** + **Synthesis** + **SyntFabric** + **BridgeV2** + **MulticallRouter** — plus the **intents** system (**DepositorySrc**, **DepositoryDst**, **DeadlineUnlocker** / **DirectUnlocker**, the v1 intent **Bridge**), the new **MetaRouterGateway + MetaRouterExecutorDontApprove** pair and the BTC-refund **Depository**, across the eight target chains (ETH 1, Base 8453, BNB 56, Avalanche 43114, Arbitrum 42161, Optimism 10, Polygon 137, Robinhood Chain 4663) plus Arc (5042, §6.1). Topics/selectors are **chain-agnostic** (keccak of the canonical signature); addresses are **network-specific**. Symbiosis connects ~50 chains in total; counterparty chains outside the eight (zkSync Era, Linea, Scroll, Mantle, TON, Bitcoin, Tron, Solana, Gnosis, …) and the dedicated **Symbiosis hub chain (chainId 13863860)** are noted in §7 — they are findings, not omissions.
 
 Symbiosis is a **lock-and-mint / burn-and-release synthetic-asset bridge with an embedded swap router**. The flow is: a user calls `MetaRouter.metaRoute` on the source chain (optional first swap) → tokens are locked in the **Portal** (`SynthesizeRequest` event) → a relayer network ("Transmitter"/MPC) reads the **BridgeV2** `OracleRequest` event and relays the call → on the manager/hub chain the **Synthesis** mints a synthetic representation (sToken) via **SyntFabric** (`SynthesizeCompleted`) → for the return leg the sToken is burned on Synthesis (`BurnRequest`) and the original token is released from the Portal on the destination chain (`BurnCompleted`). Most "synthetic" mint/burn activity is concentrated on the **Symbiosis hub chain (13863860)**, an off-target Symbiosis-operated chain; on the eight target chains the dominant events are `SynthesizeRequest` (Portal, lock), `BurnCompleted` (Portal, release), and `OracleRequest` (BridgeV2, relay). The link key of a synth route is the source `SynthesizeRequest.id`: it arrives unchanged as `crossChainID` (topic2) of the destination `BurnCompleted` (§10 item 2).
 
 **Intents (a second, solver-based flow; Base, BNB and Arbitrum only).** Source leg: the user calls `DepositorySrc.deposit`. The contract escrows the tokens (ERC-20 `Transfer` user → `DepositorySrc`, or `msg.value` with the token `0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE`) and emits `IntentLocked` + `ClientIdLog`. Destination leg: a solver calls `DepositoryDst.fill`. The fill unlocker (`DeadlineUnlocker`) pulls the solver's tokens straight to the recipient (`Filled`), and `DepositoryDst` emits `IntentFilled`. Settlement: the solver calls `DepositoryDst.settleBatch` (`SettleBatchRequested`, then `OracleRequest` on the bridge). On the source chain the bridge calls `DepositorySrc.unlockBatch`, which emits `IntentUnlocked` and sends the escrow to the settlement unlocker; the unlocker pays the solver less its volume fee (`Settled`, branch 0). Refund: after the deadline the depositor submits a Refund-branch fill, and settlement returns the full amount to the depositor (`Settled`, branch 1). The link key is `intentId` = `keccak256(abi.encode(depositParams, fillCondition, lockState))`: topic1 of `IntentLocked`, `IntentFilled` and `IntentUnlocked`, and an element of `SettleBatchRequested.intentIds` — on chain on both sides.
 
 **Five deployment facts a monitoring engineer must internalize before indexing:**
-1. **Portal, Synthesis, SyntFabric and BridgeV2 are EIP-1967 Transparent proxies** (impl + admin slots both populated). **MetaRouter, MetaRouterGateway and MulticallRouter are immutable** (impl slot empty). Watch `Upgraded(address)` on the four proxies. Every Portal and every Synthesis proxy moved to a new implementation between 2026-06-09 and 2026-09-29 (§9).
-2. **Synthesis + SyntFabric only exist on a subset of the eight** — present on **ETH, Base, BNB, Arbitrum**; **NOT deployed on Avalanche, Optimism, Polygon, Robinhood Chain** (config = `0x0`, confirmed). **Portal + Bridge exist on all eight; the legacy MetaRouter + MetaRouterGateway exist on the seven original chains, and Robinhood Chain uses only the new gateway (fact 5).** A chain with a Portal but no Synthesis is a "depository spoke" — it locks/releases real tokens but never mints synths locally.
-3. **Addresses are NOT a single cross-chain vanity.** Symbiosis reuses a small *pool* of addresses across chains because the same deployer EOA hits the same nonce on multiple chains — so e.g. `0x5523985926Aa12BA58DC5Ad00DDca99678D7227E` is the **BridgeV2 on ETH, Polygon, Arbitrum, Optimism and Robinhood Chain**, but an unrelated 1,690-byte contract on Base and an unlisted second BridgeV2 proxy on Avalanche. **Always key on `(chainId, address)` and never assume a literal means the same role on another chain** (§10).
+1. **Portal, Synthesis, SyntFabric and BridgeV2 are EIP-1967 Transparent proxies** (impl + admin slots both populated). **MetaRouter, MetaRouterGateway and MulticallRouter are immutable** (impl slot empty). Watch `Upgraded(address)` on the four proxies. Every Portal and every Synthesis proxy moved to a new implementation between 2026-06-09 and 2026-09-29, and again (with every BridgeV2) on 2026-10-01 (§9).
+2. **Synthesis + SyntFabric only exist on a subset of the eight** — present on **ETH, Base, BNB, Arbitrum**; **NOT deployed on Avalanche, Optimism, Polygon, Robinhood Chain, Arc** (config = `0x0`, confirmed). **Portal + Bridge exist on all eight; the legacy MetaRouter + MetaRouterGateway exist on the seven original chains, and Robinhood Chain uses only the new gateway (fact 5).** A chain with a Portal but no Synthesis is a "depository spoke" — it locks/releases real tokens but never mints synths locally.
+3. **Addresses are NOT a single cross-chain vanity.** Symbiosis reuses a small *pool* of addresses across chains because the same deployer EOA hits the same nonce on multiple chains — so e.g. `0x5523985926Aa12BA58DC5Ad00DDca99678D7227E` is the **BridgeV2 on ETH, Polygon, Arbitrum, Optimism, Robinhood Chain and Arc**, but an unrelated 1,690-byte contract on Base and an unlisted second BridgeV2 proxy on Avalanche. **Always key on `(chainId, address)` and never assume a literal means the same role on another chain** (§10).
 4. **The intents contracts are UUPS proxies (ERC-1967 + ERC-1822, admin slot empty) owned by an EOA, in two generations at the same addresses on Base, BNB and Arbitrum.** v1 (archived `js-sdk`): `DepositorySrc` `0x695EeaeCE7ce4502850B1F6B4f14b97DBA02E840` and `DepositoryDst` `0x4Ac560A3A8FaDd1662CF9439bb1114AbAa3BE547`, which settle through their own intent `Bridge` `0x85700Ed7C30625eD28613d75e85C58EF0056263F`. v2 (current `sdk-types`): `DepositorySrc` `0xDCD0Cb19bbe117648cF138F816d08248AF241694` and `DepositoryDst` `0x54cCE448468c137C05C895aAC9ca769B82e1fE72`, which settle through each chain's **core BridgeV2** (`bridge()` returns the core bridge, and the core bridge lists `DepositoryDst` v2 as a transmitter). Neither generation emitted a log in the pinned 12-hour window (§12).
 5. **Robinhood Chain (4663) is a depository spoke that runs only the new MetaRouter.** Portal `0x292fC50e4eB66C3f6514b9E402dBc25961824D62`, BridgeV2 `0x5523985926Aa12BA58DC5Ad00DDca99678D7227E`, MulticallRouter `0xb8f275fBf7A959F4BCE59999A2EF122A099e81A8`, and the new gateway `0xcE8f24A58D85eD5c5A6824f7be1F8d4711A0eb4C` as the configured `metaRouter`. No Synthesis, no SyntFabric, no intents contracts. It carried the most `SynthesizeRequest` logs of the eight chains in the pinned window (130).
 
@@ -39,6 +39,8 @@ There is **one generation** of this core (BridgeV2 = "V2" of the bridge; Portal/
 
 **The 2026-09 upgrade.** Between 2026-06-09 and 2026-09-29 every Portal and every Synthesis proxy moved to a new implementation (the new Portal code is byte-identical on all eight chains; previous and current implementations per chain are in §§3–6). The upgrade added two owner-set drain limits. `Portal.reserveFloor(token)`: a release (`unsynthesize`, `metaUnsynthesize`, `revertSynthesize`) reverts with `Symb: reserve floor` when the Portal's balance of the token would fall below it. `Synthesis.mintCap(stoken)`: a mint or a revert-mint reverts with `Symb: mint cap` when the sToken supply would exceed it (0 = no cap). Each setter emits an admin event (`SetReserveFloor`, `SetMintCap`).
 
+**The 2026-10-01 upgrade.** On 2026-10-01 (ETH block 26,097,821, 13:39 UTC) the Portal, Synthesis and BridgeV2 proxies moved to new implementations on all eight chains (SyntFabric unchanged). Sizes now: Portal 11,900 B (one code on all chains, Arc included), Synthesis 18,224 B, BridgeV2 6,903 B. Every documented selector is still present. The `MetaRevertRequest` topic is no longer in the Portal implementation bytecode; every other documented Portal, Synthesis and BridgeV2 topic is.
+
 ---
 
 ## 1. Topics (chain-agnostic — `topic0 = keccak256(event signature)`)
@@ -52,7 +54,7 @@ All values recomputed locally with keccak-256 on 2026-06-09 from the canonical `
 | `0x31325fe0a1a2e6a5b1e41572156ba5b4e94f0fae7e7f63ec21e9b5ce1e4b3eab` | `SynthesizeRequest(bytes32 id, address indexed from, uint256 indexed chainID, address indexed revertableAddress, address to, uint256 amount, address token)` — token locked, cross-chain mint requested. *(1,535 live logs on ETH Portal, 49k-block window ending blk 25279512; 4 topics confirms id non-indexed + 3 indexed.)* |
 | `0xaeef64b7687b985665b6620c7fa271b6f051a3fbe2bfc366fb9c964602eb6d26` | `BurnCompleted(bytes32 indexed id, bytes32 indexed crossChainID, address indexed to, uint256 amount, uint256 bridgingFee, address token)` — real token released on `unsynthesize`/`metaUnsynthesize`. *(1,594 live logs on ETH Portal, same window.)* |
 | `0x40590cc12db0488520ce425059f83f8caed91bdf98de5ff829dc57c63843161b` | `RevertBurnRequest(bytes32 indexed id, address indexed to)` |
-| `0xbd03c66ec5bd3d01fbf22bc794f68ac88b693023b438724019205a4b42aefb20` | `MetaRevertRequest(bytes32 indexed id, address indexed to)` |
+| `0xbd03c66ec5bd3d01fbf22bc794f68ac88b693023b438724019205a4b42aefb20` | `MetaRevertRequest(bytes32 indexed id, address indexed to)` — not in the 2026-10-01 Portal implementation bytecode (it is in the previous one); expect no new logs. |
 | `0xefcdf9ea4e65571d2ce9c030c46954e950662df8a7d8bd039fc4417e37b2f88c` | `RevertSynthesizeCompleted(bytes32 indexed id, address indexed to, uint256 amount, uint256 bridgingFee, address token)` |
 | `0x5a297b2c9a9f94a0f4e5a796c74ad38e219d1185fccf5f79c18726a830c2b6f5` | `ClientIdLog(bytes32 requestId, bytes32 indexed clientId)` — fires alongside every synth/burn for integrator attribution. **Also emitted by Synthesis** (same topic0) — disambiguate by emitter. |
 | `0x62e78cea01bee320cd4e420270b5ea74000d11b0c9f74754ebdbfc544b05a258` | `Paused(address account)` |
@@ -226,7 +228,7 @@ Selectors recomputed locally on 2026-06-09 from the canonical sources. Tuple par
 | `0x474a245a` | `newMPC()` → `address` | MPC after `newMPCEffectiveTime()` (ETH 2026-09-29: `0x2df0dda69a6ec341d3160b3f73c87b5358800dc5`). |
 | `0x405fb4f7` | `newMPCEffectiveTime()` → `uint256` | ETH 2026-09-29: `1790665319` (2026-09-29 07:01:59 UTC). |
 | `0x6fac3007` | `isTransmitter(address)` → `bool` | transmitter allowlist; `true` for `DepositoryDst` v2 on the Base, BNB and Arbitrum core bridges. |
-| `0x1095b6d7` | `withdrawFee(address token, address to, uint256 amount)` | `onlyOwnerOrAdmin` in `core-contracts` `BridgeV2.sol` (`onlyOwner` in the v1 intent Bridge): moves ERC-20 tokens out of the bridge (each Portal release sends its `stableBridgingFee` to the bridge). Found in the bytecode of the 5,964-B implementation used on ETH, BNB and Robinhood Chain; not checked on the older implementations. |
+| `0x1095b6d7` | `withdrawFee(address token, address to, uint256 amount)` | `onlyOwnerOrAdmin` in `core-contracts` `BridgeV2.sol` (`onlyOwner` in the v1 intent Bridge): moves ERC-20 tokens out of the bridge (each Portal release sends its `stableBridgingFee` to the bridge). Found in the bytecode of the 5,964-B implementation used on ETH, BNB and Robinhood Chain until 2026-10, and in the 6,903-B implementation that replaced it on 2026-10-01; not checked on the older implementations. |
 
 ### 2.6 SyntFabric (proxy; ETH/Base/BNB/Arb only)
 
@@ -308,16 +310,16 @@ Selectors recomputed locally on 2026-06-09 from the canonical sources. Tuple par
 
 ## 3. Addresses — Ethereum mainnet (chain ID 1)
 
-All verified via `eth_getCode` returning non-empty bytecode on `https://ethereum-rpc.publicnode.com` on 2026-06-09, and again on 2026-09-29. Proxy impls read live from the EIP-1967 slot (2026-09-29 values; the 2026-06-09 value follows "was" where it changed). ProxyAdmin (admin slot) = `0x1da522b35363c1eda4833bc121c8f3c67b2caa75` (unchanged on 2026-09-29); its `owner()` is the Safe `0x5112eba9bc2468bb5134cbfbeab9334edae7106a` (171-byte proxy), which also sent the window's `SetMintCap`.
+All verified via `eth_getCode` returning non-empty bytecode on `https://ethereum-rpc.publicnode.com` on 2026-06-09, and again on 2026-09-29. Proxy impls read live from the EIP-1967 slot (2026-10-05 values; earlier values follow "was"). The Portal, Synthesis and BridgeV2 proxies were upgraded together in block 26,097,821 (2026-10-01 13:39 UTC; three `Upgraded` logs). ProxyAdmin (admin slot) = `0x1da522b35363c1eda4833bc121c8f3c67b2caa75` (unchanged on 2026-09-29); its `owner()` is the Safe `0x5112eba9bc2468bb5134cbfbeab9334edae7106a` (171-byte proxy), which also sent the window's `SetMintCap`.
 
 | Role | Address | Impl (if proxy) | One-liner |
 |------|---------|-----------------|-----------|
 | **MetaRouter** | `0xf621Fb08BBE51aF70e7E0F4EA63496894166Ff7F` | — (immutable, 7,422 B) | Entry point; `metaRoute`. |
 | **MetaRouterGateway** | `0xfCEF2Fe72413b65d3F393d278A714caD87512bcd` | — (immutable) | Token-pull escrow; approve here. |
-| **Portal** (proxy) | `0xb8f275fBf7A959F4BCE59999A2EF122A099e81A8` | `0xa0aee4eefb0c7c2706a9b2b9c79d082154b5393c` (was `0x57dbcb192fa64bf07eab76941d1dae5177c8f4f3`) | Vault; emits `SynthesizeRequest`/`BurnCompleted`. |
-| **Synthesis** (proxy) | `0xD7c3DF25683871d18BC838E4F619126442Dd38B3` | `0x83ef4306cbe2c8b7ee58e71404ca7e3c41546169` (was `0x14078ebe3b6dd51c089188c1962ddc94a647be35`) | sToken minter; emits `BurnRequest`/`SynthesizeCompleted`. |
+| **Portal** (proxy) | `0xb8f275fBf7A959F4BCE59999A2EF122A099e81A8` | `0x4387bd011de13db2e7f22878337e4152d870e89b` (2026-10-01 upgrade; was `0xa0aee4ee…` on 2026-09-29, `0x57dbcb19…` on 2026-06-09) | Vault; emits `SynthesizeRequest`/`BurnCompleted`. |
+| **Synthesis** (proxy) | `0xD7c3DF25683871d18BC838E4F619126442Dd38B3` | `0x174c6d73b2fc1a0b434839c49eba6f281587540b` (2026-10-01 upgrade; was `0x83ef4306…` on 2026-09-29, `0x14078ebe…` on 2026-06-09) | sToken minter; emits `BurnRequest`/`SynthesizeCompleted`. |
 | **SyntFabric** (proxy) | `0xbBFb7cb70f84fb6fE1Cb13e42A0B71EFDe769428` | `0x71e761c2b3cd3d56ab33a145b3524ca5bdbc5238` | sToken registry. |
-| **BridgeV2** (proxy) | `0x5523985926Aa12BA58DC5Ad00DDca99678D7227E` | `0x20c54cc697329333fe00ded49c7dca8c83dce65b` | Relay; emits `OracleRequest`. `mpc()` = `0x5ddc2587b85c664083677654e77a472511fb537c` on 2026-06-09, `0x2df0dda69a6ec341d3160b3f73c87b5358800dc5` on 2026-09-29 (rotates about daily). |
+| **BridgeV2** (proxy) | `0x5523985926Aa12BA58DC5Ad00DDca99678D7227E` | `0x1995bb51aabe557ce119249289c37e0bf5282f32` (2026-10-01 upgrade; was `0x20c54cc6…`) | Relay; emits `OracleRequest`. `mpc()` = `0x5ddc2587b85c664083677654e77a472511fb537c` on 2026-06-09, `0x2df0dda69a6ec341d3160b3f73c87b5358800dc5` on 2026-09-29 (rotates about daily). |
 | **MulticallRouter** | `0x49d3Fc00f3ACf80FABCb42D7681667B20F60889A` | — (immutable) | Multi-hop swap executor. |
 | **MetaRouterGateway (new)** | `0xB4769e9c5bE31199a25ecD1B0C6609183fa72521` | — (immutable, 1,412 B) | New approve-and-call entry point (`sdk-types` `metaRouters.ts`). |
 | **MetaRouterExecutorDontApprove** | `0xc227b3a439EE6ae3A22500757125f4dE91d8008E` | — (immutable, 4,747 B) | Executor of the new gateway (`metaRouterExecutorDontApprove()` confirmed). Do not approve. |
@@ -335,10 +337,10 @@ All verified via `eth_getCode` on `https://base-rpc.publicnode.com` on 2026-06-0
 |------|---------|-----------------|
 | MetaRouter | `0x691df9C4561d95a4a726313089c8536dd682b946` | — |
 | MetaRouterGateway | `0x41Ae964d0F61Bb5F5e253141A462aD6F3b625B92` | — |
-| **Portal** | `0xEE981B2459331AD268cc63CE6167b446AF4161f8` | `0xaf4570fadd2ab163c809e4ba483d032b31475e1a` (was `0x253ddb32f0f45ffbc0ebcdfc5edd47857aff79d7`) |
-| **Synthesis** | `0x9F6424FE88fBe7785Fa34F0E369F192bF38E7A6e` | `0xfa8075668c56088130cac2208620fc13ea72b20e` (was `0x9d74807b8fa79d49bb95cf988af3c25fb1437b4f`) |
+| **Portal** | `0xEE981B2459331AD268cc63CE6167b446AF4161f8` | `0x8c199d633199df6dc8d2df66e6fc755d704fa23e` (2026-10; was `0xaf4570fa…` on 2026-09-29, `0x253ddb32…` on 2026-06-09) |
+| **Synthesis** | `0x9F6424FE88fBe7785Fa34F0E369F192bF38E7A6e` | `0x863cd8459c9d999a84e9326525b8e72cd2f5e780` (2026-10; was `0xfa807566…` on 2026-09-29, `0x9d74807b…` on 2026-06-09) |
 | **SyntFabric** | `0x44487a445a7595446309464A82244B4bD4e325D5` | `0x464c30aebacd4e8928167c567f8920d16f203027` |
-| **BridgeV2** | `0x8097f0B9f06C27AF9579F75762F971D745bb222F` | `0x88139ad1199e8c78a0804d4bebf4fbad89ef9d89` |
+| **BridgeV2** | `0x8097f0B9f06C27AF9579F75762F971D745bb222F` | `0x195a07d222a82b50db84e8f47b71504d1e8c5fa2` (2026-10; was `0x88139ad1…`) |
 | MulticallRouter | `0x01A3c8E513B758EBB011F7AFaf6C37616c9C24d9` | — |
 | MetaRouterGateway (new) | `0xa18348e793E77239EC68CAa51b74c5Cdc82c8a9d` | — (immutable, 1,412 B) |
 | MetaRouterExecutorDontApprove | `0xCbFD5DcaD860f49D0BD2fDaD78d9d943CAeBedef` | — (immutable, 4,747 B; the gateway's `metaRouterExecutorDontApprove()`) |
@@ -376,10 +378,10 @@ All verified via `eth_getCode` on the respective publicnode RPC on 2026-06-09, a
 |------|---------|-----------------|
 | MetaRouter | `0x44487a445a7595446309464A82244B4bD4e325D5` | — |
 | MetaRouterGateway | `0x5c97D726bf5130AE15408cE32bc764e458320D2f` | — |
-| **Portal** | `0x5Aa5f7f84eD0E5db0a4a85C3947eA16B53352FD4` | `0xb345171e015b7b44e22fd784073080a15221c785` (was `0x80347bfc5cb91bf99187f4205d56751bc9b51630`) |
-| **Synthesis** | `0x6B1bbd301782FF636601fC594Cd7Bfe74871bfaA` | `0x4e70a309eb5c60528cc984f4d3eb508935889b7d` (was `0x755a967298c96d50216c6ed8d68869747b4f6878`) |
+| **Portal** | `0x5Aa5f7f84eD0E5db0a4a85C3947eA16B53352FD4` | `0x422a0a054eb5a7424d9e3042862546a3f04e3596` (2026-10; was `0xb345171e…` on 2026-09-29, `0x80347bfc…` on 2026-06-09) |
+| **Synthesis** | `0x6B1bbd301782FF636601fC594Cd7Bfe74871bfaA` | `0x92114294e42a96c9ef3163da18ee7efdba6cc661` (2026-10; was `0x4e70a309…` on 2026-09-29, `0x755a9672…` on 2026-06-09) |
 | **SyntFabric** | `0xc17d768Bf4FdC6f20a4A0d8Be8767840D106D077` | `0xda1c70c902746996a8c989bb07aa6c408ef880d8` |
-| **BridgeV2** | `0xb8f275fBf7A959F4BCE59999A2EF122A099e81A8` | `0x291a42bdffe3754eb3c8b69b4d232fa1d4a46608` |
+| **BridgeV2** | `0xb8f275fBf7A959F4BCE59999A2EF122A099e81A8` | `0x20ef596709b460e818d5a3d43b06a5b604d6369f` (2026-10; was `0x291a42bd…`) |
 | MulticallRouter | `0x44b5d0F16Ad55c4e7113310614745e8771b963bB` | — |
 | MetaRouterGateway (new) | `0x851B43189de721dD94AbA767AAd9E6F6d6a95CCA` | — (immutable, 1,412 B) |
 | MetaRouterExecutorDontApprove | `0x980447DdcEf79A7499Da4538Da8FC59BAcAD6997` | — (immutable, 4,747 B) |
@@ -394,10 +396,10 @@ All verified via `eth_getCode` on the respective publicnode RPC on 2026-06-09, a
 |------|---------|-----------------|
 | MetaRouter | `0xf7e96217347667064DEE8f20DB747B1C7df45DDe` | — |
 | MetaRouterGateway | `0x80ddDDa846e779cceE463bDC0BCc2Ae296feDaF9` | — |
-| **Portal** | `0x01A3c8E513B758EBB011F7AFaf6C37616c9C24d9` | `0xf818d26215bb22b79f8501530bd6d54ffe166735` (was `0x2e04409f950a236690be6e119f34f7fc209d27c1`) |
-| **Synthesis** | `0x326adbE46D7E6C1B3927e9309B96DF478bda6D16` | `0x7879b3045e8f15eac306ae17c62c0d85c982bbba` (was `0x3941870e18ae68b0cf572b7a543c6647e836cbb1`) |
+| **Portal** | `0x01A3c8E513B758EBB011F7AFaf6C37616c9C24d9` | `0xd1a1ab893365d5c124d73b6001d6dc01487892fb` (2026-10; was `0xf818d262…` on 2026-09-29, `0x2e04409f…` on 2026-06-09) |
+| **Synthesis** | `0x326adbE46D7E6C1B3927e9309B96DF478bda6D16` | `0x851b43189de721dd94aba767aad9e6f6d6a95cca` (2026-10; was `0x7879b304…` on 2026-09-29, `0x3941870e…` on 2026-06-09; the new literal is the BNB new-gateway address — literal reuse) |
 | **SyntFabric** | `0x2eE9559387b806E88fd46b9DA160D64A29CE7Da0` | `0xf621fb08bbe51af70e7e0f4ea63496894166ff7f` |
-| **BridgeV2** | `0x5523985926Aa12BA58DC5Ad00DDca99678D7227E` | `0xff9b21c3bfa4bce9b20b55fed56d102ced48b0f6` |
+| **BridgeV2** | `0x5523985926Aa12BA58DC5Ad00DDca99678D7227E` | `0x566e412387ae3fab8b5aa3a77178b120bcff5af8` (2026-10; was `0xff9b21c3…`) |
 | MulticallRouter | `0xda8057acB94905eb6025120cB2c38415Fd81BfEB` | — |
 | MetaRouterGateway (new) | `0x3743c756b64ECd0770f1d4f47696A73d2A46dcbe` | — (immutable, 1,412 B) |
 | MetaRouterExecutorDontApprove | `0xf37E321e1c275d249B7A9c825aE802A9f464Eb94` | — (immutable, 4,747 B) |
@@ -412,10 +414,10 @@ All verified via `eth_getCode` on the respective publicnode RPC on 2026-06-09, a
 |------|---------|-----------------|
 | MetaRouter | `0x6F0f6393e45fE0E7215906B6f9cfeFf53EA139cf` | — |
 | MetaRouterGateway | `0x4cfA66497Fa84D739a0f785FBcEe9196f1C64e4a` | — |
-| **Portal** | `0xE75C7E85FE6ADd07077467064aD15847E6ba9877` | `0xbd37c8233649f66eb431e550856d429445706437` (was `0x8dc3151dccd58fcb6a0bec0df20c06fba133f027`) |
+| **Portal** | `0xE75C7E85FE6ADd07077467064aD15847E6ba9877` | `0xa385b1436fd2a6a1c6865e22c522a1aa40cadcc6` (2026-10; was `0xbd37c823…` on 2026-09-29, `0x8dc3151d…` on 2026-06-09) |
 | **Synthesis** | — | **NOT DEPLOYED** |
 | **SyntFabric** | — | **NOT DEPLOYED** |
-| **BridgeV2** | `0x292fC50e4eB66C3f6514b9E402dBc25961824D62` | `0x7057ab3fb2bee9c18e0cde4240de4ff7f159e365` |
+| **BridgeV2** | `0x292fC50e4eB66C3f6514b9E402dBc25961824D62` | `0x691df9c4561d95a4a726313089c8536dd682b946` (2026-10; was `0x7057ab3f…`; the new literal is the Base MetaRouter address — literal reuse) |
 | MulticallRouter | `0xDc9a6a26209A450caC415fb78487e907c660cf6a` | — |
 | MetaRouterGateway (new) | `0xfeC09BE39F82b13471D2e0E7d72e6ee589c631c6` | — (immutable, 1,412 B) |
 | MetaRouterExecutorDontApprove | `0x4494b8cBC69c794d82Bd2d820A6ff6f62D7D841A` | — (immutable, 4,747 B) |
@@ -432,9 +434,9 @@ All verified via `eth_getCode` on the respective publicnode RPC on 2026-06-09, a
 |------|---------|-----------------|
 | MetaRouter | `0x0f91052dc5B4baE53d0FeA5DAe561A117268f5d2` | — |
 | MetaRouterGateway | `0x200a0fe876421DC49A26508e3Efd0a1008fD12B5` | — |
-| **Portal** | `0x292fC50e4eB66C3f6514b9E402dBc25961824D62` | `0x8097f0b9f06c27af9579f75762f971d745bb222f` (was `0x7b4e28e7273aa8cb64c56ff191ebf43b64f409f9`; the new implementation literal is the Base BridgeV2 proxy address — literal reuse again) |
+| **Portal** | `0x292fC50e4eB66C3f6514b9E402dBc25961824D62` | `0x1dcfbc3fa01b2a86bc3a3f43479cce9e8d438adc` (2026-10; was `0x8097f0b9…` on 2026-09-29 — the Base BridgeV2 proxy literal — and `0x7b4e28e7…` on 2026-06-09) |
 | **Synthesis** / **SyntFabric** | — | **NOT DEPLOYED** |
-| **BridgeV2** | `0x5523985926Aa12BA58DC5Ad00DDca99678D7227E` | `0x7057ab3fb2bee9c18e0cde4240de4ff7f159e365` |
+| **BridgeV2** | `0x5523985926Aa12BA58DC5Ad00DDca99678D7227E` | `0x17efc1d70ea32eb04c6979c6500d12eee9e3dcbd` (2026-10; was `0x7057ab3f…`) |
 | MulticallRouter | `0xb8f275fBf7A959F4BCE59999A2EF122A099e81A8` | — |
 | MetaRouterGateway (new) | `0xA9A96Ee51dD54B9f51d46b1fbD2A19c1295Ec75b` | — (immutable, 1,412 B) |
 | MetaRouterExecutorDontApprove | `0x356d322BF762d4022D8c241428770565f236c2EA` | — (immutable, 4,747 B) |
@@ -448,15 +450,15 @@ All verified via `eth_getCode` on the respective publicnode RPC on 2026-06-09, a
 |------|---------|-----------------|
 | MetaRouter | `0xa260E3732593E4EcF9DdC144fD6C4c5fe7077978` | — |
 | MetaRouterGateway | `0xAb83653fd41511D638b69229afBf998Eb9B0F30c` | — |
-| **Portal** | `0xb8f275fBf7A959F4BCE59999A2EF122A099e81A8` | `0x40d9fa406e373cffaf02a851933d147db8f94764` (was `0x35d39bb2cbc51ce6c03f0306d0d8d56948b1f990`) |
+| **Portal** | `0xb8f275fBf7A959F4BCE59999A2EF122A099e81A8` | `0x628613064b1902a1a422825cf11b687c6f17961e` (2026-10; was `0x40d9fa40…` on 2026-09-29, `0x35d39bb2…` on 2026-06-09) |
 | **Synthesis** / **SyntFabric** | — | **NOT DEPLOYED** |
-| **BridgeV2** | `0x5523985926Aa12BA58DC5Ad00DDca99678D7227E` | `0x7057ab3fb2bee9c18e0cde4240de4ff7f159e365` |
+| **BridgeV2** | `0x5523985926Aa12BA58DC5Ad00DDca99678D7227E` | `0xaf4570fadd2ab163c809e4ba483d032b31475e1a` (2026-10; was `0x7057ab3f…`; the new literal is the 2026-09-29 Base Portal impl address — literal reuse) |
 | MulticallRouter | `0xc5B61b9abC3C6229065cAD0e961aF585C5E0135c` | — |
 | MetaRouterGateway (new) | `0x2eE9559387b806E88fd46b9DA160D64A29CE7Da0` | — (immutable, 1,412 B; the same literal is the SyntFabric proxy on Arbitrum) |
 | MetaRouterExecutorDontApprove | `0x7a73a0bA4919778C5442f026bd01795b4f2A4cB8` | — (immutable, 4,747 B) |
 | Intents contracts / Depository | — | **NOT DEPLOYED** (no code at the §4.1 addresses; no `depository` block in the config) |
 
-> Avalanche, Optimism and Polygon **share the same BridgeV2 implementation** `0x7057ab3fb2bee9c18e0cde4240de4ff7f159e365` (different proxy literals, identical logic). On Optimism and Polygon the Bridge proxy literal is also identical (`0x5523985926Aa12BA58DC5Ad00DDca99678D7227E`).
+> Until 2026-10, Avalanche, Optimism and Polygon shared the BridgeV2 implementation `0x7057ab3fb2bee9c18e0cde4240de4ff7f159e365`. Since the 2026-10 upgrade every listed BridgeV2 runs its own implementation literal with one shared 6,903-B code. On Optimism and Polygon the Bridge proxy literal is also identical (`0x5523985926Aa12BA58DC5Ad00DDca99678D7227E`). The unlisted Avalanche proxy at `0x5523…227E` still points at `0x7057ab3f…`.
 
 ---
 
@@ -466,8 +468,8 @@ Roles from the official `symbiosis-finance/sdk-types` config (`ChainId.ROBINHOOD
 
 | Role | Address | Impl / code | Notes |
 |------|---------|-------------|-------|
-| **Portal** (proxy) | `0x292fC50e4eB66C3f6514b9E402dBc25961824D62` | `0xf39d9a9abb98593ceac395d7a37c572da48fcfd5` (13,168 B, byte-identical to the current Portal implementation on the other seven chains; carries `setReserveFloor`) | `bridge()` = the BridgeV2 below; `metaRouter()` = the executor below. Pinned window: `SynthesizeRequest` 130, `BurnCompleted` 32. |
-| **BridgeV2** (proxy) | `0x5523985926Aa12BA58DC5Ad00DDca99678D7227E` | `0x7057ab3fb2bee9c18e0cde4240de4ff7f159e365` (5,964 B, byte-identical to the ETH and BNB BridgeV2 implementation; on Avax/OP/Poly the same literal holds a 6,505-B build) | Pinned window: `OracleRequest` 130, `LogChangeMPC` 1. `mpc()` on 2026-09-29 = `0x2df0dda69a6ec341d3160b3f73c87b5358800dc5`. |
+| **Portal** (proxy) | `0x292fC50e4eB66C3f6514b9E402dBc25961824D62` | `0xf8504d2ca2f0bbad9d36927e3d32e278abadada0` (2026-10; 11,900 B, byte-identical to the Portal implementation on the other chains; carries `setReserveFloor`; was `0xf39d9a9a…` on 2026-09-29) | `bridge()` = the BridgeV2 below; `metaRouter()` = the executor below. Pinned window: `SynthesizeRequest` 130, `BurnCompleted` 32. |
+| **BridgeV2** (proxy) | `0x5523985926Aa12BA58DC5Ad00DDca99678D7227E` | `0x6148fd6c649866596c3d8a971fc313e5ece84882` (2026-10; 6,903 B, byte-identical to the ETH BridgeV2 implementation; was `0x7057ab3f…` on 2026-09-29) | Pinned window: `OracleRequest` 130, `LogChangeMPC` 1. `mpc()` on 2026-09-29 = `0x2df0dda69a6ec341d3160b3f73c87b5358800dc5`. |
 | **MetaRouter** = **MetaRouterGateway (new)** | `0xcE8f24A58D85eD5c5A6824f7be1F8d4711A0eb4C` | immutable, 1,412 B (identical to the new gateway on the other seven chains) | Users approve and call this (`metaRoute`). `metaRouterExecutorDontApprove()` = the executor below. |
 | **MetaRouterExecutorDontApprove** | `0xAdB2d3b711Bb8d8Ea92ff70292c466140432c278` | immutable, 4,747 B | Receives the user's tokens from the gateway and forwards them to the Portal; the Portal's final calls go to it. Do not approve. |
 | **MulticallRouter** | `0xb8f275fBf7A959F4BCE59999A2EF122A099e81A8` | immutable, 2,888 B (a different build from the 3,558/3,617-B routers; same `multicall` selector `0x1e859a05`) | |
@@ -479,6 +481,23 @@ Sampled value movement: the deposit tx `0x558d6b6359e884846f414606e545b90cdcdbd5
 
 > **Collision:** on Robinhood `0x292fC50e4eB66C3f6514b9E402dBc25961824D62` is the Portal (as on Optimism) but it is the BridgeV2 on Avalanche. `0xcE8f24A58D85eD5c5A6824f7be1F8d4711A0eb4C` and `0xAdB2d3b711Bb8d8Ea92ff70292c466140432c278` hold an older MetaRouter (6,784 or 7,365 B) and a 1,081-B gateway on ETH, Arbitrum, Avalanche, Optimism and Polygon, which the SDK config does not list for those chains. `0xb8f275fBf7A959F4BCE59999A2EF122A099e81A8` is the MulticallRouter here and on Optimism, the Portal on ETH/Polygon and the BridgeV2 on BNB.
 
+### 6.1 Arc (5042)
+
+Roles from `symbiosis-finance/sdk-types` (`ChainId.ARC_MAINNET` block in `mainnet.ts`, last change 2026-10-01; `metaRouters.ts`). Existence-checked with `eth_getCode` on `https://rpc.mainnet.arc.io` on 2026-10-05; implementations and admin read from the EIP-1967 slots. **Depository spoke on the new MetaRouter only**, the same layout as Robinhood Chain. ProxyAdmin (admin slot of Portal and BridgeV2) = `0x1da522b35363c1eda4833bc121c8f3c67b2caa75`; its `owner()`, and `owner()` of the Portal and the BridgeV2, is `0x64c44f682a1014410c864bd708a7ab1b67eec0ea` (171-byte proxy).
+
+| Role | Address | Impl / code | Notes |
+|------|---------|-------------|-------|
+| **Portal** (proxy) | `0xE75C7E85FE6ADd07077467064aD15847E6ba9877` | `0xf39d9a9abb98593ceac395d7a37c572da48fcfd5` (11,900 B, byte-identical to the 2026-10 Portal implementation on the other chains) | `bridge()` = the BridgeV2 below; `metaRouter()` = the executor below. Same literal as the Avalanche Portal. |
+| **BridgeV2** (proxy) | `0x5523985926Aa12BA58DC5Ad00DDca99678D7227E` | `0xf85fc807d05d3ab2309364226970aac57b4e1ea4` (6,903 B, byte-identical to the 2026-10 ETH BridgeV2 implementation; the literal is the hub-chain Fabric address) | `mpc()` on 2026-10-05 = `0x483fce549a3a753128db5cbbce393ef7371e3443` (the same as ETH that day). |
+| **MetaRouter** = **MetaRouterGateway (new)** | `0xcE8f24A58D85eD5c5A6824f7be1F8d4711A0eb4C` | immutable, 1,412 B | `metaRouterExecutorDontApprove()` = the executor below. |
+| **MetaRouterExecutorDontApprove** | `0xAdB2d3b711Bb8d8Ea92ff70292c466140432c278` | immutable, 4,747 B | Do not approve. |
+| **MulticallRouter** | `0x292fC50e4eB66C3f6514b9E402dBc25961824D62` | immutable, 2,888 B | The same literal is the Portal on Optimism/Robinhood and the BridgeV2 on Avalanche. |
+| Pauser | `0x3e4aDcf98E77F6d8022639F7135BE4A3850033ED` | 4,804 B | `pauser` in the config. |
+| Synthesis / SyntFabric | — | **NOT DEPLOYED** (`0x0` in the config) | |
+| Stable | USDC `0x3600000000000000000000000000000000000000` (6 decimals) | | Arc's native gas token, ERC-20 interface. |
+
+Activity: low. Over 72,000 Arc blocks (about 10 h) to block 24,377,764 the Portal emitted no log and the BridgeV2 emitted one `LogChangeMPC`.
+
 ---
 
 ## 7. Counterparty chains outside the eight (findings, not omissions)
@@ -488,7 +507,7 @@ The SDK config (`js-sdk/src/crosschain/config/mainnet.ts`) defines ~50 mainnet c
 - **Synthesis-bearing manager chains (off-target):** **Symbiosis hub `13863860`** (the canonical synth-minting chain: Synthesis `0x45CFd6FB7999328F189aaD2739Fba4Be6C45E5bf`, Bridge `0x1a039cE63AE35a67Bf0E9F6DbFaE969639D59eC8`, Fabric `0xf85FC807D05d3Ab2309364226970aAc57b4e1ea4`, **no Portal** — it is a pure mint/burn hub), **Telos `40`**, **zkSync Era `324`**, **Bahamut `5165`**, **Rootstock `30`**, **ZetaChain `7000`**, **Citrea `4114`**, **Quai `9`**.
 - **Portal-only spokes (off-target):** Kava `2222`, Boba `288`, Arbitrum Nova `42170`, Polygon zkEVM `1101`, Linea `59144`, Mantle `5000`, Scroll `534352`, Manta `169`, Metis `1088`, Mode `34443`, Blast `81457`, Merlin `4200`, zkLink `810180`, Core `1116`, Taiko `167000`, Sei `1329`, Cronos `25`/`388`, Fraxtal `252`, Gravity `1625`, BSquared `223`, Morph `2818`, Goat `2345`, Sonic `146`, Abstract `2741`, **Gnosis `100`**, Berachain `80094`, **Unichain `130`**, Soneium `1868`, opBNB `204`, Hyperliquid `999`, Katana `747474`, ApeChain `33139`, Plasma `9745`, Monad `143`, Tempo `4217`.
 - **Non-EVM counterparties** (bridged via dedicated adapters, not the EVM Portal): **Bitcoin** (chainId `3652501241`, symBTC pool), **TON** (`85918`, `TonBridge` + `BurnRequestTON`), **Tron** (`728126428`), **Solana** (`5426`).
-- **New in `sdk-types` `mainnet.ts` (2026-09):** Robinhood Chain `4663` (a target chain, §6), Stable `988`, Arc `5042` (both on the same new gateway/executor literals as Robinhood), Lighter `99990002` and Hyperliquid perp `99990001`.
+- **New in `sdk-types` `mainnet.ts` (2026-09):** Robinhood Chain `4663` (a target chain, §6), Stable `988` (on the same new gateway/executor literals as Robinhood), Arc `5042` (deployed; see §6.1), Lighter `99990002` and Hyperliquid perp `99990001`.
 
 These are **not** deployed on the eight target chains in the documented role — they are the bridge's remote endpoints. A `SynthesizeRequest.chainID` on a target-chain Portal frequently points at one of these off-target chains (commonly the hub `13863860`).
 
@@ -506,6 +525,7 @@ These are **not** deployed on the eight target chains in the documented role —
 | Optimism | 10 | ✓ | ✓ | ✓ | ✗ | ✗ | ✓ | ✓ | ✓ | ✗ | ✗ |
 | Polygon | 137 | ✓ | ✓ | ✓ | ✗ | ✗ | ✓ | ✓ | ✓ | ✗ | ✗ |
 | Robinhood Chain | 4663 | ✗ (the new gateway is the `metaRouter`) | ✗ | ✓ | ✗ | ✗ | ✓ | ✓ | ✓ | ✗ | ✗ |
+| Arc | 5042 | ✗ (the new gateway is the `metaRouter`) | ✗ | ✓ | ✗ | ✗ | ✓ | ✓ | ✓ | ✗ | ✗ |
 
 **Synthesis + SyntFabric live on ETH/Base/BNB/Arb only; the other four are depository spokes (Portal + Bridge + a MetaRouter only).** No single vanity address: the same literals recur in *different roles* across chains (see collision warnings in §§4–6).
 
@@ -521,6 +541,7 @@ Portal (lock/release escrow) and BridgeV2 (`OracleRequest` emitter) per chain:
 | Optimism | 10 | `0x292fC50e4eB66C3f6514b9E402dBc25961824D62` | `0x5523985926Aa12BA58DC5Ad00DDca99678D7227E` |
 | Polygon | 137 | `0xb8f275fBf7A959F4BCE59999A2EF122A099e81A8` | `0x5523985926Aa12BA58DC5Ad00DDca99678D7227E` |
 | Robinhood Chain | 4663 | `0x292fC50e4eB66C3f6514b9E402dBc25961824D62` | `0x5523985926Aa12BA58DC5Ad00DDca99678D7227E` |
+| Arc | 5042 | `0xE75C7E85FE6ADd07077467064aD15847E6ba9877` | `0x5523985926Aa12BA58DC5Ad00DDca99678D7227E` |
 
 ---
 
@@ -540,7 +561,7 @@ Portal (lock/release escrow) and BridgeV2 (`OracleRequest` emitter) per chain:
 | **DeadlineUnlocker / DirectUnlocker** (intents) | **Immutable** | impl slot `0x0`; 1,740–5,040 B | none (owner sets only fee parameters) |
 | **Depository** (BTC refund) | Not a proxy | impl slot `0x0`; 5,049–7,023 B | owner (`setRouter`) |
 
-EIP-1967 implementation slot read live (`eth_getStorageAt`) per chain — current impls listed in §§3–6. **Every Portal and every Synthesis implementation changed between 2026-06-09 and 2026-09-29** (previous value kept as "was" in §§3–5). The eight Portal implementations now share one code hash (13,168 B), and the upgrade added `SetReserveFloor` / `SetMintCap` (§0). SyntFabric and BridgeV2 implementations were unchanged on 2026-09-29. **ProxyAdmin (admin slot) clusters into three values:** `0x1da522b35363c1eda4833bc121c8f3c67b2caa75` (ETH, Avax, Arb, Op, Poly, and Robinhood Chain), `0x1ac4c50080871d7a24dd705de9efe5ff14bc0ea2` (Base), `0xda8057acb94905eb6025120cb2c38415fd81bfeb` (BNB). Its `owner()` is the Safe `0x5112eba9bc2468bb5134cbfbeab9334edae7106a` on ETH and the 171-byte contract `0x0605963420c4e8566fcef2cf65dcd575662bf53d` on Robinhood Chain. **MetaRouter / MetaRouterGateway / MulticallRouter are confirmed NOT proxies** — `eth_getStorageAt` at the impl slot returns all-zero on every chain, and they carry full multi-KB runtime bytecode (an immutable would). The upgradeable surface to monitor is the four Transparent proxies plus the three intents UUPS proxies, via the `Upgraded(address)` topic `0xbc7cd75a20ee27fd9adebab32041f755214dbc6bffa90cc0225b39da2e5c2d3b`.
+EIP-1967 implementation slot read live (`eth_getStorageAt`) per chain — current impls listed in §§3–6.1. **Every Portal and every Synthesis implementation changed between 2026-06-09 and 2026-09-29** (previous value kept as "was" in §§3–5). That upgrade added `SetReserveFloor` / `SetMintCap` (§0). **A second upgrade on 2026-10-01 replaced every Portal, Synthesis and BridgeV2 implementation again** (§0; current values in §§3–6.1): the Portal implementations share one code (11,900 B), the BridgeV2 implementations one code (6,903 B). SyntFabric implementations were unchanged on 2026-10-05. **ProxyAdmin (admin slot) clusters into three values:** `0x1da522b35363c1eda4833bc121c8f3c67b2caa75` (ETH, Avax, Arb, Op, Poly, Robinhood Chain and Arc), `0x1ac4c50080871d7a24dd705de9efe5ff14bc0ea2` (Base), `0xda8057acb94905eb6025120cb2c38415fd81bfeb` (BNB). Its `owner()` is the Safe `0x5112eba9bc2468bb5134cbfbeab9334edae7106a` on ETH and the 171-byte contract `0x0605963420c4e8566fcef2cf65dcd575662bf53d` on Robinhood Chain. **MetaRouter / MetaRouterGateway / MulticallRouter are confirmed NOT proxies** — `eth_getStorageAt` at the impl slot returns all-zero on every chain, and they carry full multi-KB runtime bytecode (an immutable would). The upgradeable surface to monitor is the four Transparent proxies plus the three intents UUPS proxies, via the `Upgraded(address)` topic `0xbc7cd75a20ee27fd9adebab32041f755214dbc6bffa90cc0225b39da2e5c2d3b`.
 
 ---
 
@@ -551,7 +572,7 @@ EIP-1967 implementation slot read live (`eth_getStorageAt`) per chain — curren
 3. **`OracleRequest` (BridgeV2) is the relayer fan-out and fires on EVERY cross-chain send** — it's the most reliable "a bridge tx happened here" signal. All params are non-indexed (only topic0), so you must ABI-decode the data to get `receiveSide`/`oppositeBridge`/`chainId`.
 4. **The real user is `from` in `SynthesizeRequest`/`BurnRequest`, NOT `tx.origin`.** Most flows arrive through MetaRouter/MetaRouterGateway, so `tx.to` is the router and `msg.sender` to the Portal is the MetaRouter. Attribute to the event's `from`/`to`, and use `ClientIdLog.clientId` for integrator attribution.
 5. **Synthesis + SyntFabric do NOT exist on Avalanche, Optimism, Polygon, Robinhood Chain.** If you scan for `BurnRequest`/`SynthesizeCompleted` on those four you'll find nothing — that's correct, not a missing feed. Those chains only lock/release real tokens via the Portal.
-6. **No single vanity address — heavy literal reuse across chains in *different roles*.** Examples: `0x5523985926Aa12BA58DC5Ad00DDca99678D7227E` = Bridge on ETH/Poly/Arb/Op/Robinhood, an unlisted second BridgeV2 proxy on Avax, an unrelated contract on Base; `0xb8f275fBf7A959F4BCE59999A2EF122A099e81A8` = Portal on ETH/Poly, Bridge on BNB, MulticallRouter on OP and Robinhood; `0x01A3c8E513B758EBB011F7AFaf6C37616c9C24d9` = Portal on Arb, MulticallRouter on Base; `0x44487a445a7595446309464A82244B4bD4e325D5` = MetaRouter on BNB, SyntFabric on Base; `0x292fC50e4eB66C3f6514b9E402dBc25961824D62` = Bridge on Avax, Portal on OP and Robinhood; `0x2eE9559387b806E88fd46b9DA160D64A29CE7Da0` = SyntFabric on Arb, new gateway on Polygon; `0xcE8f24A58D85eD5c5A6824f7be1F8d4711A0eb4C` = new gateway (the `metaRouter`) on Robinhood, an unlisted older MetaRouter on ETH/Arb/Avax/Op/Poly. **Always key on `(chainId, address, role)`.**
+6. **No single vanity address — heavy literal reuse across chains in *different roles*.** Examples: `0x5523985926Aa12BA58DC5Ad00DDca99678D7227E` = Bridge on ETH/Poly/Arb/Op/Robinhood/Arc, an unlisted second BridgeV2 proxy on Avax, an unrelated contract on Base; `0xb8f275fBf7A959F4BCE59999A2EF122A099e81A8` = Portal on ETH/Poly, Bridge on BNB, MulticallRouter on OP and Robinhood; `0x01A3c8E513B758EBB011F7AFaf6C37616c9C24d9` = Portal on Arb, MulticallRouter on Base; `0x44487a445a7595446309464A82244B4bD4e325D5` = MetaRouter on BNB, SyntFabric on Base; `0x292fC50e4eB66C3f6514b9E402dBc25961824D62` = Bridge on Avax, Portal on OP and Robinhood; `0x2eE9559387b806E88fd46b9DA160D64A29CE7Da0` = SyntFabric on Arb, new gateway on Polygon; `0xcE8f24A58D85eD5c5A6824f7be1F8d4711A0eb4C` = new gateway (the `metaRouter`) on Robinhood, an unlisted older MetaRouter on ETH/Arb/Avax/Op/Poly. **Always key on `(chainId, address, role)`.**
 7. **`mpc()` (BridgeV2) is the single trusted relayer key.** A `LogChangeMPC` or `SetTransmitterStatus` event is a top-severity governance/security signal — a compromised MPC can mint/release arbitrarily. ETH `mpc()` was `0x5ddc2587b85c664083677654e77a472511fb537c` on 2026-06-09 and `0x2df0dda69a6ec341d3160b3f73c87b5358800dc5` on 2026-09-29 (same on all eight chains). **The MPC rotates about daily** (31 `LogChangeMPC` on the ETH bridge in 30 days; one on each chain in the pinned window, sent via `changeMPCSigned` by the relayer EOA `0x67f9b3e561383493b3f874feae0c53c2cd23851d`). A rotation alone is therefore routine: key an alert on a rotation from a different sender or outside the daily pattern, on `SetTransmitterStatus`, and on `Upgraded` / ProxyAdmin changes. Never hard-code the MPC; read `mpc()` live.
 8. **`BurnRequestTON` encodes the destination as a TON `(int8 workchain, bytes32 address_hash)` tuple, not an EVM address** — different topic0 (`0xb22f66d5cb4d958c8beec99f61917824d407a74d4514d8d44cc77247e67a4e5a`) and a non-address `to`. Only fires where TON is a destination.
 9. **sTokens are plain ERC-20s** minted/burned by SyntFabric: a mint is `Transfer(0x0 → user)`, a burn is `Transfer(user → 0x0)` on the sToken contract. Most live on the off-target hub chain `13863860`; on target chains they appear only where Synthesis exists (ETH/Base/BNB/Arb).
@@ -578,7 +599,7 @@ EIP-1967 implementation slot read live (`eth_getStorageAt`) per chain — curren
 TOPIC_SYNTHESIZE_REQUEST       = '\x31325fe0a1a2e6a5b1e41572156ba5b4e94f0fae7e7f63ec21e9b5ce1e4b3eab'
 TOPIC_BURN_COMPLETED           = '\xaeef64b7687b985665b6620c7fa271b6f051a3fbe2bfc366fb9c964602eb6d26'
 TOPIC_REVERT_BURN_REQUEST      = '\x40590cc12db0488520ce425059f83f8caed91bdf98de5ff829dc57c63843161b'
-TOPIC_META_REVERT_REQUEST      = '\xbd03c66ec5bd3d01fbf22bc794f68ac88b693023b438724019205a4b42aefb20'
+TOPIC_META_REVERT_REQUEST      = '\xbd03c66ec5bd3d01fbf22bc794f68ac88b693023b438724019205a4b42aefb20'  -- absent from the 2026-10-01 Portal impl
 TOPIC_REVERT_SYNTH_COMPLETED   = '\xefcdf9ea4e65571d2ce9c030c46954e950662df8a7d8bd039fc4417e37b2f88c'
 TOPIC_CLIENT_ID_LOG            = '\x5a297b2c9a9f94a0f4e5a796c74ad38e219d1185fccf5f79c18726a830c2b6f5'
 TOPIC_SET_WHITELIST_TOKEN      = '\x0a4552f1105808db6a44587c9ef0a7c4064bf620b9d843b514ad7365bd52239a'
@@ -815,6 +836,16 @@ RH_PROXY_ADMIN                 = '\x1da522b35363c1eda4833bc121c8f3c67b2caa75'
 RH_OWNER                       = '\x0605963420c4e8566fcef2cf65dcd575662bf53d'
 RH_USDG                        = '\x5fc5360d0400a0fd4f2af552add042d716f1d168'
 RH_WETH                        = '\x0bd7d308f8e1639fab988df18a8011f41eacad73'
+
+-- ===== Addresses — Arc (chain ID 5042) — NO Synthesis/Fabric; new MetaRouter only =====
+ARC_PORTAL                     = '\xe75c7e85fe6add07077467064ad15847e6ba9877'
+ARC_BRIDGE                     = '\x5523985926aa12ba58dc5ad00ddca99678d7227e'
+ARC_METAROUTER_GATEWAY_NEW     = '\xce8f24a58d85ed5c5a6824f7be1f8d4711a0eb4c'
+ARC_METAROUTER_EXECUTOR        = '\xadb2d3b711bb8d8ea92ff70292c466140432c278'
+ARC_MULTICALL_ROUTER           = '\x292fc50e4eb66c3f6514b9e402dbc25961824d62'
+ARC_PROXY_ADMIN                = '\x1da522b35363c1eda4833bc121c8f3c67b2caa75'
+ARC_OWNER                      = '\x64c44f682a1014410c864bd708a7ab1b67eec0ea'
+ARC_USDC                       = '\x3600000000000000000000000000000000000000'
 
 -- ===== Off-target Symbiosis hub (chain ID 13863860) — Synthesis hub, no Portal =====
 HUB_SYNTHESIS                  = '\x45cfd6fb7999328f189aad2739fba4be6c45e5bf'

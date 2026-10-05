@@ -1,7 +1,7 @@
 # Synapse RFQ (FastBridge) — Topics, Selectors, Addresses (Ethereum, BNB, Arbitrum, Optimism, Base)
 
-**Status:** verified against live RPC and the canonical `synapsecns/sanguine` `packages/contracts-rfq` repo on 2026-06-09.
-**Scope:** the **RFQ / intent bridge** — `FastBridge` (a.k.a. FastBridgeV2), the `FastBridgeRouter`/`FastBridgeRouterV2` front, and the `FastBridgeInterceptor`. This is Synapse's *current* primary bridge path (relayer-fronted optimistic transfers), distinct from the mint/burn `SynapseBridge` documented in [synapse.md](./synapse.md). Chains + IDs: Ethereum 1, BNB 56, Arbitrum 42161, Optimism 10, Base 8453. **Topics/selectors are chain-agnostic; addresses are network-specific.**
+**Status:** verified against live RPC and the canonical `synapsecns/sanguine` `packages/contracts-rfq` repo on 2026-06-09. **Activity re-checked 2026-10-05: the RFQ path is dormant.** The FastBridge `0x5523D3c98809DdDB82C686E152F5C58B1B0fB59E` emitted its last log on 2026-05-09 (Base block 45,748,866 at 00:37:59 UTC; Ethereum block 25,053,985 at 00:38:35 UTC) and had 0 logs on Base and Ethereum from then to 2026-10-05; FastBridgeRouterV2 had 0 logs on Base (60 days) and Ethereum (30 days). The contracts still have code, `FastBridgeRouterV2.fastBridge()` still returns `0x5523…`, and no replacement RFQ contract was found in the SDK address file. Keep the constants for history and for a restart.
+**Scope:** the **RFQ / intent bridge** — `FastBridge` (a.k.a. FastBridgeV2), the `FastBridgeRouter`/`FastBridgeRouterV2` front, and the `FastBridgeInterceptor`. This was Synapse's primary bridge path until 2026-05-09 (relayer-fronted optimistic transfers), distinct from the mint/burn `SynapseBridge` documented in [synapse.md](./synapse.md). Chains + IDs: Ethereum 1, BNB 56, Arbitrum 42161, Optimism 10, Base 8453. **Topics/selectors are chain-agnostic; addresses are network-specific.**
 
 RFQ is an **optimistic relay bridge**: a user calls `bridge(...)` on the origin `FastBridge`, which escrows their token and emits `BridgeRequested` (carrying a `bytes32 transactionId`). A whitelisted **relayer** fronts the destination funds and calls `relay(...)` on the destination `FastBridge` (emits `BridgeRelayed`). The relayer then `prove`s the relay on the origin (`BridgeProofProvided`), and after a `DISPUTE_PERIOD` with no `dispute`, `claim`s the escrowed origin funds (`BridgeDepositClaimed`). If no relay happens before `deadline`, the user `refund`s (`BridgeDepositRefunded`). **There is no mint/burn and no nUSD here** — funds are pre-positioned by relayers; the join key across chains is the `bytes32 transactionId`.
 
@@ -89,7 +89,7 @@ All verified via `eth_getCode` on each chain's publicnode RPC on 2026-06-09. **F
 | **FastBridgeRouterV2** | `0x00cD000000003f7F682BE4813200893d4e690000` | Current router front (vanity `00cD…0000`). |
 | **FastBridgeRouter (V1)** | `0x0000000000489d89D2B233D3375C045dfD05745F` | Older router front. |
 | **FastBridgeInterceptor** | `0xFb1fb1060C550A9b274C64f70dadF16f2aD34fB1` | Quote/zap interceptor. |
-| RelayerInterceptor (RELAY) | `0xBBbfD134E9b44BfB5123898BA36b01dE7ab93d98` | (SDK `RELAY_ADDRESS`) |
+| Relay ApprovalProxy v2 (third party) | `0xBBbfD134E9b44BfB5123898BA36b01dE7ab93d98` | SDK `RELAY_ADDRESS`: the Relay protocol's ApprovalProxy v2 (11,652 B, same code on Ethereum and Arc), used for Relay routes. **Not a Synapse contract**; see the `relay` reference. |
 
 ### 3.1 Per-chain presence
 
@@ -99,7 +99,7 @@ All verified via `eth_getCode` on each chain's publicnode RPC on 2026-06-09. **F
 | BNB | 56 | ✓ `0x5523…` (9,547 B) | ✓ `0x00cD…` | present. |
 | Arbitrum | 42161 | ✓ `0x5523…` | ✓ `0x00cD…` | present; `fastBridge()` → `0x5523…`. |
 | Optimism | 10 | ✓ `0x5523…` | ✓ `0x00cD…` | present. |
-| Base | 8453 | ✓ `0x5523…` | ✓ `0x00cD…` | **highest live RFQ volume** of the 7. |
+| Base | 8453 | ✓ `0x5523…` | ✓ `0x00cD…` | highest RFQ volume of the 7 until the last FastBridge log on 2026-05-09; 0 logs since. |
 | **Avalanche** | 43114 | **✗ `0x`** | **✗ `0x`** | **NOT DEPLOYED.** |
 | **Polygon** | 137 | **✗ `0x`** | **✗ `0x`** | **NOT DEPLOYED.** |
 | **Robinhood** | 4663 | **✗ `0x`** | **✗ `0x`** | **NOT DEPLOYED.** `eth_getCode` = `0x` (nonce 0) on 2026-09-29 at FastBridge `0x5523D3c98809DdDB82C686E152F5C58B1B0fB59E`, FastBridgeRouterV2 `0x00cD000000003f7F682BE4813200893d4e690000`, FastBridgeRouter `0x0000000000489d89D2B233D3375C045dfD05745F` and FastBridgeInterceptor `0xFb1fb1060C550A9b274C64f70dadF16f2aD34fB1`; chain id 4663 is not in the SDK's `SupportedChainId` enum. |
@@ -129,7 +129,8 @@ There is **no proxy** in the RFQ stack. Upgrades happen by deploying a new FastB
 6. **`BridgeDepositRefunded` means the relay never happened in time** — the user got their origin funds back. A spike implies relayer outages or a destination-chain issue.
 7. **Not on Avalanche or Polygon** (`0x` on both) — those two chains use only the classic `SynapseBridge`/CCTP paths ([synapse.md](./synapse.md)).
 8. **`FastBridge` and `FastBridgeRouterV2` are the same literal address on all 5 deployed chains** — key on `(chainId, address)`.
-9. **The dApp calls the router (`0x00cD…`), not the bridge directly** — so a `BridgeRequested` log's `tx.to` is the router/interceptor, and `sender` in the event (not `tx.from`) is the user.
+9. **The RFQ path is dormant (last FastBridge log 2026-05-09 on Base and Ethereum).** A new `BridgeRequested` or `BridgeRelayed` after that date is a restart signal worth an alert. Current Synapse value flow is on the classic bridge and its adapter ([synapse.md](./synapse.md)).
+10. **The dApp calls the router (`0x00cD…`), not the bridge directly** — so a `BridgeRequested` log's `tx.to` is the router/interceptor, and `sender` in the event (not `tx.from`) is the user.
 
 ---
 

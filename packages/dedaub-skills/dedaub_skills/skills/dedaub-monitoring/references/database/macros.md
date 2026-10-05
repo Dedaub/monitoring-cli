@@ -14,7 +14,7 @@ but doesn't execute. Read it for *index lead / `Seq Scan` vs index scan*, not it
 
 **Companion — `common_query_patterns.md`** (the SQL craft to this file's macro surface; most queries need
 both): §1 schema/indexes · §2 block-times · §3 perf rules · §7 question→pattern · §8 edge cases · §9
-anti-patterns. Its two siblings hold the bulk: **`query_patterns.md`** (§5 P1–P16 templates) and
+anti-patterns. Its two siblings hold the bulk: **`query_patterns.md`** (§5 P1–P17 templates) and
 **`decode_primitives.md`** (§4 decode/enrich cheat-sheet).
 
 ## Table macros
@@ -24,7 +24,7 @@ anti-patterns. Its two siblings hold the bulk: **`query_patterns.md`** (§5 P1�
 | `{{<chain>.outer_transaction(duration=)}}` | 1 / top-level tx | `tx_hash`,`callvalue`,`status`,`from_a`/`to_a`,`input` — entry-call, ETH value |
 | `{{<chain>.transaction_detail(duration=,inputs=)}}` | 1 / call frame | `from_a`/`to_a`/`calldata`/`callvalue`/`error`/`call_opcode`/`caller_vm_step_stack` — internal calls, selectors. Takes `duration=` + `inputs=` like `logs`, plus the signature-string forms (below). |
 | `{{<chain>.logs(duration=,inputs=)}}` | 1 / emitted log | events by topic0 + emitter |
-| `{{<chain>.token_ledger(...)}}` / `{{<chain>.token_transfers(...)}}` | parsed token deltas | value analytics (`value_delta` signed) > decoding `logs.data` |
+| `{{<chain>.token_ledger(...)}}` / `{{<chain>.token_transfers(...)}}` | parsed token deltas | value analytics (`value_delta` signed: `> 0` = `address` sent, `< 0` = received) > decoding `logs.data` |
 | `{{<chain>.contracts(...)}}` / `{{contract_list(...)}}` | deployed contracts | deployer / is-contract lookups |
 | `{{<chain>.block(...)}}` | block headers | tip, timestamps |
 
@@ -142,6 +142,12 @@ annotated raw-`topic0` form — wrong flags lose silently, a raw topic0 can't.
 - `run-query`/`preprocess-query`/`explain-query` require `--id`; omit SQL to use stored text (an `--id`-only
   call returns immediately rather than blocking on idle stdin). A macro's explicit `duration='…'`
   **overrides** `run-query --duration`.
+- **`run-query --end-time <ISO>` pins the window END** and `--duration` looks back from it: the query reads
+  `[end-time − duration, end-time]` (measured: `--duration 1h --end-time 2026-10-01T12:00:00Z` → blocks
+  11:00–12:00). Omit it for "now". To read a window `[A, B]`, pass `--end-time B --duration (B − A)`.
+  The server field and a macro's own `start_time='…'` argument carry the same END meaning despite the name
+  (measured: `logs(duration='1h', start_time='…T12:00:00Z')` → the same 11:00–12:00 blocks);
+  `--start-time` survives only as a hidden, deprecated alias of `--end-time`. Not allowed in a scheduled run.
 - **No `delete-query`**; `delete-folder` (`--path`) refuses non-empty folders → can't clean up. Fix in place
   via `write-query`; reuse one `/_scratch/probe` for probing. (`create-folder` = positional PATH;
   `delete-folder`/`rename-folder` = `--path`/`--new-path`.)

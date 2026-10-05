@@ -1,4 +1,4 @@
-# §5 — Query patterns (P1–P16)
+# §5 — Query patterns (P1–P17)
 
 Sibling of `sample_queries/common_query_patterns.md` (the hub). `§N` references point to the hub; decode
 snippets are in `decode_primitives.md`. Each pattern is a template — placeholders use `{{UPPER_CASE}}`;
@@ -19,7 +19,7 @@ the protocol doc supplies the constants. Pick via the hub's §7 map or the quick
 "amount/volume/USD"→P4 · "by hour/day/week, trend"→P6 · "top/leaderboard"→P7 · "network/graph/edges"→P8 ·
 "multiple paths/variants"→P9 · "across chains"→P10 · "total/sum/aggregate (esp. cross-chain)"→P12 ·
 "deployer/first deployed"→P11 · "hasn't happened in N"→P13 · "drained >$N in one tx"→P14 ·
-"reentrancy/nested call"→P15 · "sudden drop/spike vs norm"→P16.
+"reentrancy/nested call"→P15 · "sudden drop/spike vs norm"→P16 · "who can spend / approvals / allowance"→P17.
 
 ### P1 — Function-call discovery (`to_a + selector`)
 
@@ -131,25 +131,24 @@ WITH txs AS (   -- a tx filter (P1 or P3); strip if you want ALL transfers of th
 SELECT
     tl.block_number,
     tl.tx_index,
-    tl.address              AS sender,            -- the row with value_delta < 0
+    tl.address              AS sender,            -- the row with value_delta > 0 (address SENT)
     tl.counterparty_address AS recipient,
-    -tl.value_delta / pow(10::numeric, {{DECIMALS}}) AS amount_human
+    tl.value_delta / pow(10::numeric, {{DECIMALS}}) AS amount_human
 FROM txs
 JOIN {{CHAIN}}.token_ledger tl
   ON tl.block_number = txs.block_number
  AND tl.tx_index     = txs.tx_index
  AND tl.token_address = '{{TOKEN}}'::bytea
- AND tl.value_delta < 0                          -- one row per Transfer (debit side)
- AND tl.value_delta != 0;                        -- defensive
+ AND tl.value_delta > 0;                         -- one row per Transfer (sender side)
 ```
 
-`token_ledger` records both sides of each transfer; filtering `value_delta < 0` picks the sender row and `counterparty_address` gives you the recipient — no log decoding needed.
+`token_ledger` records both sides of each transfer. **`value_delta > 0` is the row where `address` SENT the tokens; `value_delta < 0` is the row where `address` RECEIVED them** (`value_delta` is the amount sent, not a balance change — `common_query_patterns.md` §1). Filtering `value_delta > 0` picks the sender row and `counterparty_address` gives you the recipient — no log decoding needed.
 
 ### P5 — Authorizer attribution (caller ≠ initiator)
 
 > Use when: the protocol uses meta-transactions, gasless approvals, or any relayer pattern — i.e. `tx.from` is **not** the real user. Examples: EIP-3009 (`transferWithAuthorization`), EIP-2612 (`permit`), Permit2, ERC-4337 user ops, Gelato relays.
 
-The pattern: identify the real initiator from either (a) a side-channel event whose indexed arg is the signer, or (b) the `value_delta < 0` row in `token_ledger`.
+The pattern: identify the real initiator from either (a) a side-channel event whose indexed arg is the signer, or (b) the `value_delta > 0` (sender) row in `token_ledger`.
 
 ```sql
 WITH txs AS (
@@ -175,7 +174,7 @@ JOIN {{CHAIN}}.logs au
  AND au.topic0       = '{{AUTH_TOPIC0}}'::bytea;   -- {{AUTH_EVENT_SIG}}
 ```
 
-Substitute `au.topic1` → `value_delta < 0` row from `token_ledger` if no auth event exists (e.g. Permit2 path).
+Substitute `au.topic1` → the `value_delta > 0` (sender) row's `address` from `token_ledger` if no auth event exists (e.g. Permit2 path).
 
 ### P6 — Time-bucketed aggregation
 
@@ -186,15 +185,15 @@ WITH events AS (
     -- emit one row per "thing" you're measuring (use P1/P3/P4 as appropriate)
     SELECT
         date_trunc('{{BUCKET}}', {{CHAIN}}.block_timestamp(td.block_number)) AS bucket,
-        tl.address              AS initiator,
+        tl.address              AS initiator,     -- value_delta > 0 row: address sent
         tl.counterparty_address AS counterparty,
-        -tl.value_delta / pow(10::numeric, {{DECIMALS}}) AS amount_usd
+        tl.value_delta / pow(10::numeric, {{DECIMALS}}) AS amount_usd
     FROM {{CHAIN}}.transaction_detail td
     JOIN {{CHAIN}}.token_ledger tl
       ON tl.block_number = td.block_number
      AND tl.tx_index     = td.tx_index
      AND tl.token_address = '{{TOKEN}}'::bytea
-     AND tl.value_delta < 0
+     AND tl.value_delta > 0
     WHERE td.to_a = '{{CONTRACT}}'::bytea
       AND common.selector(td.calldata) = ANY (ARRAY['{{SELECTOR}}'::bytea])   -- {{FN_SIG}}
       AND td.call_opcode = 'CALL'
@@ -225,7 +224,7 @@ ORDER BY bucket DESC;
 ```sql
 SELECT
     tl.{{ACTOR_COLUMN}} AS actor,              -- tl.address (sender) | tl.counterparty_address (recipient)
-    SUM(-tl.value_delta) / pow(10::numeric, {{DECIMALS}}) AS total_amount,
+    SUM(tl.value_delta) / pow(10::numeric, {{DECIMALS}}) AS total_amount,
     COUNT(*)                  AS event_count,
     COUNT(DISTINCT tl.{{OPPOSITE_COLUMN}}) AS unique_counterparties
 FROM {{CHAIN}}.transaction_detail td
@@ -233,7 +232,7 @@ JOIN {{CHAIN}}.token_ledger tl
   ON tl.block_number = td.block_number
  AND tl.tx_index     = td.tx_index
  AND tl.token_address = '{{TOKEN}}'::bytea
- AND tl.value_delta < 0
+ AND tl.value_delta > 0                      -- sender row
 WHERE td.to_a = '{{CONTRACT}}'::bytea
   AND common.selector(td.calldata) = ANY (ARRAY['{{SELECTOR}}'::bytea])   -- {{FN_SIG}}
   AND td.call_opcode = 'CALL'
@@ -256,7 +255,7 @@ For "top relayers/facilitators/operators", `GROUP BY td.from_a` instead (the cal
 SELECT
     tl.address              AS sender,
     tl.counterparty_address AS receiver,
-    SUM(-tl.value_delta) / pow(10::numeric, {{DECIMALS}}) AS edge_weight_amount,
+    SUM(tl.value_delta) / pow(10::numeric, {{DECIMALS}}) AS edge_weight_amount,
     COUNT(*)                AS edge_weight_count,
     MIN({{CHAIN}}.block_timestamp(tl.block_number)) AS first_interaction,
     MAX({{CHAIN}}.block_timestamp(tl.block_number)) AS last_interaction
@@ -265,7 +264,7 @@ JOIN {{CHAIN}}.token_ledger tl
   ON tl.block_number = td.block_number
  AND tl.tx_index     = td.tx_index
  AND tl.token_address = '{{TOKEN}}'::bytea
- AND tl.value_delta < 0
+ AND tl.value_delta > 0                      -- sender row
 WHERE td.to_a = '{{CONTRACT}}'::bytea
   AND common.selector(td.calldata) = ANY (ARRAY['{{SELECTOR}}'::bytea])   -- {{FN_SIG}}
   AND td.call_opcode = 'CALL'
@@ -360,15 +359,15 @@ The split:
 ```sql
 -- Principal VIEW, named "Detail": full rows, NO limit, materialize VIEW.
 -- One UNION ALL branch per chain; each carries its own literal chain_id + chain_name (cross-chain PK rule below).
-SELECT 8453  AS chain_id, 'base'     AS chain_name, tl.token_address, -tl.value_delta AS amount_raw, lti.decimals, lti.symbol
+SELECT 8453  AS chain_id, 'base'     AS chain_name, tl.token_address, tl.value_delta AS amount_raw, lti.decimals, lti.symbol
 FROM {{base.token_ledger(duration='24h')}} tl
 JOIN base.latest_token_info lti ON lti.token_address = tl.token_address
-WHERE tl.value_delta < 0 AND tl.value_delta != 0
+WHERE tl.value_delta > 0   -- sender row: one row per transfer
 UNION ALL
-SELECT 42161 AS chain_id, 'arbitrum' AS chain_name, tl.token_address, -tl.value_delta AS amount_raw, lti.decimals, lti.symbol
+SELECT 42161 AS chain_id, 'arbitrum' AS chain_name, tl.token_address, tl.value_delta AS amount_raw, lti.decimals, lti.symbol
 FROM {{arbitrum.token_ledger(duration='3h')}} tl
 JOIN arbitrum.latest_token_info lti ON lti.token_address = tl.token_address
-WHERE tl.value_delta < 0 AND tl.value_delta != 0
+WHERE tl.value_delta > 0   -- sender row: one row per transfer
 -- no LIMIT
 ```
 
@@ -400,7 +399,7 @@ Collapsing on bare `address` over-sums across chains and mislabels rows.
 **Carry `chain_name` next to `chain_id`** in every VIEW branch (`8453 AS chain_id, 'base' AS chain_name`)
 and project both (group by both — they're 1:1) so the human-readable name rides along with each summed row.
 Mapping: `1` ethereum, `8453` base, `42161` arbitrum, `10` optimism, `137` polygon, `56` bnb,
-`43114` avalanche, `4663` robinhood.
+`43114` avalanche, `4663` robinhood, `5042` arc.
 
 ### P13 — Absence / staleness ("X hasn't happened in N")
 
@@ -437,7 +436,7 @@ GROUP BY t.block_number, t.tx_index, p.protocol_id, p.protocol_name
 HAVING SUM(<chain>.to_usd_value(t.value_delta, t.token_address)) > 1000000   -- net move > $1M
 ```
 
-`value_delta` is **signed**, so summing per `(tx, protocol)` **nets** inflows against outflows — a balanced swap → ~0, a real drain → a large one-sided total. `to_usd_value` works on any numeric (incl. signed `value_delta`), not just balances. **Confirm the sign direction empirically** (the flagship "Drained in a single tx" thresholds the sum `> 1e7`); flip the comparison if your chain/protocol records the drained side negative.
+`value_delta` is **signed**, so summing per `(tx, protocol)` **nets** inflows against outflows — a balanced swap → ~0, a real drain → a large one-sided total. `value_delta > 0` means `address` **sent** the tokens (`common_query_patterns.md` §1), so a drained protocol nets **positive**: keep `> threshold` (the flagship "Drained in a single tx" thresholds the sum `> 1e7`). `to_usd_value` works on any numeric (incl. signed `value_delta`), not just balances.
 
 ### P15 — Reentrancy / nested-call detection (`is_ancestor`)
 
@@ -471,3 +470,28 @@ FROM series
 ```
 
 `LAG` = period-over-period % change (drop/recovery); `AVG(…) OVER (… ROWS BETWEEN n PRECEDING AND 1 PRECEDING)` = rolling baseline for a `>k×` spike or `<−x%` drop threshold. **Always `NULLIF(denominator, 0)`.** These are standard PG window functions — no macro needed; bucket with P6 first, threshold in the outer query.
+
+### P17 — Token allowance exposure (`token_allowance`)
+
+> Use when: "who can spend X's tokens?", "which owners gave spender S a large or unlimited approval?", "new unlimited approvals to a fresh contract", or exposure sizing after a spender is compromised.
+
+`<chain>.token_allowance` is **current state**, not history: one row per `(token_address, spender_address, owner_address)` holding the latest `value` and the `block_number` of its last change. Referenced **raw** (no macro). Rows with `value = 0` stay in the table after a revoke or a full spend — they were ~96% of recent Ethereum updates — so filter `value > 0` for live exposure. For *when* or *how often* an approval happened, or for the previous value, use the ERC-20 `Approval` logs (P1) instead.
+
+```sql
+SELECT
+    concat('0x', encode(ta.token_address, 'hex')) AS token_address,
+    concat('0x', encode(ta.owner_address, 'hex')) AS owner_address,
+    ta.value                                      AS allowance_raw,
+    ta.value >= 2::numeric ^ 255                  AS is_unlimited,   -- MaxUint256, or a decremented "infinite" approval
+    ta.block_number                               AS last_change_block
+FROM {{CHAIN}}.token_allowance ta
+WHERE ta.spender_address = '{{SPENDER}}'::bytea                      -- index lead: spender | owner_address | token_address (PK)
+  AND ta.value > 0                                                   -- drop revoked / fully-spent rows
+  AND ta.block_number > (SELECT MAX(block_number) FROM {{CHAIN}}.block) - {{N_BLOCKS}}   -- optional: changed recently
+ORDER BY ta.value DESC
+LIMIT 200
+```
+
+Lead with an indexed column: `spender_address` (who can this spender pull from), `owner_address` (whom has this owner approved), `token_address` (PK prefix), or `block_number` (recent changes). Any other lead is a full scan. Price exposure as `LEAST(ta.value, tb.value)` with `<chain>.token_balance tb ON (tb.token_address, tb.owner_address) = (ta.token_address, ta.owner_address)` — an allowance can exceed what the owner holds. The table updates on every allowance-spending `transferFrom`, so a `block_number` recency filter alone returns busy routers, not *new* approvals; pair it with `is_unlimited` or a spender allowlist/denylist.
+
+**Pull without an allowance (bypass candidates).** For a `transferFrom` pull `(token, spender=caller, owner)`, a **missing** row is the candidate signal — not `value = 0`, which a normal approval spent to zero leaves behind. Look it up by the PK: `NOT EXISTS (SELECT 1 FROM {{CHAIN}}.token_allowance ta WHERE (ta.token_address, ta.spender_address, ta.owner_address) = (p.token, p.spender, p.owner))`. It ranks, it does not prove: measured over 15m of all pulls, 0.5% of triples on Robinhood and 5% on Ethereum had no row, and the misses included Permit2 pulls (an index gap) and non-token contracts that share the `transferFrom` selector. Before you report a bypass, confirm the candidate with the `Approval` logs (P2) or an `eth_call` to `allowance(owner, spender)` (tip state only — a later revoke or spend hides the past value).

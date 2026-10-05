@@ -1,6 +1,6 @@
 # DODO Smart-Route / Trading-Entry Layer — Topics, Selectors, Addresses (Ethereum, Base, BNB, Avalanche, Arbitrum, Optimism, Polygon)
 
-**Status:** verified against live RPC on every listed chain and the canonical `DODOEX/contractV2`, `DODOEX/dodo-route-contract`, and `DODOEX/dodo-limit-order` repos on 2026-06-02.
+**Status:** verified against live RPC on every listed chain and the canonical `DODOEX/contractV2`, `DODOEX/dodo-route-contract`, and `DODOEX/dodo-limit-order` repos on 2026-06-02. BNB router set corrected 2026-10-05 from live logs and `eth_call` (§5).
 **Scope:** DODO's trading-entry / smart-route infrastructure — the token-allowance layer (DODOApprove, DODOApproveProxy), the swap/route entry contracts (DODOV2Proxy, RouteProxy, DODOFeeRouteProxy + widget variant), the create+liquidity entry contracts (DSPProxy, CpProxy, DPPProxy), the per-venue swap adapters (DODOV1Adapter, DODOV2Adapter, UniAdapter, CurveAdapter), the read-only quoting/aggregation helpers (DODOV2RouteHelper, DODOCalleeHelper, DODOSellHelper, DODOV1PmmHelper, DODOSwapCalcHelper, ERC20Helper, MultiCall, CurveSample), and the limit-order settlement layer (LimitOrder, LimitOrderBot). Covers Ethereum (1), Base (8453), BNB Smart Chain (56), Avalanche C-Chain (43114), Arbitrum One (42161), Optimism (10), Polygon PoS (137). Topics and 4-byte selectors are **chain-agnostic** (computed from the canonical signature); **addresses are network-specific**. This file deliberately excludes the AMM pool/factory/template layer and the token/NFT/staking contracts.
 
 Three orientation facts a monitoring engineer must internalise:
@@ -368,9 +368,10 @@ All verified via `eth_getCode` on `https://bsc-rpc.publicnode.com`.
 |------|---------|-----------|
 | **DODOApprove** | `0xa128Ba44B2738A558A1fdC06d6303d52D3Cef8c1` | Allowance hub. |
 | **DODOApproveProxy** | `0xB76de21f04F677f07D9881174a1D8E624276314C` | Router allow-list. |
-| **RouteProxy** | `0x6B3D817814eABc984d51896b1015C0b89E9737Ca` | Gen-2 aggregator. `isAllowedProxy = true`. |
-| **DODOFeeRouteProxy** | `0x0656fD85364d03b103CEEda192FB2D3906A6ac15` | Gen-3 fee aggregator. `isAllowedProxy = true`. |
-| **DODOFeeRouteProxy (widget)** | `0xa8b034301Bb5DD3610db585Def3e7C0d52f2319F` | Widget fee variant. |
+| **DODOV2Proxy** (`DODOV2Proxy02` build) | `0x8F8Dd7DB1bDA5eD3da8C9daf3bfa471c12d58486` | **The live BNB swap entry.** 24,144 B (same size as the Ethereum `DODOV2Proxy`); `_DODO_APPROVE_PROXY_()` = `0xB76de21f…314C`, `_WETH_()` = WBNB, `_DVM_FACTORY_()` = BNB DVMFactory `0x790B4A80…33fB`, `_DODO_SELL_HELPER_()` = `0x0F859706…DA33`; `isAllowedProxy = true`. Called with `dodoSwapV2TokenToToken` / `ETHToToken` / `TokenToETH`. `OrderHistory` 3,379 in the 7 d to 2026-09-30 15:00 UTC. Not in the DODO contract API; the same literal is the Avalanche `PermissionManager` ([v2.md](v2.md)). |
+| **RouteProxy** | `0x6B3D817814eABc984d51896b1015C0b89E9737Ca` | Gen-2 aggregator. `isAllowedProxy = true`. Quiet: 0 logs in the 7 d to 2026-09-30 15:00 UTC. |
+| **DODOFeeRouteProxy** | `0x0656fD85364d03b103CEEda192FB2D3906A6ac15` | Gen-3 fee aggregator. `isAllowedProxy = true`. Quiet: 0 logs in the same 7 d. |
+| **DODOFeeRouteProxy (widget)** | `0xa8b034301Bb5DD3610db585Def3e7C0d52f2319F` | Widget fee variant. Quiet: 0 logs in the same 7 d. |
 | **DSPProxy** | `0x2442A8B5cdf1E659F3F949A7E454Caa554D4E65a` | Stable-pool create + LP. |
 | **CpProxy** | `0xA867241cDC8d3b0C07C85cC06F25a0cD3b5474d8` | CrowdPooling create + bid. |
 | **DPPProxy** | `0x624FC8368fE11BE00D8B2F3fE0B9D0053BEc21b9` | Private-pool create + reset. |
@@ -383,7 +384,7 @@ All verified via `eth_getCode` on `https://bsc-rpc.publicnode.com`.
 | **LimitOrder** | `0xdc5E86654e768d21f7D298690687eA02db7b2a04` | Limit-order fills. `isAllowedProxy = true`. |
 | **LimitOrderBot** | `0x187da347dEbf4221B861EeAFC9808d8Cf89cF5fE` | Keeper. |
 
-> **BSC divergences (verified):** **no `DODOV2Proxy`** (BSC swap entry is `RouteProxy` + `DODOFeeRouteProxy`); `isAllowedProxy(DODOV2Proxy-ETH-addr) = false`. No `CurveAdapter`/`CurveSample`. No `DODOSwapCalcHelper`/`ERC20Helper`/`MultiCall`. No `DODOSellHelper`.
+> **BSC divergences (verified):** the BNB `DODOV2Proxy` sits at its own address `0x8F8Dd7DB…8486` (the Ethereum `DODOV2Proxy` address is not allowed here: `isAllowedProxy(DODOV2Proxy-ETH-addr) = false`), and it carries nearly all BNB `OrderHistory` volume. No `CurveAdapter`/`CurveSample`. No `DODOSwapCalcHelper`/`ERC20Helper`/`MultiCall`. No `DODOSellHelper`.
 
 ---
 
@@ -514,7 +515,7 @@ All verified via `eth_getCode` on `https://polygon-bor-rpc.publicnode.com`.
 |----------|:------:|:-----------:|:--------:|:------------:|:-----------:|:-------:|:---------:|
 | DODOApprove | Y | Y | Y | Y | Y | Y | Y |
 | DODOApproveProxy | Y | Y | Y | Y | Y | Y | Y |
-| DODOV2Proxy | Y | Y | **—** | Y | Y | Y | Y |
+| DODOV2Proxy | Y | Y | Y (`0x8F8Dd7DB…`) | Y | Y | Y | Y |
 | RouteProxy | Y | **—** | Y | Y | Y | Y | Y |
 | DODOFeeRouteProxy | Y | Y | Y | Y | Y | Y | Y |
 | DODOFeeRouteProxy (widget) | Y | Y | Y | Y | Y | Y | Y |
@@ -536,13 +537,13 @@ All verified via `eth_getCode` on `https://polygon-bor-rpc.publicnode.com`.
 | LimitOrder | Y | **—** | Y | **—** | Y | **—** | Y |
 | LimitOrderBot | Y | **—** | Y | **—** | Y | **—** | Y |
 
-Key absences to encode in alert config: **DODOV2Proxy ∉ BNB**, **RouteProxy ∉ Base**, **DPPProxy ∉ Optimism**, **LimitOrder/Bot present only on {ETH, BNB, ARB, POL}**, **Base adapter set = {DODOV2Adapter}** only, **CurveAdapter/CurveSample ∈ {ETH, ARB}** only.
+Key absences to encode in alert config: **RouteProxy ∉ Base**, **DPPProxy ∉ Optimism**, **LimitOrder/Bot present only on {ETH, BNB, ARB, POL}**, **Base adapter set = {DODOV2Adapter}** only, **CurveAdapter/CurveSample ∈ {ETH, ARB}** only.
 
 `OrderHistory`-emitting router set per chain (the swap detector allow-list):
 
 - **Ethereum / Avalanche / Arbitrum / Optimism / Polygon:** `{DODOV2Proxy, RouteProxy, DODOFeeRouteProxy, DODOFeeRouteProxy(widget)}`
 - **Base:** `{DODOV2Proxy, DODOFeeRouteProxy, DODOFeeRouteProxy(widget)}` (no RouteProxy)
-- **BNB:** `{RouteProxy, DODOFeeRouteProxy, DODOFeeRouteProxy(widget)}` (no DODOV2Proxy)
+- **BNB:** `{DODOV2Proxy 0x8F8Dd7DB…, RouteProxy, DODOFeeRouteProxy, DODOFeeRouteProxy(widget)}` (in the 7 d to 2026-09-30 15:00 UTC every BNB `OrderHistory` from this set came from the DODOV2Proxy)
 
 ---
 
@@ -741,9 +742,10 @@ BASE_DODO_SWAP_CALC_HELPER            = '\xbcd2fdc3b884cf0dfd932f55ec2fe1fb7e8c6
 BASE_ERC20_HELPER                     = '\xb5c7ba1eade74800cd6cf5f56b1c4562de373780'
 BASE_MULTICALL                        = '\xf5ec1a19e1570bdf0a3aaa6585274f27027270b1'
 
--- ===== BNB Smart Chain (chain ID 56) — NO DODOV2Proxy =====
+-- ===== BNB Smart Chain (chain ID 56) =====
 BSC_DODO_APPROVE                      = '\xa128ba44b2738a558a1fdc06d6303d52d3cef8c1'
 BSC_DODO_APPROVE_PROXY                = '\xb76de21f04f677f07d9881174a1d8e624276314c'
+BSC_DODO_V2_PROXY                     = '\x8f8dd7db1bda5ed3da8c9daf3bfa471c12d58486'
 BSC_ROUTE_PROXY                       = '\x6b3d817814eabc984d51896b1015c0b89e9737ca'
 BSC_FEE_ROUTE_PROXY                   = '\x0656fd85364d03b103ceeda192fb2d3906a6ac15'
 BSC_FEE_ROUTE_PROXY_WIDGET            = '\xa8b034301bb5dd3610db585def3e7c0d52f2319f'

@@ -1,16 +1,18 @@
 # Allbridge Core — Topics, Selectors, Addresses (Ethereum, BNB, Polygon, Avalanche, Arbitrum, Optimism, Base)
 
-**Status:** verified against live RPC on all seven chains and the canonical `allbridge-io/allbridge-core-evm-contracts` repo on 2026-06-09. Topic0s/selectors recomputed locally as `keccak256(signature)` and cross-checked against live `eth_getLogs`; addresses parsed from the official Core contracts page (`docs-core.allbridge.io`) and existence-checked via `eth_getCode`.
+**Status:** verified against live RPC on all seven chains and the canonical `allbridge-io/allbridge-core-evm-contracts` repo on 2026-06-09. Topic0s/selectors recomputed locally as `keccak256(signature)` and cross-checked against live `eth_getLogs`; addresses parsed from the official Core contracts page (`docs-core.allbridge.io`) and existence-checked via `eth_getCode`. **Status re-checked 2026-10-05:** the vUSD pool path (Bridge + Pools + Messenger/WormholeMessenger) is **discontinued**; only the CCTP v1, CCTP v2, xReserve and OFT adapters carry transfers (see below).
 **Scope:** Allbridge Core — the stablecoin bridge built on a virtual-USD (vUSD) pool model, plus the bundled CCTP / CCTPv2 / OFT bridge adapters that share the same docs page and admin. Topics + selectors are **chain-agnostic**; addresses are **network-specific**. All seven requested chains carry a Core deployment. **Robinhood Chain (4663) has none** (§10; checked 2026-09-29).
 
 Allbridge Core is a **liquidity-pool stablecoin bridge**. A swap-and-bridge transfer routes the source stablecoin into a per-token `Pool`, converting it to an internal accounting unit **vUSD** (`SwappedToVUsd`), emits a `TokensSent` event on the `Bridge`, and ships a 32-byte message hash through a pluggable messaging layer (`Messenger` = Allbridge's own validator protocol, or `WormholeMessenger`). On the destination chain `receiveTokens` validates the message, swaps vUSD back out of the destination `Pool` (`SwappedFromVUsd`), and emits `TokensReceived`. Same-chain swaps between two pools go through `swap` → `Swapped`.
+
+> **Pool path discontinued (July 2026).** The official contracts page marks the Main Bridge contracts, the liquidity pools and the Allbridge/Wormhole messaging as **deprecated: "pool-based transfers … were discontinued after the July 2026 security incident"**; current transfers use the CCTP, xReserve and OFT interface contracts. On-chain (read 2026-10-05): `router()` (`0xf887ea40`) of every Core pool on all seven chains returns the admin `0x01a494079dcb715f622340301463ce50cd69a4d0` (no code) instead of the Bridge, so `swapToVUsd` / `swapFromVUsd` cannot run through the Bridge. The last Bridge `TokensSent` / `TokensReceived` on Ethereum was at block 25,568,554 (2026-07-19); the last Ethereum USDC pool `SwappedToVUsd` at block 25,846,456 (2026-08-27). Keep the Bridge/Pool constants for history and for an alert on any new pool or Bridge activity.
 
 **Every Core contract is immutable — there are NO proxies.** The EIP-1967 implementation slot (`0x360894…382bbc`) reads `0x0` on the `Bridge`, every `Pool`, the `Messenger`, the `GasOracle`, and the CCTP/OFT adapters. Upgrades are done by deploying a new contract and re-pointing references via owner-only setters (`Bridge.addPool`, `Pool.setRouter`, `Messenger.setOtherChainIds`, …). The single protocol admin **`0x01a494079dcb715f622340301463ce50cd69a4d0`** owns the `Bridge` and `Messenger` on **all seven chains** (read from Ownable storage slot 0). Addresses are **NOT** vanity / deterministic — each chain has unrelated addresses (unlike Allbridge Classic, which uses one cross-chain vanity address — see [classic.md](classic.md)).
 
 Three things to internalize before indexing:
 1. The user-facing `Bridge` contract is also the `Router` (same address) — `Swapped` (same-chain) and `TokensSent`/`TokensReceived` (cross-chain) all emit from the **one** Bridge address per chain.
 2. The CCTP / CCTPv2 / OFT adapters are **separate contracts** with their own `TokensSent` topic0s that **collide by name** with the Bridge's `TokensSent` but have **different signatures and different topic0s** — disambiguate by emitter and topic0 (§1).
-3. Most Core volume now flows through Circle CCTP (the v1/v2 adapters), not the original vUSD pool bridge. Both are live; index both.
+3. **All live Core volume flows through the adapters** (Circle CCTP v1/v2, Circle xReserve, LayerZero OFT). The original vUSD pool bridge is retired (pool path discontinued after the July 2026 incident; see above).
 
 ---
 
@@ -18,14 +20,15 @@ Three things to internalize before indexing:
 
 | Contract | Role | Proxy? | Source |
 |----------|------|--------|--------|
-| **Bridge** (= GasUsage + Router + MessengerGateway) | User entrypoint for `swapAndBridge` / `receiveTokens` / same-chain `swap`. Holds the per-token Pool registry and the other-chain bridge registry. | **No** (immutable, 10,784 B) | `Bridge.sol` |
-| **Pool** (one per token per chain; = RewardManager + ERC-20 LP) | vUSD AMM for a single stablecoin; LP token; deposit/withdraw liquidity; `swapToVUsd`/`swapFromVUsd` (router-only). | **No** (immutable) | `Pool.sol`, `RewardManager.sol` |
+| **Bridge** (= GasUsage + Router + MessengerGateway) | User entrypoint for `swapAndBridge` / `receiveTokens` / same-chain `swap`. Holds the per-token Pool registry and the other-chain bridge registry. **Deprecated (pool transfers discontinued, July 2026).** | **No** (immutable, 10,784 B) | `Bridge.sol` |
+| **Pool** (one per token per chain; = RewardManager + ERC-20 LP) | vUSD AMM for a single stablecoin; LP token; deposit/withdraw liquidity; `swapToVUsd`/`swapFromVUsd` (router-only). **Deprecated; `router()` now = the admin, not the Bridge.** | **No** (immutable) | `Pool.sol`, `RewardManager.sol` |
 | **Messenger** | Allbridge's own cross-chain messaging protocol (1 primary + N secondary ECDSA validators). | **No** (immutable, 3,977 B) | `Messenger.sol` |
 | **WormholeMessenger** | Alternate messaging backend via Wormhole. Selected per-transfer by the `MessengerProtocol` enum. | **No** (immutable) | `WormholeMessenger.sol` |
 | **GasOracle** | Stores per-chain native-token USD price + gas price; used to quote the cross-chain messaging fee. | **No** (immutable, 2,330 B) | `GasOracle.sol` |
 | **CctpBridge** ("CCTP Interface") | Adapter that bridges native USDC over Circle CCTP **v1** with Allbridge relayer/gas logic. | **No** (immutable, 7,127 B) | `CctpBridge.sol` |
 | **CctpV2Bridge** ("CCTP v2 Interface") | Same for Circle CCTP **v2** (fast/finality-threshold transfers). | **No** (immutable, 6,605 B) | `CctpV2Bridge.sol` |
 | **OftBridge** ("OFT Interface") | Adapter that bridges LayerZero OFT tokens with Allbridge relayer/gas logic. | **No** (immutable, 11,266 B) | `OftBridge.sol` |
+| **xReserve Interface** | Adapter for USDC-backed stablecoins over Circle xReserve (official contracts page). Ethereum only among the seven. Source not verified on Blockscout; topics not recomputed. | No (EIP-1967 slot empty; 4,726 B) | — |
 
 `MessengerProtocol` enum (from `IBridge.sol`): `0=None, 1=Allbridge, 2=Wormhole, 3=CCTP, 4=CCTPv2, 5=LayerZero`. The trailing `uint8 messenger` field of `TokensSent`/`swapAndBridge` is this enum.
 
@@ -168,15 +171,16 @@ All verified via `eth_getCode` returning non-empty bytecode on `https://ethereum
 
 | Role | Address | One-liner |
 |------|---------|-----------|
-| **Bridge (Router)** | `0x609c690e8F7D68a59885c9132e812eEbDaAf0c9e` | vUSD swap-and-bridge entrypoint (10,784 B). owner `0x01a494…a4d0`. |
+| **Bridge (Router)** | `0x609c690e8F7D68a59885c9132e812eEbDaAf0c9e` | vUSD swap-and-bridge entrypoint (10,784 B). owner `0x01a494…a4d0`. **Retired:** last `TokensSent`/`TokensReceived` at block 25,568,554 (2026-07-19); deprecated on the official page (observed 2026-10-05). |
 | **Messenger** | `0x203e8785b4d4312c4152d0c42ba3fa8bd79086da` | Allbridge validator messaging (3,977 B). gasOracle `0x0bdf61…96e0`. |
 | **GasOracle** | `0x0bdf6139f2841a7856ca154d851182c52f5b96e0` | Native-token-price / gas oracle (2,330 B). |
 | **Pool — USDC** | `0xa7062bbA94c91d565Ae33B893Ab5dFAF1Fc57C4d` | `token()` = USDC `0xa0b8…eb48`. |
 | **Pool — USDT** | `0x7DBF07Ad92Ed4e26D5511b4F285508eBF174135D` | |
-| **Pool — USDe** | `0xCab34D4d532a9c9929f4f96d239653646351abAd` | `token()` = Ethena USDe `0x4c9E…68B3` (13,385 B). **NB: the USDe _token_ is `0x4c9EDD5852cd905f086C759E8383e09bff1E68B3` — do NOT confuse it with the pool; the token has no `token()`/`getPrice()` and is Ethena-owned.** |
+| **Pool — USDe** | `0xcaB34d4D532A9c9929f4f96D239653646351Abad` | `token()` = Ethena USDe `0x4c9E…68B3` (13,385 B). **NB: the USDe _token_ is `0x4c9EDD5852cd905f086C759E8383e09bff1E68B3` — do NOT confuse it with the pool; the token has no `token()`/`getPrice()` and is Ethena-owned.** |
 | **CctpBridge (CCTP v1)** | `0xC51397b75B783E31469bFaADE79913F3f82210d6` | Native-USDC over Circle CCTP v1 (7,127 B). |
 | **CctpV2Bridge (CCTP v2)** | `0x7972d6907739593C00e6284c53C83dB3ECd15c33` | Circle CCTP v2 (6,605 B). |
 | **OftBridge (OFT)** | `0xeC455fFC19811e573eb5700a1bDff6ee1C47AB7B` | LayerZero OFT adapter (11,266 B). |
+| **xReserve Interface** | `0x44F9E60cB5543777492101BF424271c5F252cF15` | Circle xReserve adapter (4,726 B; `owner()` = `0x01a494…a4d0`). Listed on the official page; 0 logs in the 7 days to 2026-10-05. |
 | Protocol admin (owner) | `0x01a494079dcb715f622340301463ce50cd69a4d0` | Owns Bridge + Messenger on all chains. |
 
 ## 4. Addresses — BNB Smart Chain (chain ID 56)
@@ -232,7 +236,7 @@ Verified via `eth_getCode` on `https://arbitrum-one-rpc.publicnode.com`.
 | **GasOracle** | `0x2476b2f821612afbf01dfc51e4cd4d7b77ebcb10` |
 | **Pool — USDC** | `0x690e66fc0F8be8964d40e55EdE6aEBdfcB8A21Df` |
 | **Pool — USDT** | `0x47235cB71107CC66B12aF6f8b8a9260ea38472c7` |
-| **Pool — USDe** | `0x2b5e5E6008742Cd9d139C6Add9Cac57679C59D6d` | `token()` = USDe `0x5d3a…ef34` (13,385 B). **NB: the USDe _token_ is `0x5d3a1Ff2b6BAb83b63cd9AD0787074081a52ef34` — not the pool.** |
+| **Pool — USDe** | `0x2B5E5E6008742Cd9D139c6ADd9CaC57679C59D6d` | `token()` = USDe `0x5d3a…ef34` (13,385 B). **NB: the USDe _token_ is `0x5d3a1Ff2b6BAb83b63cd9AD0787074081a52ef34` — not the pool.** |
 | **CctpBridge (CCTP v1)** | `0x23e1aec13c92158643cf2aa17e155d27a792ccdb` |
 | **CctpV2Bridge (CCTP v2)** | `0x7ED5343dFC95dc3eBe5B6de64F5B5423A888Ca18` |
 | **OftBridge (OFT)** | `0xB074e73e637E778BE6411c3732bD58D44194FDEa` |
@@ -270,6 +274,8 @@ Verified via `eth_getCode` on `https://base-rpc.publicnode.com`.
 
 ## 10. Cross-chain summary
 
+Bridge, Messenger, GasOracle and Pools below are deployed but **deprecated** (pool path discontinued July 2026). Live columns: CCTP v1, CCTP v2, OFT, and the Ethereum xReserve interface (`0x44F9…cF15`).
+
 | Chain | ID | Bridge | Messenger | GasOracle | Pools | CCTP v1 | CCTP v2 | OFT |
 |---|---|---|---|---|---|---|---|---|
 | Ethereum | 1 | ✓ `0x609c…0c9e` | ✓ `0x203e…86da` | ✓ `0x0bdf…96e0` | USDC, USDT, USDe | ✓ | ✓ | ✓ |
@@ -280,6 +286,7 @@ Verified via `eth_getCode` on `https://base-rpc.publicnode.com`.
 | Optimism | 10 | ✓ `0x97E5…d5ab` | ✓ `0x309a…3695` | ✓ `0x4ad8…9d9a`† | USDC, USDT | ✓ | — | — |
 | Base | 8453 | ✓ `0x001E…DEf7` | ✓ `0x9bc6…8271` | ✓ `0x7b80…f6d6` | USDC | ✓ | ✓ | — |
 | Robinhood Chain | 4663 | — | — | — | — | — | — | — |
+| Arc | 5042 | — | — | — | — | — | — | — |
 
 † OP GasOracle full address `0x4ad835ffa57e5e1e82514b2ba01d21fc15199d9a`.
 
@@ -308,7 +315,7 @@ EIP-1967 implementation slot: `0x360894a13ba1a3210667c828492db98dca3e2076cc3735a
 5. **`nonce` is the cross-chain key.** The message preimage (see `hashMessage`) binds `(amount, recipient, srcChainId, dstChainId, receiveToken, nonce, messenger)`; the on-chain `message` is that hash. Match a source `TokensSent` to a destination `TokensReceived` by `nonce` + chain pair, and to the messaging layer by the `message` hash in `MessageSent`/`MessageReceived`.
 6. **Pool `Deposit(address,uint256)` shares topic0 `0xe1fffcc4…` with WETH/canonical `Deposit`,** and `Pool.withdraw(uint256)` shares selector `0x2e1a7d4d` with WETH `withdraw`. Filter Pool events strictly by the Pool address.
 7. **`swapToVUsd`/`swapFromVUsd` are `onlyRouter`.** A direct call from a non-Bridge address reverts — these always appear inside a `swapAndBridge`/`receiveTokens`/`swap` tx, with the Bridge as caller.
-8. **Most current Core volume is CCTP, not the vUSD pool bridge.** The original swap bridge still fires (verified live on ETH), but for USDC the CCTP v1/v2 adapters carry the bulk. Index both families.
+8. **All current Core volume is on the adapters, not the vUSD pool bridge.** The pool path was discontinued after the July 2026 incident: every pool's `router()` is the admin, and the Ethereum Bridge has emitted no transfer event since block 25,568,554 (2026-07-19). Treat any new `TokensSent` / `SwappedToVUsd` from a Bridge or Pool as an anomaly.
 9. **Transfers arrive via aggregators.** The sampled ETH `swapAndBridge` tx had `tx.to` = LI.FI (`0x1231deb6…`), not the Bridge — attribute by the Bridge **event emitter**, never by `tx.to`.
 10. **The destination relayer, not the user, calls `receiveTokens`.** The real beneficiary is the `recipient` field of `TokensReceived`, not the tx sender.
 11. **Validator-set is the security boundary for Allbridge-protocol messages.** `MessageReceived` is only emitted after `ecrecover` against the primary + a secondary validator. Watch `SecondaryValidatorsSet` (`0x55981f51…`) — a validator rotation is a governance-grade signal.
@@ -392,6 +399,7 @@ ETH_POOL_USDE                 = '\xcab34d4d532a9c9929f4f96d239653646351abad'  --
 ETH_CCTP                      = '\xc51397b75b783e31469bfaade79913f3f82210d6'
 ETH_CCTP_V2                   = '\x7972d6907739593c00e6284c53c83db3ecd15c33'
 ETH_OFT                       = '\xec455ffc19811e573eb5700a1bdff6ee1c47ab7b'
+ETH_XRESERVE                  = '\x44f9e60cb5543777492101bf424271c5f252cf15'
 
 -- ===== BNB (chain ID 56) =====
 BNB_BRIDGE                    = '\x3c4fa639c8d7e65c603145adad8bd12f2358312f'
@@ -458,6 +466,7 @@ How every constant was verified (2026-06-09):
 - **Immutability:** EIP-1967 impl slot `0x360894…382bbc` read live = `0x0` on the ETH Bridge, ETH USDC Pool, and ETH CCTP bridge → no proxies. Admin slot likewise empty.
 - **Admin:** Ownable slot 0 of the Bridge and Messenger reads `0x01a494079dcb715f622340301463ce50cd69a4d0` identically on all seven chains. Classic admin (validator/feeCollector/feeOracle) is in [classic.md](classic.md).
 - **Robinhood Chain (2026-09-29):** the official Core contract page (Main Bridge, CCTP, CCTP v2, xReserve and OFT interface tables) names no Robinhood Chain entry, and `eth_getCode` on `https://rpc.mainnet.chain.robinhood.com` returns `0x` (nonce 0) for the Ethereum and Base Bridge, the Ethereum Messenger, GasOracle, CCTP, CCTP v2, OFT and xReserve interface addresses. `TokensSent` / `TokensReceived` had 0 logs on Robinhood Chain in the pinned window 2026-09-28 00:00–12:00 UTC.
+- **Status (2026-10-05):** the official contracts page marks the Main Bridge contracts, the pools and the Allbridge/Wormhole messaging as deprecated after the July 2026 security incident and adds the xReserve interface `0x44F9E60cB5543777492101BF424271c5F252cF15` (Ethereum; `eth_getCode` 4,726 B, EIP-1967 slot empty). `router()` read on all 15 EVM pools of the seven chains = `0x01a494079dcb715f622340301463ce50cd69a4d0`. Last Ethereum Bridge transfer event and last USDC pool `SwappedToVUsd` read from indexed logs (blocks 25,568,554 and 25,846,456). The page lists no Arc entry.
 - **Chain coverage:** `eth_getCode` run for every Bridge/Pool/Messenger/GasOracle/CCTP/OFT address on all seven RPCs; absences (`0x`) recorded explicitly in §4–§9 and §10 (BNB has no CCTP/OFT; OP/Polygon/BNB have no CCTP v2; only ETH+Arb have OFT).
 
 **Authoritative sources:**

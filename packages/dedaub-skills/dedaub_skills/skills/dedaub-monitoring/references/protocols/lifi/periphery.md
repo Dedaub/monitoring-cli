@@ -1,6 +1,6 @@
-# LI.FI Periphery — Topics, Selectors, Addresses (Ethereum + Base + Arbitrum + Optimism + Polygon + BNB + Avalanche + Robinhood Chain)
+# LI.FI Periphery — Topics, Selectors, Addresses (Ethereum + Base + Arbitrum + Optimism + Polygon + BNB + Avalanche + Robinhood Chain + Arc)
 
-**Status:** verified on 2026-09-29 against live RPC on all eight chains, `lifinance/contracts` (`src/Periphery/`, `src/Security/`, `deployments/<network>.json`, `deployments/<network>.diamond.json` → `Periphery`) and the explorer-verified sources of the deployed contracts. Every topic0 and selector was recomputed as `keccak256(signature)`. Every address was existence-checked with `eth_getCode`.
+**Status:** verified on 2026-09-29 against live RPC on all eight chains (Arc added 2026-10-05), `lifinance/contracts` (`src/Periphery/`, `src/Security/`, `deployments/<network>.json`, `deployments/<network>.diamond.json` → `Periphery`) and the explorer-verified sources of the deployed contracts. Every topic0 and selector was recomputed as `keccak256(signature)`. Every address was existence-checked with `eth_getCode`.
 **Scope:** the contracts around the LiFiDiamond: the **destination side** (Executor and the bridge receivers: ReceiverAcrossV3, ReceiverAcrossV4, ReceiverStargateV2, ReceiverChainflip, ReceiverOIF and the legacy Receiver), the **entry helpers** (Permit2Proxy, ERC20Proxy), the **fee contracts** (FeeCollector, FeeForwarder, LiFuelFeeCollector), and the **utilities** (TokenWrapper, GasZipPeriphery, LiFiDEXAggregator, Patcher, OutputValidator, LidoWrapper), plus the **LiFiTimelockController** that owns the diamond. The diamond itself is in [diamond.md](diamond.md). Topics and selectors are chain-agnostic; addresses are network-specific.
 
 The periphery contracts are plain, immutable contracts. Most of them have a different address on each chain, because LI.FI redeploys them with chain-specific constructor arguments (the Executor, the Across spoke pool, the LayerZero endpoint). Always key them on `(chain, address)`.
@@ -17,25 +17,25 @@ Three facts to know before indexing:
 
 | Contract | Role | Emits | Chains |
 |----------|------|-------|--------|
-| **Executor** | Destination swaps and calls. `swapAndCompleteBridgeTokens` pulls the bridged token from the calling receiver, runs the swaps and pays the receiver. | `LiFiTransferCompleted`, `AssetSwapped` | all 8 |
-| **ReceiverAcrossV4** | Across message handler (`handleV3AcrossMessage`, called only by the Across spoke pool). | `LiFiTransferRecovered` | 7 (not Avalanche) |
+| **Executor** | Destination swaps and calls. `swapAndCompleteBridgeTokens` pulls the bridged token from the calling receiver, runs the swaps and pays the receiver. | `LiFiTransferCompleted`, `AssetSwapped` | all 9 |
+| **ReceiverAcrossV4** | Across message handler (`handleV3AcrossMessage`, called only by the Across spoke pool). | `LiFiTransferRecovered` | 8 (not Avalanche) |
 | ReceiverAcrossV3 | Older Across message handler, still deployed. | `LiFiTransferRecovered` | ETH·Base·Arb·OP·Poly·BNB |
-| **ReceiverStargateV2** | Stargate V2 / LayerZero `lzCompose` handler (called only by the LayerZero endpoint, for a Stargate pool). | `LiFiTransferRecovered` | 7 (not Robinhood Chain) |
+| **ReceiverStargateV2** | Stargate V2 / LayerZero `lzCompose` handler (called only by the LayerZero endpoint, for a Stargate pool). | `LiFiTransferRecovered` | 7 (not Robinhood Chain, not Arc) |
 | ReceiverChainflip | Chainflip `cfReceive` handler (called only by the Chainflip vault). | `LiFiTransferRecovered` | ETH·Arb |
-| ReceiverOIF | Open Intents Framework output settler callback (`outputFilled`). No own event; the Executor emits. | — | all 8 |
-| Receiver (legacy) | Stargate V1 `sgReceive` and Connext Amarok `xReceive` handler. Not in the current periphery registry. | `LiFiTransferRecovered` | 7 (not Robinhood Chain) |
-| **Permit2Proxy** | Gasless entry: pulls the user's tokens with an EIP-2612 permit or a Permit2 signature, then calls the diamond. | — | all 8 |
-| ERC20Proxy | Lets the Executor pull tokens (`transferFrom`) for authorized callers. | `AuthorizationChanged` | all 8 |
-| **FeeCollector** | Integrator and LI.FI fee escrow. | `FeesCollected`, `FeesWithdrawn`, `LiFiFeesWithdrawn` | all 8 |
-| **FeeForwarder** | Newer fee path: forwards fees straight to the recipients in the same transaction. | `FeesForwarded` | all 8 |
-| LiFuelFeeCollector | Legacy destination-gas (LI.FI Fuel) fee collector. | `GasFeesCollected`, `FeesWithdrawn` | 7 (not Robinhood Chain) |
-| TokenWrapper | Wraps and unwraps the native token for swap steps. | — | all 8 |
-| GasZipPeriphery | Deposits to the Gas.zip router from a swap step. | — | all 8 |
-| LiFiDEXAggregator | LI.FI's own swap router (`processRoute`). | `Route` | all 8 |
+| ReceiverOIF | Open Intents Framework output settler callback (`outputFilled`). No own event; the Executor emits. | — | all 9 |
+| Receiver (legacy) | Stargate V1 `sgReceive` and Connext Amarok `xReceive` handler. Not in the current periphery registry. | `LiFiTransferRecovered` | 7 (not Robinhood Chain, not Arc) |
+| **Permit2Proxy** | Gasless entry: pulls the user's tokens with an EIP-2612 permit or a Permit2 signature, then calls the diamond. | — | all 9 |
+| ERC20Proxy | Lets the Executor pull tokens (`transferFrom`) for authorized callers. | `AuthorizationChanged` | all 9 |
+| **FeeCollector** | Integrator and LI.FI fee escrow. | `FeesCollected`, `FeesWithdrawn`, `LiFiFeesWithdrawn` | all 9 |
+| **FeeForwarder** | Newer fee path: forwards fees straight to the recipients in the same transaction. | `FeesForwarded` | all 9 |
+| LiFuelFeeCollector | Legacy destination-gas (LI.FI Fuel) fee collector. | `GasFeesCollected`, `FeesWithdrawn` | 7 (not Robinhood Chain, not Arc) |
+| TokenWrapper | Wraps and unwraps the native token for swap steps. | — | 8 (not Arc) |
+| GasZipPeriphery | Deposits to the Gas.zip router from a swap step. | — | all 9 |
+| LiFiDEXAggregator | LI.FI's own swap router (`processRoute`). | `Route` | all 9 |
 | Patcher | Patches amounts into calldata at run time for multi-step routes. | `PatchExecuted`, `TokensDeposited` | ETH·Base·Poly·Avax |
-| OutputValidator | Checks the output amount of a swap and sends the excess to a wallet. | `OutputValidated` | all 8 |
+| OutputValidator | Checks the output amount of a swap and sends the excess to a wallet. | `OutputValidated` | all 9 |
 | LidoWrapper | stETH ↔ wstETH helper. | — | OP only |
-| **LiFiTimelockController** | Owner of the diamond (OpenZeppelin TimelockController, 10,800 s minimum delay). | `CallScheduled`, `CallExecuted`, `Cancelled`, `MinDelayChange`, role events | all 8 |
+| **LiFiTimelockController** | Owner of the diamond (OpenZeppelin TimelockController, 10,800 s minimum delay). | `CallScheduled`, `CallExecuted`, `Cancelled`, `MinDelayChange`, role events | all 9 |
 
 All periphery contracts that inherit `WithdrawablePeriphery` or `TransferrableOwnership` also emit `TokensWithdrawn` and the ownership events (§1.2).
 
@@ -367,7 +367,7 @@ Existence-checked with `eth_getCode` on 2026-09-29 (runtime size in bytes).
 | Contract | Address | Code | Notes |
 |----------|---------|------|-------|
 | Executor | `0x464fC28B9CbC1781286c8626B6E925275c8C14F1` | 7,732 |  |
-| ReceiverAcrossV4 | `0x90dd81bD07763f39dF31D0089B61520461557D71` | 4,179 | `SPOKEPOOL()` = `0xd29C85F15DF544bA632C9E25829fd29d767d7978`; `EXECUTOR()` = the Executor above. |
+| ReceiverAcrossV4 | `0x90dd81bD07763f39dF31D0089B61520461557D71` | 4,179 | `SPOKEPOOL()` = `0xD29C85F15DF544bA632C9E25829fd29d767d7978`; `EXECUTOR()` = the Executor above. |
 | ReceiverOIF | `0xc1DcE9F7F5a7477CaE473D262e47b05bF2E712a3` | 3,843 |  |
 | Permit2Proxy | `0x8eABB4E117fB70b346592e013855f6d825F50af1` | 8,037 |  |
 | ERC20Proxy | `0xfb3973800ADf5B997E910F2DD90158924370612A` | 2,552 |  |
@@ -381,33 +381,53 @@ Existence-checked with `eth_getCode` on 2026-09-29 (runtime size in bytes).
 
 Not deployed on Robinhood Chain: ReceiverAcrossV3, ReceiverStargateV2, ReceiverChainflip, Receiver (legacy), LiFuelFeeCollector (legacy), Patcher, LidoWrapper.
 
+## 10a. Addresses — Arc (chain ID 5042)
+
+Existence-checked with `eth_getCode` on 2026-10-05 (runtime size in bytes). Source: `deployments/arc.json` and the `Periphery` block of `deployments/arc.diamond.json`.
+
+| Contract | Address | Code | Notes |
+|----------|---------|------|-------|
+| Executor | `0x7cfA0f3A811AEb3aC454F344aacaBA16aaFe828c` | 7,732 |  |
+| ReceiverAcrossV4 | `0x5C6295F5CB620DBAC1A3C41397dee25db79ceBa5` | 4,179 | `SPOKEPOOL()` = `0x9b4A302A548c7e313c2b74C461db7b84d3074A84`; `EXECUTOR()` = the Executor above. |
+| ReceiverOIF | `0xf8268EF796657144161CC0467762dD929423F1F7` | 3,843 |  |
+| Permit2Proxy | `0x9048Ab4E896aF38E2C3d001Aa1D7FB7668739e1d` | 8,037 |  |
+| ERC20Proxy | `0x0E76008a3C431BC818faF6b76a809bc285896D46` | 2,552 |  |
+| FeeCollector | `0x0604811F11863AA7904CF07c27875c80134744c7` | 4,717 |  |
+| FeeForwarder | `0xEDff4051B8286d2333149429F019dC10E23570da` | 3,037 |  |
+| GasZipPeriphery | `0xbD21C9E5536a483888c81B59a48797cd0f981086` | 4,866 |  |
+| LiFiDEXAggregator | `0xB479A5FF1b2Bda4D5F13fCAfF0C3Cd6102019F6B` | 22,427 |  |
+| OutputValidator | `0xE6ca0479AE3849e393c5b4735c9D41D58CcCb8cb` | 3,185 |  |
+| LiFiTimelockController | `0x50Ad2949DBCF80B4019fA9cA01Cc38AB7cE2ED8C` | 10,254 | Owner of the diamond. |
+
+Not deployed on Arc: ReceiverAcrossV3, ReceiverStargateV2, ReceiverChainflip, Receiver (legacy), LiFuelFeeCollector (legacy), TokenWrapper, Patcher, LidoWrapper.
+
 ---
 
 ## 11. Cross-chain summary
 
-| Contract | ETH | Base | Arb | OP | Poly | BNB | Avax | RH (4663) |
-|----------|-----|------|-----|----|------|-----|------|-----------|
-| Executor | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| ReceiverAcrossV4 | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | — | ✓ |
-| ReceiverAcrossV3 | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | — | — |
-| ReceiverStargateV2 | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | — |
-| ReceiverChainflip | ✓ | — | ✓ | — | — | — | — | — |
-| ReceiverOIF | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| Receiver (legacy) | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | — |
-| Permit2Proxy | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| ERC20Proxy | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| FeeCollector | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| FeeForwarder | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| LiFuelFeeCollector (legacy) | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | — |
-| TokenWrapper | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| GasZipPeriphery | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| LiFiDEXAggregator | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| Patcher | ✓ | ✓ | — | — | ✓ | — | ✓ | — |
-| OutputValidator | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| LidoWrapper | — | — | — | ✓ | — | — | — | — |
-| LiFiTimelockController | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Contract | ETH | Base | Arb | OP | Poly | BNB | Avax | RH (4663) | Arc (5042) |
+|----------|-----|------|-----|----|------|-----|------|-----------|------------|
+| Executor | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| ReceiverAcrossV4 | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | — | ✓ | ✓ |
+| ReceiverAcrossV3 | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | — | — | — |
+| ReceiverStargateV2 | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | — | — |
+| ReceiverChainflip | ✓ | — | ✓ | — | — | — | — | — | — |
+| ReceiverOIF | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Receiver (legacy) | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | — | — |
+| Permit2Proxy | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| ERC20Proxy | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| FeeCollector | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| FeeForwarder | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| LiFuelFeeCollector (legacy) | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | — | — |
+| TokenWrapper | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | — |
+| GasZipPeriphery | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| LiFiDEXAggregator | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Patcher | ✓ | ✓ | — | — | ✓ | — | ✓ | — | — |
+| OutputValidator | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| LidoWrapper | — | — | — | ✓ | — | — | — | — | — |
+| LiFiTimelockController | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 
-✓ = deployed at the address of §3–§10. — = not deployed (no entry in `deployments/<network>.json`; where an address of another chain was probed, `eth_getCode` returned `0x` or unrelated code). Robinhood Chain has its own address for every contract.
+✓ = deployed at the address of §3–§10a. — = not deployed (no entry in `deployments/<network>.json`; where an address of another chain was probed, `eth_getCode` returned `0x` or unrelated code). Robinhood Chain and Arc each have their own address for every contract.
 
 ---
 
@@ -585,6 +605,16 @@ RH_LIFI_FEE_FORWARDER                    = '\xf4bffe4dfc693f37715a47c15bda8af9ed
 RH_LIFI_GASZIP_PERIPHERY                 = '\x9f80fdadca03a6e062b13bae1b5e5c0b2a166049'
 RH_LIFI_DEX_AGGREGATOR                   = '\x6a330d43f40ca4e21842685aee7692a6a9d4c0c8'
 RH_LIFI_TIMELOCK                         = '\x6e9beb6997dae04122f1f8f8980f3dc8225443f3'
+ARC_LIFI_EXECUTOR                        = '\x7cfa0f3a811aeb3ac454f344aacaba16aafe828c'
+ARC_LIFI_RECEIVER_ACROSS_V4              = '\x5c6295f5cb620dbac1a3c41397dee25db79ceba5'
+ARC_LIFI_RECEIVER_OIF                    = '\xf8268ef796657144161cc0467762dd929423f1f7'
+ARC_LIFI_PERMIT2_PROXY                   = '\x9048ab4e896af38e2c3d001aa1d7fb7668739e1d'
+ARC_LIFI_ERC20_PROXY                     = '\x0e76008a3c431bc818faf6b76a809bc285896d46'
+ARC_LIFI_FEE_COLLECTOR                   = '\x0604811f11863aa7904cf07c27875c80134744c7'
+ARC_LIFI_FEE_FORWARDER                   = '\xedff4051b8286d2333149429f019dc10e23570da'
+ARC_LIFI_GASZIP_PERIPHERY                = '\xbd21c9e5536a483888c81b59a48797cd0f981086'
+ARC_LIFI_DEX_AGGREGATOR                  = '\xb479a5ff1b2bda4d5f13fcaff0c3cd6102019f6b'
+ARC_LIFI_TIMELOCK                        = '\x50ad2949dbcf80b4019fa9ca01cc38ab7ce2ed8c'
 ```
 
 ---
@@ -594,7 +624,7 @@ RH_LIFI_TIMELOCK                         = '\x6e9beb6997dae04122f1f8f8980f3dc822
 How every constant was verified (2026-09-29):
 
 - **Topic0 / selectors:** recomputed as `keccak256(canonical signature)` / `[0:4]` from the explorer-verified ABIs of the deployed periphery contracts, and cross-checked against `lifinance/contracts` `src/Periphery/*.sol`, `src/Security/LiFiTimelockController.sol`, `src/Interfaces/ILiFi.sol` and `archive/src/Periphery/Receiver.sol`.
-- **Addresses:** from `deployments/<network>.json` and the `Periphery` block of `deployments/<network>.diamond.json` for the eight networks; each existence-checked with `eth_getCode` on its chain (§3–§10). The code sizes are in §3–§10.
+- **Addresses:** from `deployments/<network>.json` and the `Periphery` block of `deployments/<network>.diamond.json` for the eight networks and `arc` (2026-10-05); each existence-checked with `eth_getCode` on its chain (§3–§10a). The code sizes are in §3–§10a. On Arc, `eth_getLogs` over blocks 24,335,947–24,375,947 (2026-10-05 04:48–10:26 UTC) found no log from the Executor or ReceiverAcrossV4.
 - **Activity (pinned 12-hour window 2026-09-28 00:00–12:00 UTC):**
 
   | Event (Executor address scan) | ETH | Base | Arb | OP | Poly | BNB | Avax | RH |
@@ -606,7 +636,7 @@ How every constant was verified (2026-09-29):
   - `LiFiTransferCompleted` (topic scan, any emitter): Ethereum 1 (1 Executor); Base 87 (87 Executor); Arbitrum 11 (11 Executor); Optimism 2 (2 Executor); Polygon 9 (9 Executor); BNB 479 (479 Executor); Avalanche 0; Robinhood Chain 298 (298 Executor).
 - **Sample transactions read:** Base `0x7a0c00d617e4668b7915ec3cd5df00b5cc79e97f5c7af66528d1d083bc3ba304` (Across fill from Polygon: `FilledRelay` → 630.64 USDC to ReceiverAcrossV4 `0x33b255b5db44A78c34381f89f1a454bc0Ef49871` → Executor `0x4DaC9d1769b9b304cb04741DCDEb2FC14aBdF110` → swap to AERO → `Transfer` of 749.26 AERO to the receiver → `LiFiTransferCompleted` with `receivingAssetId` = USDC and `amount` = 749256988150143394551); Base `0xacb8ed7f8fb91846b8857b996310ae16bd2bd70b11d95c7ee8fc03ee6d5f7c77` (Across fill from Robinhood Chain, origin chain id 4663: WETH to ReceiverAcrossV4, the Executor call fails, 15173003224019732 WETH to the receiver, `LiFiTransferRecovered`).
 
-No periphery address listed above is an EIP-1967 proxy: the implementation slot read by the code check returned zero for every one of them.
+No periphery address listed above is an EIP-1967 proxy: the implementation slot read by the code check returned zero for every one of them (on Arc, read for the Executor, ReceiverAcrossV4, Permit2Proxy and FeeCollector).
 
 Authoritative sources:
 - [lifinance/contracts](https://github.com/lifinance/contracts) (`src/Periphery/`, `src/Security/LiFiTimelockController.sol`, `archive/src/Periphery/Receiver.sol`, `deployments/`)

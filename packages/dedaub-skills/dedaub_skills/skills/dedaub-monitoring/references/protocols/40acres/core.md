@@ -201,7 +201,7 @@ All verified via `eth_getCode` on `https://base-rpc.publicnode.com`. Proxies sho
 | **PortfolioManager** | `0x40ac2e40acb7bdd6ec83e468143262fe216529ec` | — (singleton, 16 973 B) | Portfolio registry/factory hub. 4 factories, 4 facet registries. |
 | **AERO-USDC-Vault** | `0xb99b6df96d4d5448cc0a5b3e0ef7896df9507cf5` | — (direct, 4 993 B) | ERC-4626 lender vault, `asset()` = USDC, `symbol()` = `"VAULT"`. |
 | **AERO USDC Loan** | `0x87f18b377e625b62c708d5f6ea96ec193558efd0` | `0xb43b30c405c61bc330227968635d130994450735` (`Loan`) | Borrow USDC against an Aerodrome veNFT. `getProtocolFee()` = 500. |
-| **AERO Loan** (native) | `0x1Dc76341CA156e376736ddbA042aba071bD3b858` | `0xeda1e6578f7cca28a36e5b50d71f2f154b93c061` (`LoanV2Native`) | Borrow AERO (managed-NFT variant). |
+| **AERO Loan** (native) | `0x1Dc76341CA156e376736ddbA042aba071bD3b858` | `0xeda1e6578f7cca28a36e5b50d71f2f154b93c061` (`LoanV2Native`) | Borrow AERO (managed-NFT variant). Quiet: 0 logs in the 30 d to 2026-10-05. |
 | **Claim** (`RedeemCommunityShares`) | `0x8Ac5aa057da4c86f3896cFD851cBcdFC19a04dfe` | `0x030ad5f8a436ac243e8682c8d036cd82bf5a9fe3` | Community-rewards redemption. **Only deployed here (Base).** |
 | Portfolio Factories (×4) | `0x967361472f99fedc26a2b8bb3cfc1d0966979c8e`, `0xc3b96d5e971407902c563194bf8386ca5dad787b`, `0xae7b5751c370dc566a2bcd63be3e20729d050264`†, `0x74488ee5f1599cc4b89fa42134b9c5a142cba7d6` | Diamond | Mint per-user portfolio accounts. |
 | Facet Registries (×4) | `0xc2b32a782b7d98939c9403343b9e6d3c019004a2`, `0x3a0e5b904991196c9fcf8d591c8b9db9450bcdf4`, `0x82357a62b407fc89b0505b986c70812f395aeecf‡`, `0x60ab719aa7e0de6797e1619fceacab29c2a9e24b` | Diamond | Facet/selector registries for the factories. |
@@ -221,7 +221,7 @@ Verified via `eth_getCode` on `https://optimism-rpc.publicnode.com`.
 | **PortfolioManager** | `0x40ac2e40acb7bdd6ec83e468143262fe216529ec` | — (singleton) | 3 factories, 3 facet registries. |
 | **VELO-USDC-Vault** | `0x08dcdbf7bade91ccd42cb2a4ea8e5d199d285957` | — (direct, 4 993 B) | ERC-4626 vault, `asset()` = USDC. |
 | **VELO USDC Loan** | `0xf132bD888897254521D13e2c401e109caABa06A7` | `0x972b1ac00dfb287f244205b379f4565ab286ed3a` (`Loan`, ≡ Base) | Borrow USDC against a Velodrome veNFT. |
-| **VELO Loan** (native) | `0x8C0Ae206A52D3FddE6D43Ea5B5CbbbE00e1C0315` | `0xbfb12bac6bd6ce8c1006542152c2bbbe0bf1e54b` (`LoanV2Native`, ≡ Base) | Borrow VELO. |
+| **VELO Loan** (native) | `0x8C0Ae206A52D3FddE6D43Ea5B5CbbbE00e1C0315` | `0xbfb12bac6bd6ce8c1006542152c2bbbe0bf1e54b` (`LoanV2Native`, ≡ Base) | Borrow VELO. Quiet: 0 logs in the 30 d to 2026-10-05. |
 | Portfolio Factories (×3) | `0x8a71e4bab42ddc3d996fa4b4780919567e367924`, `0xce904f1c3c9bdf74d4dbd6a204058d1eb649140b`, `0xae7b5751c370dc566a2bcd63be3e20729d050264`† | Diamond | |
 | Facet Registries (×3) | `0x8139b24596dc0bee2f7a66d5a0d519c16c962c86`, `0xfbb7deab88be1f80dde3f2919b59acb9fe9e31e2`, `0x82357a62b407fc89b0505b986c70812f395aeecf‡` | Diamond | |
 | USDC (native) | `0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85` | — | 6 decimals. |
@@ -238,10 +238,10 @@ Verified via `eth_getCode` on `https://avalanche-c-chain-rpc.publicnode.com`. **
 |------|---------|-----------------|-----------|
 | **PortfolioManager** | `0x40ac2e40acb7bdd6ec83e468143262fe216529ec` | — (singleton) | Deployed, but **0 factories / 0 facet registries** registered (portfolio layer not yet active on Avax). |
 | **PHAR-USDC-Vault** | `0x124D00b1ce4453Ffc5a5F65cE83aF13A7709baC7` | `0x6243e6b69118d75cac781e806aef4b21c5890cc1` (`Vault`, **ERC-1967 proxy**) | Pharaoh lender vault. |
-| **BLACK-USDC-Vault** | `0xC0485C4bafB594Ae1457820fb6e5B67e8A04BCFD` | `0xf8e3120fd9957200b84913f746b4cb66b9a8a612` (`Vault`, ERC-1967 proxy) | Blackhole lender vault. |
+| **BLACK-USDC-Vault** | `0xC0485C4bafB594Ae1457820fb6e5B67e8A04BCFD` | `0x04262dbe34764f36cf75ef98313ff97824dcc752` (`Vault`, ERC-1967 proxy; was `0xf8e3120f…` — impl slot read live 2026-10-05) | Blackhole lender vault. |
 | **PHAR USDC Loan** | `0x6Bf2Fe80D245b06f6900848ec52544FBdE6c8d2C` | `0x01e9e8e684dd9b158fe772405f7b013f792e9a2f` (`XPharaohLoan`) | Borrow USDC against a Pharaoh veNFT (xPHAR model). |
 | **PHAR Loan** (native) | `0xd3E726b681C9a1E2a620cef9fE0EcE49822B11d4` | `0x54c269cf9712ab099ae1668b031f719156206ad9` (`PharaohLoanV2Native`) | Borrow PHAR (managed-NFT variant). |
-| **BLACK Loan** (USDC **and** native) | `0x5122f5154DF20E5F29df53E633cE1ac5b6623558` | `0x693ab037675b056730576892c214015990440cdb` (`LoanV2Native` family) | **One contract serves both the "BLACK USDC Loan" and "BLACK Loan" doc rows** — the docs list the same address twice. |
+| **BLACK Loan** (USDC **and** native) | `0x5122f5154DF20E5F29df53E633cE1ac5b6623558` | `0xce6fc22a63a0348a27b074476602823ee97c1d7e` (`LoanV2Native` family; was `0x693ab037…` — impl slot read live 2026-10-05) | **One contract serves both the "BLACK USDC Loan" and "BLACK Loan" doc rows** — the docs list the same address twice. |
 | USDC (native, Circle) | `0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E` | — | 6 decimals; vault underlying. |
 
 **No Claim / RedeemCommunityShares on Avalanche** (`0x8Ac5aa05…` = `0x` bytecode).
@@ -300,7 +300,7 @@ To read the live impl of any proxy: `cast storage <proxy> 0x360894a13ba1a3210667
 5. **`RewardsPaidtoOwner` has a lowercase `to`** in the canonical signature — using the "correct" capitalization yields the wrong topic0.
 6. **Avax vaults are proxies; Base/OP vaults are not.** Reading the EIP-1967 slot on a Base/OP vault returns empty — that's expected, not a missing proxy.
 7. **`Claim` (`0x8Ac5aa05…`) only has code on Base.** The contracts doc lists it under all four DEXes, but Optimism and Avalanche return `0x`. Don't index it cross-chain.
-8. **Blackhole's "USDC Loan" and "Loan" are the same address** (`0x5122…3558`, impl `0x693ab037…`). One contract, two doc rows.
+8. **Blackhole's "USDC Loan" and "Loan" are the same address** (`0x5122…3558`, impl `0xce6fc22a…`). One contract, two doc rows.
 9. **PortfolioManager is the same vanity address (`0x40ac2e40ac…`) on ETH/Base/OP/Avax,** but the *factory/facet-registry sets differ per chain* (ETH 5, Base 4, OP 3, Avax 0). Always read `getAllFactories()` per chain. Factory `0xae7b5751…0264` and facet registry `0x82357a62…eecf` recur on ETH+Base+OP.
 10. **Ethereum has the portfolio layer but no lending.** If you only look for Loan/Vault you'll wrongly conclude "not on Ethereum" — the PortfolioManager + 5 factories are live there.
 11. **UUPS impls are the upgrade target** — index events on the *proxy* address (stable), read state by `eth_call` to the *proxy* (delegates to impl). The impl address can change via `Upgraded`.
@@ -409,10 +409,10 @@ OP_USDC                           = '\x0b2c639c533813f4aa9d7837caf62653d097ff85'
 -- ===== Avalanche (chain ID 43114) — Pharaoh + Blackhole =====
 AVAX_PORTFOLIO_MANAGER            = '\x40ac2e40acb7bdd6ec83e468143262fe216529ec'   -- 0 factories registered
 AVAX_PHAR_USDC_VAULT              = '\x124d00b1ce4453ffc5a5f65ce83af13a7709bac7'   -- impl 0x6243e6b6… (Vault, ERC-1967 proxy)
-AVAX_BLACK_USDC_VAULT             = '\xc0485c4bafb594ae1457820fb6e5b67e8a04bcfd'   -- impl 0xf8e3120f… (Vault, ERC-1967 proxy)
+AVAX_BLACK_USDC_VAULT             = '\xc0485c4bafb594ae1457820fb6e5b67e8a04bcfd'   -- impl 0x04262dbe… (Vault, ERC-1967 proxy)
 AVAX_PHAR_USDC_LOAN               = '\x6bf2fe80d245b06f6900848ec52544fbde6c8d2c'   -- impl 0x01e9e8e6… (XPharaohLoan)
 AVAX_PHAR_LOAN_NATIVE             = '\xd3e726b681c9a1e2a620cef9fe0ece49822b11d4'   -- impl 0x54c269cf… (PharaohLoanV2Native)
-AVAX_BLACK_LOAN                   = '\x5122f5154df20e5f29df53e633ce1ac5b6623558'   -- impl 0x693ab037… (USDC + native are the SAME address)
+AVAX_BLACK_LOAN                   = '\x5122f5154df20e5f29df53e633ce1ac5b6623558'   -- impl 0xce6fc22a… (USDC + native are the SAME address)
 AVAX_USDC                         = '\xb97ef9ef8734c71904d8002f8b6bc66dd9c48a6e'
 -- NOTE: no Claim on Avalanche
 

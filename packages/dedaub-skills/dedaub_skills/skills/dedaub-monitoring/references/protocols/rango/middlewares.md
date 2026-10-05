@@ -1,6 +1,6 @@
-# Rango Middlewares — Topics, Selectors, Addresses (Ethereum + Base + Arbitrum + Optimism + Polygon + BNB + Avalanche + Robinhood Chain)
+# Rango Middlewares — Topics, Selectors, Addresses (Ethereum + Base + Arbitrum + Optimism + Polygon + BNB + Avalanche + Robinhood Chain + Arc)
 
-**Status:** verified on 2026-09-29 against live RPC on all eight chains, `rango-exchange/rango-contracts-v2` (`contracts/facets/base/RangoBaseInterchainMiddleware*.sol`, `contracts/facets/bridges/*Middleware.sol`, `contracts/libraries/LibInterchain*.sol`), the Rango docs (deployment addresses, message passing) and the explorer-verified sources of the deployed middlewares. Topics and selectors recomputed as `keccak256(signature)`; every address existence-checked with `eth_getCode` on all eight chains.
+**Status:** verified on 2026-09-29 against live RPC on the eight original chains (Arc checked on 2026-10-05), `rango-exchange/rango-contracts-v2` (`contracts/facets/base/RangoBaseInterchainMiddleware*.sol`, `contracts/facets/bridges/*Middleware.sol`, `contracts/libraries/LibInterchain*.sol`), the Rango docs (deployment addresses, message passing) and the explorer-verified sources of the deployed middlewares. Topics and selectors recomputed as `keccak256(signature)`; every address existence-checked with `eth_getCode` on all eight chains.
 **Scope:** the Rango **middlewares** (the destination "receivers" of routes that carry an interchain message) and the **MiddlewaresWhitelistsStorage** they share: their payout, refund and message events, their bridge entry functions, their admin functions, and their addresses per chain. The diamond is in [diamond.md](diamond.md). Topics and selectors are chain-agnostic; addresses are network-specific.
 
 A middleware is called by the underlying bridge on the destination chain (the Across spoke pool, the CCTP V2 message transmitter through a relayer, the LayerZero endpoint, the Chainflip vault, the deBridge external-call adapter, and so on). It decodes the `RangoInterChainMessage` (`requestId`, destination token, receiver, action), runs the destination swap or dApp call, pays the receiver, and emits `RangoBridgeCompleted` with the source `requestId`. If the swap fails, it pays the bridged token instead and reports the status.
@@ -320,7 +320,7 @@ Every documented address of every middleware was checked with `eth_getCode` on t
 
 No code at any documented address on Avalanche: RangoAcrossMiddleware, RangoChainFlipMiddleware, RangoConnextMiddleware.
 
-## 10. Addresses — Robinhood Chain (chain ID 4663)
+## 10. Addresses — Robinhood Chain (chain ID 4663) and Arc (chain ID 5042)
 
 Every documented address of every middleware was checked with `eth_getCode` on this chain (runtime size in bytes).
 
@@ -329,25 +329,27 @@ Every documented address of every middleware was checked with `eth_getCode` on t
 
 No code at any documented address on Robinhood Chain: RangoAcrossMiddleware, RangoCCTPV2Middleware, RangoOftMiddleware, RangoStargateMiddleware, RangoSymbiosisMiddleware, RangoSatelliteMiddleware, RangoWormholeMiddleware, RangoCBridgeMiddleware, RangoChainFlipMiddleware, RangoDeBridgeMiddleware, RangoConnextMiddleware, RangoNitroAssetForwarderMiddleware, RangoMiddlewaresWhitelistsStorage.
 
+Arc (2026-10-05, `https://rpc.mainnet.arc.io`): the same result. No documented middleware address and no whitelists storage has code. Routes to Arc end with the underlying bridge's payout.
+
 ---
 
 ## 11. Cross-chain summary
 
-| Middleware | ETH | Base | Arb | OP | Poly | BNB | Avax | RH |
-|------------|-----|------|-----|----|------|-----|------|----|
-| RangoAcrossMiddleware | Cancun | EVM | EVM | Cancun | EVM | — | — | — |
-| RangoCCTPV2Middleware | ✓ | ✓ | ✓ | ✓ | ✓ | — | ✓ | — |
-| RangoOftMiddleware | ✓ | — | ✓ | ✓ | ✓ | ✓ | ✓ | — |
-| RangoStargateMiddleware | Cancun | EVM | EVM | Cancun | EVM | EVM | EVM | — |
-| RangoSymbiosisMiddleware | Cancun | EVM | EVM | Cancun | EVM | EVM | EVM | — |
-| RangoSatelliteMiddleware | Cancun | EVM | EVM | Cancun | EVM | EVM | EVM | — |
-| RangoWormholeMiddleware | Cancun | EVM | EVM | Cancun | EVM | EVM | EVM | — |
-| RangoCBridgeMiddleware | — | — | EVM | — | EVM | EVM | EVM | — |
-| RangoChainFlipMiddleware | Cancun | — | EVM | — | — | — | — | — |
-| RangoDeBridgeMiddleware | Cancun | EVM | EVM | Cancun | EVM | EVM | EVM | — |
-| RangoConnextMiddleware | Cancun | EVM | EVM | Cancun | EVM | EVM | — | — |
-| RangoNitroAssetForwarderMiddleware | Cancun | EVM | EVM | Cancun | EVM | EVM | EVM | — |
-| RangoMiddlewaresWhitelistsStorage | Cancun | EVM | EVM | Cancun | EVM/Cancun | EVM | EVM | — |
+| Middleware | ETH | Base | Arb | OP | Poly | BNB | Avax | RH | Arc |
+|------------|-----|------|-----|----|------|-----|------|----|-----|
+| RangoAcrossMiddleware | Cancun | EVM | EVM | Cancun | EVM | — | — | — | — |
+| RangoCCTPV2Middleware | ✓ | ✓ | ✓ | ✓ | ✓ | — | ✓ | — | — |
+| RangoOftMiddleware | ✓ | — | ✓ | ✓ | ✓ | ✓ | ✓ | — | — |
+| RangoStargateMiddleware | Cancun | EVM | EVM | Cancun | EVM | EVM | EVM | — | — |
+| RangoSymbiosisMiddleware | Cancun | EVM | EVM | Cancun | EVM | EVM | EVM | — | — |
+| RangoSatelliteMiddleware | Cancun | EVM | EVM | Cancun | EVM | EVM | EVM | — | — |
+| RangoWormholeMiddleware | Cancun | EVM | EVM | Cancun | EVM | EVM | EVM | — | — |
+| RangoCBridgeMiddleware | — | — | EVM | — | EVM | EVM | EVM | — | — |
+| RangoChainFlipMiddleware | Cancun | — | EVM | — | — | — | — | — | — |
+| RangoDeBridgeMiddleware | Cancun | EVM | EVM | Cancun | EVM | EVM | EVM | — | — |
+| RangoConnextMiddleware | Cancun | EVM | EVM | Cancun | EVM | EVM | — | — | — |
+| RangoNitroAssetForwarderMiddleware | Cancun | EVM | EVM | Cancun | EVM | EVM | EVM | — | — |
+| RangoMiddlewaresWhitelistsStorage | Cancun | EVM | EVM | Cancun | EVM/Cancun | EVM | EVM | — | — |
 
 Cell = the address set that has code on that chain (`EVM`, `Cancun`, or the single address of the newer middlewares); — = no code at any documented address. The docs' table gives the CBridgeMiddleware Cancun address as `0x89fE77AF04DB303d612D7e7F4C1c5E8664EDbEf6`, which is the MiddlewaresWhitelistsStorage (verified name on Ethereum); no CBridgeMiddleware was found on Ethereum or Optimism.
 

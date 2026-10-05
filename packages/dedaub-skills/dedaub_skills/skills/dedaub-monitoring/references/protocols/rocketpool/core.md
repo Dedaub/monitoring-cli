@@ -288,7 +288,7 @@ Rocket Pool is one continuously-upgraded deployment (not discrete redeploys). In
 |----------|-----------|----------|
 | `0x1d3d3538` / `0x9979ef45` / `0x21113057` / `0x767a6d2f` | `createLot()` / `placeBid(uint256)` / `claimBid(uint256)` / `recoverUnclaimedRPL(uint256)` | `rocketAuctionManager` |
 | `0xf07f75ab` / `0xf21c150c` | `submitRewardSnapshot(RewardSubmission)` / `getRewardIndex()` ✓(=49) | `rocketRewardsPool` |
-| `0x12c5f9e3`-ish | `submitBalances(uint256,uint256,uint256,uint256,uint256)` | `rocketNetworkBalances` (oDAO report) |
+| `0x979611ea` | `submitBalances(uint256,uint256,uint256,uint256,uint256)` | `rocketNetworkBalances` (oDAO report) |
 
 ---
 

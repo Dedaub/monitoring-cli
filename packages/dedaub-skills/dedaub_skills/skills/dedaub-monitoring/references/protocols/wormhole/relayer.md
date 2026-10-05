@@ -1,4 +1,4 @@
-# Wormhole Relayer and Executor — Topics, Selectors, Addresses (Ethereum, Base, Arbitrum, Optimism, Polygon, BNB, Avalanche; Executor also on Robinhood Chain)
+# Wormhole Relayer and Executor — Topics, Selectors, Addresses (Ethereum, Base, Arbitrum, Optimism, Polygon, BNB, Avalanche; Executor also on Robinhood Chain and Arc)
 
 **Status:** verified on 2026-09-29 against live RPC on all eight chains, the relayer sources of `wormhole-foundation/wormhole` (the `relayer/ethereum/contracts/` tree as of commit `932a2e0a2c0e6efc419552456cc0fefeb2124c6e`, the parent of the 2026-01-21 commit that removed it from `main`), `wormholelabs-xyz/example-messaging-executor`, the `wormhole-sdk-ts` constants and the Executor deployment registry. Topics and selectors recomputed as `keccak256(signature)`; addresses existence-checked with `eth_getCode`; implementations read from the EIP-1967 slot and scanned for each topic and selector.
 **Scope:** the two automatic-delivery systems of Wormhole. (1) The **Wormhole Relayer** ("Standard Relayer": `WormholeRelayer` + `DeliveryProvider`), deployed on **seven chains, not on Robinhood Chain**; the docs mark it as being deprecated. (2) The **Executor** framework (`Executor`, `ExecutorQuoterRouter`, receive-with-gas-drop-off helpers), its successor, deployed on **all eight chains, Robinhood Chain (4663) included**. Topics and selectors are chain-agnostic; addresses are network-specific. The Executor-based product helpers live in the product files: Token Bridge relayers in [token-bridge.md](token-bridge.md), CCTP helpers in [cctp.md](cctp.md), NTT helpers in [ntt.md](ntt.md).
@@ -18,9 +18,9 @@ Neither system moves bridged tokens. They carry a Wormhole message to a destinat
 |----------|--------|------|--------|
 | **WormholeRelayer** | ETH, BNB, POLY, AVAX, ARB, OP at `0x27428DD2d3DD32A4D7f7C497eAaa23130d894911`; Base at `0x706f82e9bb5b0813501714ab5974216704980e31` | Send and deliver automatic messages; refunds; replay protection. | EIP-1967 proxy (209 B), upgraded by governance VAA |
 | **DeliveryProvider** (default) | ETH, BNB, POLY, AVAX, ARB, OP at `0x7a0a53847776f7e94cc35742971acb2217b0db81`; Base at `0x70b4a48f482956983d8c69d3ae18fe229888638d` | On-chain price quotes, supported chains, reward address. `getDefaultDeliveryProvider()` of the relayer. | EIP-1967 proxy (209 B) |
-| **Executor** | all 8 (chain-unique addresses, §4) | Stateless request registry: pays the quoted payee, emits `RequestForExecution`. | No (961 B) |
-| **ExecutorQuoterRouter** | all except Robinhood (§4) | On-chain quote resolution (`EQ02`): `quoteExecution` / `requestExecution` for integrators that cannot use signed quotes. | No (2,421 B) |
-| **VAA v1 receive-with-gas-drop-off** | all 8 at `0x13b62003C8b126Ec0748376e7ab22F79Fb8bbDF2` | Destination helper that a relay provider calls to deliver a VAA and a native drop-off. | No (749 B) |
+| **Executor** | all 8 + Arc (chain-unique addresses, §4) | Stateless request registry: pays the quoted payee, emits `RequestForExecution`. | No (961 B) |
+| **ExecutorQuoterRouter** | all except Robinhood and Arc (§4) | On-chain quote resolution (`EQ02`): `quoteExecution` / `requestExecution` for integrators that cannot use signed quotes. | No (2,421 B) |
+| **VAA v1 receive-with-gas-drop-off** | all 8 + Arc at `0x13b62003C8b126Ec0748376e7ab22F79Fb8bbDF2` | Destination helper that a relay provider calls to deliver a VAA and a native drop-off. | No (749 B) |
 
 ---
 
@@ -115,7 +115,7 @@ All existence-checked with `eth_getCode` on 2026-09-29. Wormhole chain id **2**.
 | **DeliveryProvider** (default, proxy) | `0x7a0a53847776f7e94cc35742971acb2217b0db81` | `getDefaultDeliveryProvider()`; implementation `0x9db2f72b8e5aafa88f62852a0658f0b9249f6454` (7,564 B). |
 | **Executor** | `0x84EEe8dBa37C36947397E1E11251cA9A06Fc6F8a` | `ourChain()` = 2. |
 | **ExecutorQuoterRouter** | `0xF22F1c0A3a8Cb42F695601731974784C499C4EF3` | Not a proxy (implementation slot 0). |
-| VAA v1 receive-with-gas-drop-off | `0x13b62003C8b126Ec0748376e7ab22F79Fb8bbDF2` | Same address on all eight chains. |
+| VAA v1 receive-with-gas-drop-off | `0x13b62003C8b126Ec0748376e7ab22F79Fb8bbDF2` | Same address on all eight chains and Arc. |
 
 ---
 
@@ -133,6 +133,7 @@ All existence-checked with `eth_getCode` on 2026-09-29. Wormhole chain id **2**.
 | BNB Smart Chain | 56 | 4 | `0x27428DD2d3DD32A4D7f7C497eAaa23130d894911` | `0xb6134890a64e9ffc54ecc2702bdf41deedd4999c` | `0x7a0a53847776f7e94cc35742971acb2217b0db81` |
 | Avalanche C-Chain | 43114 | 6 | `0x27428DD2d3DD32A4D7f7C497eAaa23130d894911` | `0x27c472d1db89afd6f41a61eec0f4db996800f8cd` | `0x7a0a53847776f7e94cc35742971acb2217b0db81` |
 | **Robinhood Chain** | 4663 | 72 | ❌ `0x` | — | ❌ `0x` |
+| **Arc** | 5042 | 71 | ❌ `0x` | — | ❌ `0x` |
 
 On every chain read, `getRegisteredWormholeRelayerContract(2)` returned `0x27428DD2d3DD32A4D7f7C497eAaa23130d894911` and `getRegisteredWormholeRelayerContract(30)` returned `0x706f82e9bb5b0813501714ab5974216704980e31`. All implementations are 17,750 B and contain `SendEvent`, `Delivery`, `ContractUpgraded`, `sendPayloadToEvm` and `deliver`. Arbitrum and Avalanche use the same implementation address with different bytecode (code hashes `0x96f8efd4e7ae383953b83451eef8ca431face54c8429707da88b1e6efa287328` and `0x7975d8d4dce175cbf5a65c46525525371acca2c850b47ca3f5b18a23dc80a479`).
 
@@ -148,6 +149,7 @@ On every chain read, `getRegisteredWormholeRelayerContract(2)` returned `0x27428
 | BNB Smart Chain | `0xeC8cCCD058DbF28e5D002869Aa9aFa3992bf4ee0` | 4 | `0xc921F293c27F332D47283174b11C872295624Edb` | `0x13b62003C8b126Ec0748376e7ab22F79Fb8bbDF2` |
 | Avalanche C-Chain | `0x4661F0E629E4ba8D04Ee90080Aee079740B00381` | 6 | `0xA3a2A615774d34c6a4dF443C488B084eacaBd2D0` | `0x13b62003C8b126Ec0748376e7ab22F79Fb8bbDF2` |
 | **Robinhood Chain** | `0xd19aAd5a69F7D35Cee169D9D90e1BbCB795ABB38` | 72 | — (not in the registry) | `0x13b62003C8b126Ec0748376e7ab22F79Fb8bbDF2` |
+| **Arc** (5042) | `0xCD6b0d9635862e715FD8e2df335f8D0fF20Bb798` | 71 | — (not in the registry) | `0x13b62003C8b126Ec0748376e7ab22F79Fb8bbDF2` |
 
 Every Executor is 961 B and contains `RequestForExecution` and `requestExecution`. The Executor addresses agree between `executor.ts` of the SDK and the Executor deployment registry; the docs moved the Executor list to the Executor Explorer, which reads the same registry.
 
@@ -165,6 +167,7 @@ Every Executor is 961 B and contains `RequestForExecution` and `requestExecution
 | BNB Smart Chain | 56 | 4 | `0x27428DD2d3DD32A4D7f7C497eAaa23130d894911` | ✅ | `0xeC8cCCD058DbF28e5D002869Aa9aFa3992bf4ee0` | ✅ |
 | Avalanche C-Chain | 43114 | 6 | `0x27428DD2d3DD32A4D7f7C497eAaa23130d894911` | ✅ | `0x4661F0E629E4ba8D04Ee90080Aee079740B00381` | ✅ |
 | **Robinhood Chain** | 4663 | 72 | ❌ | ❌ | `0xd19aAd5a69F7D35Cee169D9D90e1BbCB795ABB38` | ❌ |
+| **Arc** | 5042 | 71 | ❌ | ❌ | `0xCD6b0d9635862e715FD8e2df335f8D0fF20Bb798` | ❌ |
 
 **Vanity address:** the relayer shares `0x27428DD2d3DD32A4D7f7C497eAaa23130d894911` on six chains; Base alone uses `0x706f82e9bb5b0813501714ab5974216704980e31` (the vanity address has no code on Base). The Executors have chain-unique addresses.
 
@@ -188,7 +191,7 @@ Every Executor is 961 B and contains `RequestForExecution` and `requestExecution
 4. **Deprecation.** The docs say the Standard Relayer is being deprecated and ask integrators to move to the Executor. Traffic in the window was small (below), and the NTT and Token Bridge routes now request the Executor.
 5. **`RequestForExecution` is a payment plus a request, not a transfer.** `amtPaid` goes to the quote's payee in the same call. Decode `requestBytes` to find the message: its first 4 bytes are the type (`ERV1`, `ERN1`, `ERC1`, `ERC2`, `ERB1`). For `ERV1` the next 42 bytes are the VAA key.
 6. **The Executor has no destination event.** Match the request to the product event on the destination chain: `ERV1` to Token Bridge `TransferRedeemed` (same key), `ERN1` to NTT `TransferRedeemed(digest)` via the NTT message id, `ERC1` to CCTP v1 `MessageReceived(sourceDomain, nonce)`.
-7. **Robinhood has the Executor but no Wormhole Relayer.** All Robinhood automatic deliveries go through the Executor (1 `RequestForExecution` in the window).
+7. **Robinhood has the Executor but no Wormhole Relayer.** All Robinhood automatic deliveries go through the Executor (1 `RequestForExecution` in the window). Arc is the same: Executor, no Wormhole Relayer; 0 `RequestForExecution` in the ~7 days to 2026-10-05.
 
 ---
 
@@ -238,8 +241,9 @@ POLY_EXECUTOR                 = '\x0b23efa164ab3ed08e9a39ac7ad930ff4f5a5e81'
 BNB_EXECUTOR                  = '\xec8cccd058dbf28e5d002869aa9afa3992bf4ee0'
 AVAX_EXECUTOR                 = '\x4661f0e629e4ba8d04ee90080aee079740b00381'
 RH_EXECUTOR                   = '\xd19aad5a69f7d35cee169d9d90e1bbcb795abb38'
+ARC_EXECUTOR                  = '\xcd6b0d9635862e715fd8e2df335f8d0ff20bb798'
 ETH_EXECUTOR_QUOTER_ROUTER    = '\xf22f1c0a3a8cb42f695601731974784c499c4ef3'
-RH_VAA_V1_RECEIVE_GAS_DROP    = '\x13b62003c8b126ec0748376e7ab22f79fb8bbdf2'   -- same address on all eight chains
+RH_VAA_V1_RECEIVE_GAS_DROP    = '\x13b62003c8b126ec0748376e7ab22f79fb8bbdf2'   -- same address on all eight chains and Arc
 ```
 
 ---

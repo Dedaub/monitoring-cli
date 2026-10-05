@@ -15,7 +15,7 @@
 0x0d3648bd0f6ba80134a33ba9275ac585d9d315f0ad8355cddefde31afa28d0e9 -> PairCreated(address,address,address,uint256)           [Factory]
 0xd78ad95fa46c994b6551d0da85fc275fe613ce37657fb8d5e3d130840159d822 -> Swap(address,uint256,uint256,uint256,uint256,address)   [Pair]
 0x4c209b5fc8ad50758f13e2e1088ba56a560dff690a1c6fef26394f4c03821c4f -> Mint(address,uint256,uint256)                          [Pair]
-0xd3986fdc78865c06fb072387efddb45772a87fe2105e598db99f085be3d05b84 -> Burn(address,address,uint256,uint256,address)          [Pair]
+0xdccd412f0b1252819cb1fd330b93224ca42612892bb3f4f789976e6d81936496 -> Burn(address,uint256,uint256,address)                  [Pair]
 0x1c411e9a96e071241c2f21f7726b17ae89e3cab4c78be50e062b03a9fffbbad1 -> Sync(uint112,uint112)                                  [Pair]
 0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef -> Transfer(address,address,uint256)                      [Pair LP / ERC-20]
 0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925 -> Approval(address,address,uint256)
@@ -78,9 +78,9 @@ BSC pairs (all LP: symbol="DOOAR", name="DooarSwap V2"):
 0x17DB7a395BCC1eC828e732A014dD2A7C43eD30F0 -> pair[2] GMT/USDC   (GMT=0x3019BF2a2eF8040C242C9a4c5c4BD4C81678b2A1)
 ```
 
-### Base (8453), Avalanche (43114), Arbitrum (42161), Optimism (10), Polygon (137)
+### Base (8453), Avalanche (43114), Arbitrum (42161), Optimism (10), Polygon (137), Robinhood Chain (4663), Arc (5042)
 ```
-0x0  -> not deployed (eth_getCode = 0x on all five chains ✓)
+0x0  -> not deployed (eth_getCode = 0x on all seven chains ✓; Robinhood/Arc checked 2026-10)
 ```
 
 ---

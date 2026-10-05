@@ -1,12 +1,12 @@
-# Rango Exchange — reference index (Ethereum + Base + Arbitrum + Optimism + Polygon + BNB + Avalanche + Robinhood Chain)
+# Rango Exchange — reference index (Ethereum + Base + Arbitrum + Optimism + Polygon + BNB + Avalanche + Robinhood Chain + Arc)
 
 **Rango** is a cross-chain DEX and bridge aggregator. On EVM chains it runs one **RangoDiamond** (EIP-2535) at the same address on every chain, `0x69460570c93f9DE5E2edbC3052bf10125f0Ca22d`, and a set of destination **middlewares** that receive bridged tokens with a message and finish the route (swap, then pay). Rango runs no bridge of its own: the value crosses chains through the underlying bridge (Relay, Across, CCTP, Chainflip, Stargate, Symbiosis, deBridge, THORChain and others), whose own reference doc covers the second leg.
 
-**Status:** verified on 2026-09-29 against live RPC on all eight chains, the canonical `rango-exchange/rango-contracts-v2` repository, the Rango docs (smart-contract architecture, deployment addresses, message passing) and the explorer-verified sources of the live facets and middlewares. Topics and selectors recomputed as `keccak256(signature)`; the live facet table of every diamond read with `facets()`; every address existence-checked with `eth_getCode`.
+**Status:** verified on 2026-09-29 against live RPC on the eight original chains (Arc added on 2026-10-05), the canonical `rango-exchange/rango-contracts-v2` repository, the Rango docs (smart-contract architecture, deployment addresses, message passing) and the explorer-verified sources of the live facets and middlewares. Topics and selectors recomputed as `keccak256(signature)`; the live facet table of every diamond read with `facets()`; every address existence-checked with `eth_getCode`.
 
-| File | Covers | Pattern | Chains (of the 8) |
+| File | Covers | Pattern | Chains (of the 9) |
 |------|--------|---------|-------------------|
-| [diamond.md](diamond.md) | The RangoDiamond: source events (`RangoBridgeInitiated`, `RangoSwap`, `SendToken`, `FeeInfo`, `CallResult`), per-bridge events, admin events, entry selectors per facet, owner and facets per chain | EIP-2535 diamond, same address on 8 chains | all 8 |
+| [diamond.md](diamond.md) | The RangoDiamond: source events (`RangoBridgeInitiated`, `RangoSwap`, `SendToken`, `FeeInfo`, `CallResult`), per-bridge events, admin events, entry selectors per facet, owner and facets per chain | EIP-2535 diamond, same address on 9 chains | all 9 |
 | [middlewares.md](middlewares.md) | Destination middlewares (Across, CCTP V2, OFT, Stargate, Symbiosis, Satellite, Wormhole, cBridge, Chainflip, deBridge, Connext, Nitro) and the MiddlewaresWhitelistsStorage: `RangoBridgeCompleted`, refunds, message events, entry functions, addresses per chain | Plain contracts, two address sets | ETH·Base·Arb·OP·Poly·BNB·Avax |
 
 ## The flow of one transfer
@@ -26,13 +26,13 @@
 
 ## Chain ids
 
-`destinationChainId` in `RangoBridgeInitiated` is the EVM chain id for EVM destinations (1, 8453, 42161, 10, 137, 56, 43114, 4663). **Non-EVM destinations are ASCII codes packed into the integer**, measured in the pinned window: `1414680398` = `0x54524f4e` "TRON", `1279348289` = `0x4c414e41` "LANA" (Solana), `4346947` = `0x425443` "BTC", `5461321` = `0x535549` "SUI". For those rows `receiver` holds the first 20 ASCII characters of the non-EVM address, not an EVM address.
+`destinationChainId` in `RangoBridgeInitiated` is the EVM chain id for EVM destinations (1, 8453, 42161, 10, 137, 56, 43114, 4663, 5042). **Non-EVM destinations are ASCII codes packed into the integer**, measured in the pinned window: `1414680398` = `0x54524f4e` "TRON", `1279348289` = `0x4c414e41` "LANA" (Solana), `4346947` = `0x425443` "BTC", `5461321` = `0x535549` "SUI". For those rows `receiver` holds the first 20 ASCII characters of the non-EVM address, not an EVM address.
 
 ## Addresses at a glance
 
 | Contract | Address | Chains |
 |----------|---------|--------|
-| **RangoDiamond** | `0x69460570c93f9DE5E2edbC3052bf10125f0Ca22d` | all 8 (same runtime code, 5,208 bytes) |
+| **RangoDiamond** | `0x69460570c93f9DE5E2edbC3052bf10125f0Ca22d` | all 9 (same runtime code, 5,208 bytes) |
 | RangoAcrossMiddleware | `0xd5C7176Ec638eF466c2Fee761762d9EAb673997d` | ETH·OP |
 | RangoAcrossMiddleware | `0xB852e653f8FBC099F06DC9D61E269517a4990B73` | Base·Arb·Poly |
 | RangoCCTPV2Middleware | `0xB5777E29aEEA886537E3fEF1c565F86e2d9760e8` | ETH·Base·Arb·OP·Poly·Avax |
@@ -59,7 +59,7 @@
 
 ## Cross-cutting facts
 
-1. **Same diamond address on all eight chains, different owner on each** ([diamond.md](diamond.md) §11).
+1. **Same diamond address on all nine chains, different owner on each** ([diamond.md](diamond.md) §12).
 2. **`RangoBridgeInitiated` exists in two versions.** The current one ends with `string dAppName`; the older one (`0xa551f5e7134cc110651fa6eb8a0423535b3ea90eedb01463af70e6798a75d426`) has no `dAppName`. Older facet functions that still emit it stay registered; it had 0 logs in the pinned window.
 3. **`bridgeId` is a `uint8` topic.** Values 0–23 follow `IRango.BridgeType` (0 Across, 5 Stargate, 7 Thorchain, 16 CCTP, 19 DeBridge, 23 ChainFlip, and others). Higher values come from the Rango API through `genericBridge` and are not in the repository enum; in the pinned window the Ethereum diamond emitted `bridgeId` 56 (425 logs), 57, 60, 52, 51, 58, 55 and 59. The sample transaction with `bridgeId` 56 called the Relay depository.
-4. **Robinhood Chain is live** with a reduced diamond: 7 facets (core, swapper, access manager, generic bridge, Across) and 137 `RangoBridgeInitiated` logs in the pinned window.
+4. **Robinhood Chain is live** with a reduced diamond: 7 facets (core, swapper, access manager, generic bridge, Across) and 137 `RangoBridgeInitiated` logs in the pinned window. **Arc** carries the same 7-facet diamond (Safe 1.5.0 owner `0xB1D330f5f1c467B76d5DB02315fEAA17CAbCBD01`) and emits Rango events (2026-10-05); no middleware has code there.

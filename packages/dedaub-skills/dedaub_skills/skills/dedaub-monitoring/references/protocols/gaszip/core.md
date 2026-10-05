@@ -1,7 +1,7 @@
-# Gas.zip — Topics, Selectors, Addresses (Ethereum, Base, Arbitrum, Optimism, Polygon, BNB, Avalanche; Robinhood Chain = payouts only)
+# Gas.zip — Topics, Selectors, Addresses (Ethereum, Base, Arbitrum, Optimism, Polygon, BNB, Avalanche, Arc; Robinhood Chain = payouts only)
 
-**Status:** verified on 2026-09-29 against live RPC on all eight target chains, the verified `GasZipV2` source (Ethereum, compiler 0.8.26), the canonical `gasdotzip/gas-contracts` (`src/GasZip.sol`, v1) and `gasdotzip/gas-lz-contracts` (`src/v2/GasLZV2.sol`) repos, the `gasdotzip/documentation` repo (`data/gas/inboundChains.ts`, `data/layerzero/lzConfigData.json`, the deposit code examples) and the public Gas.zip API (`https://backend.gas.zip/v2`: `chains`, `quotes`, `deposit`, `search`). Topic0s and selectors are recomputed as `keccak256(sig)`. Addresses are existence-checked with `eth_getCode`. `owner()` is read live.
-**Scope:** the Gas.zip gas-refuel bridge: the **Direct Deposit** address (an EOA), the **GasZipV2** contract-deposit forwarder, the legacy **GasZip v1** contract, the **GasLZV2** LayerZero v2 refuel contract, and the **payout signers** (EOAs). Chains: Ethereum (1), Base (8453), Arbitrum One (42161), Optimism (10), Polygon PoS (137), BNB Smart Chain (56), Avalanche C-Chain (43114), Robinhood Chain (4663; destination only). Topics and selectors are chain-agnostic. Addresses are network-specific.
+**Status:** verified on 2026-09-29 against live RPC on all eight target chains, the verified `GasZipV2` source (Ethereum, compiler 0.8.26), the canonical `gasdotzip/gas-contracts` (`src/GasZip.sol`, v1) and `gasdotzip/gas-lz-contracts` (`src/v2/GasLZV2.sol`) repos, the `gasdotzip/documentation` repo (`data/gas/inboundChains.ts`, `data/layerzero/lzConfigData.json`, the deposit code examples) and the public Gas.zip API (`https://backend.gas.zip/v2`: `chains`, `quotes`, `deposit`, `search`). Topic0s and selectors are recomputed as `keccak256(sig)`. Addresses are existence-checked with `eth_getCode`. `owner()` is read live. Extended on 2026-10-05 with Arc (5042).
+**Scope:** the Gas.zip gas-refuel bridge: the **Direct Deposit** address (an EOA), the **GasZipV2** contract-deposit forwarder, the legacy **GasZip v1** contract, the **GasLZV2** LayerZero v2 refuel contract, and the **payout signers** (EOAs). Chains: Ethereum (1), Base (8453), Arbitrum One (42161), Optimism (10), Polygon PoS (137), BNB Smart Chain (56), Avalanche C-Chain (43114), Robinhood Chain (4663; destination only), Arc (5042; contract deposits and payouts, no Direct Deposit). Topics and selectors are chain-agnostic. Addresses are network-specific.
 
 Gas.zip moves **native gas only**. The user sends native coin on one chain, and Gas.zip sends native coin on one or more destination chains, split equally. The docs say to send between $0.25 and $50 per destination chain. There is no token bridge, no lock-and-mint and no destination contract.
 
@@ -15,11 +15,11 @@ The destination leg of forms (1) and (2) is a plain native transfer from a Gas.z
 
 | Component | Role | Proxy? | Where |
 |-----------|------|--------|-------|
-| **Direct Deposit** ("Direct Deposit v2") | Receives native deposits with calldata. Also the `owner()` of GasZipV2 and GasZip v1: it sweeps them with `withdraw`. | n/a (EOA) | Ethereum, Base, Arbitrum, Optimism, Polygon, BNB, Avalanche (Robinhood Chain: disabled as a source) |
-| **GasZipV2** (the docs call this method the "v1 Contract Deposit") | `deposit(uint256 chains, bytes32 to)` and `deposit(uint256 chains, address to)`. Keeps `msg.value`. Emits `Deposit`. | **No** (immutable, 1,499 B, same code on seven chains) | the seven chains above |
+| **Direct Deposit** ("Direct Deposit v2") | Receives native deposits with calldata. Also the `owner()` of GasZipV2 and GasZip v1: it sweeps them with `withdraw`. | n/a (EOA) | Ethereum, Base, Arbitrum, Optimism, Polygon, BNB, Avalanche (Robinhood Chain: disabled as a source; Arc: no Direct Deposit) |
+| **GasZipV2** (the docs call this method the "v1 Contract Deposit") | `deposit(uint256 chains, bytes32 to)` and `deposit(uint256 chains, address to)`. Keeps `msg.value`. Emits `Deposit`. | **No** (immutable, 1,499 B, same code on seven chains) | the seven chains above; on Arc a different 1,202 B deposit contract at `0x9E22ebeC84c7e4C4bD6D4aE7FF6f4D436D6D8390` emits the same `Deposit` (§10a) |
 | **GasZip** (v1, legacy) | `deposit(uint256 chains, address to)`. Emits the older `Deposit` with `address to`. | No (943 B) | Ethereum, Arbitrum, Optimism |
 | **GasLZV2** | LayerZero v2 OApp. `sendDeposits` asks the LayerZero executor for a native drop on each destination. | No (9,503 B, same code on seven chains) | the seven chains above |
-| **Payout signer** | Sends the native payouts. | n/a (EOA) | all eight chains |
+| **Payout signer** | Sends the native payouts. | n/a (EOA) | all eight chains and Arc |
 | **Ethereum payout signer** | Sends the native payouts on Ethereum. Receives the swept deposits from the Direct Deposit EOA. | n/a (EOA) | Ethereum |
 
 ### Gas.zip short chain ids
@@ -36,6 +36,7 @@ The calldata and `Deposit.chains` use Gas.zip's own ids, not chain ids. Values f
 | BNB Smart Chain | 56 | 14 | `0x000e` | 30102 |
 | Avalanche C-Chain | 43114 | 15 | `0x000f` | 30106 |
 | Robinhood Chain | 4663 | 526 | `0x020e` | not configured |
+| Arc | 5042 | 525 | `0x020d` | not configured |
 
 ---
 
@@ -196,6 +197,17 @@ Gas.zip pays out on Robinhood Chain but does not accept deposits there. A quote 
 | Payout signer (EOA) | `0x8C826F795466E39acbfF1BB4eEeB759609377ba1` | Sends the Robinhood Chain payouts. Nonce 1,248. |
 | Unlisted contract (unconfirmed) | `0x9E22ebeC84c7e4C4bD6D4aE7FF6f4D436D6D8390` | A 1,202-byte contract. Its bytecode holds both `deposit` selectors and the `bytes32` `Deposit` topic, like GasZipV2. Its `owner()` is `0x4c968f6bEecf1906710b08e8B472b8Ba6E75F957`, not the Gas.zip owner that the same address has on Plasma and Katana (`0x391E7C679d29bD940d63be94AD22A25d25b5A604`). Not in the docs; 0 `Deposit` logs in the pinned window. Do not treat it as a Gas.zip deposit contract without confirmation. |
 
+## 10a. Addresses — Arc (chain ID 5042)
+
+Arc is a Gas.zip deposit chain (`/v2/chains`: `short` 525, `symbol` USDC, `inbound` true; a quote with source 5042 returns a price). The docs' `inboundChains.ts` lists Arc with `contractAddress` `0x9e22ebec84c7e4c4bd6d4ae7ff6f4d436d6d8390` and the placeholder `directAddress` `0xaAaAaAaaAaAaAaaAaAAAAAAAAaaaAaAaAaaAaaAa`, so there is **no Direct Deposit** on Arc. Verified with `eth_getCode` and `eth_call` on `https://rpc.mainnet.arc.io` on 2026-10-05.
+
+| Role | Address | One-liner |
+|------|---------|-----------|
+| **Deposit contract** | `0x9E22ebeC84c7e4C4bD6D4aE7FF6f4D436D6D8390` | 1,202 B, same code hash as the unlisted Robinhood contract (§10). Bytecode holds both `deposit` selectors, `withdraw`, `newOwner` and the `bytes32` `Deposit` topic0 `0x7921786f…`. `owner()` = the Gas.zip Direct Deposit EOA `0x391E7C679d29bD940d63be94AD22A25d25b5A604`. Not a proxy. 30 `Deposit` logs in the window 2026-10-04 11:56 – 2026-10-05 10:29 UTC. |
+| Payout signer (EOA) | `0x8C826F795466E39acbfF1BB4eEeB759609377ba1` | Sends the Arc payouts (native USDC). Nonce 1,067 on 2026-10-05 (1,060 one day earlier). |
+
+GasZipV2 `0x2a37D63EAdFe4b4682a3c28C1c2cD4F109Cc2762` and GasLZV2 `0x26DA582889f59EaaE9dA1f063bE0140CD93E6a4f` have no code on Arc. The Direct Deposit EOA has nonce 0 and balance 0 there. Native USDC moves on Arc show as `Transfer` logs from `0xfffffffffffffffffffffffffffffffffffffffe` (seen in the sampled deposit `0x60dacdc57a4d66cdc6239cc54c7f4a20161418959ba021cec8b67ae3d0b7bda5`, sent through an aggregator).
+
 ---
 
 ## 11. Cross-chain summary
@@ -210,8 +222,9 @@ Gas.zip pays out on Robinhood Chain but does not accept deposits there. A quote 
 | BNB Smart Chain | 56 | 14 | ✅ | ✅ | — | ✅ | same | 375 | 0 |
 | Avalanche C-Chain | 43114 | 15 | ✅ | ✅ | — | ✅ | same | 18 | 0 |
 | Robinhood Chain | 4663 | 526 | source disabled | — | see §10 | — | `0x8C826F795466E39acbfF1BB4eEeB759609377ba1` | 0 | — |
+| Arc | 5042 | 525 | — (placeholder) | — (deposit contract `0x9E22ebeC84c7e4C4bD6D4aE7FF6f4D436D6D8390`) | — | — | `0x8C826F795466E39acbfF1BB4eEeB759609377ba1` | 30 (2026-10-04/05 window) | — |
 
-Counts are from the pinned 12-hour window 2026-09-28 00:00–12:00 UTC, emitter = the Gas.zip contract. Direct Deposits and payouts have no log, so the table does not count them. The Gas.zip chains API returns 194 entries (mainnets and testnets); the docs list 77 deposit chains, most of them outside the eight.
+Counts are from the pinned 12-hour window 2026-09-28 00:00–12:00 UTC (Arc: 2026-10-04 11:56 – 2026-10-05 10:29 UTC), emitter = the Gas.zip contract. Direct Deposits and payouts have no log, so the table does not count them. The Gas.zip chains API returns 194 entries (mainnets and testnets); the docs list 77 deposit chains, most of them outside the eight.
 
 ---
 
@@ -238,8 +251,9 @@ All three contracts are owned by EOAs. No contract here is a proxy.
 7. **Selector collision.** `deposit(uint256,address)` = `0x6e553f65` = the ERC-4626 vault `deposit`. Never key on the selector alone.
 8. **The v1 `Deposit` topic is not unique.** In the pinned window, the only Ethereum emitter of `0x02d7e648dd130fc184d383e55bb126ac4c9c60e8f94bf05acdf557ba2d540b47` was an unrelated transparent proxy, `0xdad503f8b9d42bb7af3afc588358d30163e4416f`. GasZip v1 itself emitted 0 on Ethereum, Arbitrum and Optimism. Filter on the emitter.
 9. **LayerZero refuel packs the destination in the parameter.** Per the code, `uint32(params[i] >> 224)` is the LayerZero eid and `uint128(params[i])` is the drop amount. The README says "leftmost 16 bits" for the chain and "rightmost 240 bits" for the amount; the code is the source of truth. The destination gets a LayerZero executor native drop, not a Gas.zip transfer.
-10. **Robinhood Chain is destination-only.** Payouts there come from `0x8C826F795466E39acbfF1BB4eEeB759609377ba1` (nonce 1,248). A native transfer to the Direct Deposit EOA on Robinhood Chain is not a supported deposit.
+10. **Robinhood Chain is destination-only.** Payouts there come from `0x8C826F795466E39acbfF1BB4eEeB759609377ba1` (nonce 1,248). A native transfer to the Direct Deposit EOA on Robinhood Chain is not a supported deposit. The same 1,202 B code at `0x9E22ebeC84c7e4C4bD6D4aE7FF6f4D436D6D8390` is the official deposit contract on Arc (owner = Gas.zip) but not on Robinhood Chain (owner `0x4c968f6bEecf1906710b08e8B472b8Ba6E75F957`): check `owner()` per chain.
 11. **Admin changes leave no log on GasZipV2.** `newOwner` and `withdraw` emit nothing; watch their selectors (`0x85952454`, `0x51cff8d9`). GasLZV2 ownership changes do emit `OwnershipTransferred`.
+12. **Arc has no Direct Deposit.** Arc deposits are `Deposit` logs at `0x9E22ebeC84c7e4C4bD6D4aE7FF6f4D436D6D8390`, not at GasZipV2. The amount is native USDC (18 decimals on chain).
 
 ---
 
@@ -304,6 +318,10 @@ POLY_PAYOUT_SIGNER_EOA               = '\x8c826f795466e39acbff1bb4eeeb759609377b
 BNB_PAYOUT_SIGNER_EOA                = '\x8c826f795466e39acbff1bb4eeeb759609377ba1'
 AVAX_PAYOUT_SIGNER_EOA               = '\x8c826f795466e39acbff1bb4eeeb759609377ba1'
 RH_PAYOUT_SIGNER_EOA                 = '\x8c826f795466e39acbff1bb4eeeb759609377ba1'
+ARC_PAYOUT_SIGNER_EOA                = '\x8c826f795466e39acbff1bb4eeeb759609377ba1'
+
+-- ===== Arc (chain ID 5042): contract deposits only =====
+ARC_GASZIP_DEPOSIT_CONTRACT          = '\x9e22ebec84c7e4c4bd6d4ae7ff6f4d436d6d8390'   -- 1,202 B build; emits TOPIC_GASZIPV2_DEPOSIT
 
 -- ===== Owners and infrastructure =====
 ETH_GASLZV2_OWNER_EOA                = '\xbc2c7144b1f8d708a0601961da6b6102f4af286a'   -- same EOA on all seven chains
@@ -321,7 +339,7 @@ How the constants in this file were verified (2026-09-29):
 - **Encoding:** the quote API returned `calldata` `0x0100390037` and a `contractDepositTxn` with `chains` = `0x00390037` for Base → Arbitrum + Optimism, and `0x01020e` for Base → Robinhood Chain.
 - **Value movement, read from receipts:** Ethereum deposit `0x6797de406deb83610d2465a5c68cf72a30c79aff98269ac04c3d748e4f4c3c04` (LI.FI → GasZipV2, `Deposit` with 128 bytes of data); Base payout `0x1552599e6fcebef44c0caf6753d4957ab53881036b087065bad68c626d51a8c4` (native from `0x8C826F795466E39acbfF1BB4eEeB759609377ba1`, no logs); Ethereum payout `0xb52ebe246d1b688a91476659beb5d4076cb359cdfce9208bca0c1eaadb24f90a` (native from `0x5baBE600b9fCD5fB7b66c0611bF4896D967b23A1`, no logs); Base refuel `0x05d2002c001119b8d12611c027e86f0eab099865cdbfe2bbaf09c5e8fba38f59` (`sendDeposits`, EndpointV2 `PacketSent`, then `SentDeposits`).
 - **Activity:** see §11. The Ethereum `Deposit` count (156) was measured twice with the same result. Nonces are transaction counts at the latest block on 2026-09-29.
-- **Chain coverage:** the seven chains other than Robinhood Chain carry all current contracts. Robinhood Chain is destination-only (API refusal, empty contract addresses, payout signer active).
+- **Chain coverage:** the seven chains other than Robinhood Chain carry all current contracts. Robinhood Chain is destination-only (API refusal, empty contract addresses, payout signer active; re-checked 2026-10-05: `/v2/chains` shows `inbound` true for 4663, but a quote with source 4663 still returns `Source: Chain Disabled`). Arc (2026-10-05): `inboundChains.ts` entry, `/v2/chains`, a priced quote from source 5042, `eth_getCode` / `owner()` / bytecode scan of the deposit contract, `eth_getLogs` count, payout-signer nonce.
 
 Authoritative sources:
 - [gasdotzip/gas-contracts](https://github.com/gasdotzip/gas-contracts) — `src/GasZip.sol`, `script/Deploy.s.sol`, `README.md`.

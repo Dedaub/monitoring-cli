@@ -30,7 +30,7 @@ PROTOCOLS = (
 )
 INDEX = PROTOCOLS / "INDEX.md"
 
-# The eight target chains, and how a per-chain heading names each one. Both
+# The nine target chains, and how a per-chain heading names each one. Both
 # halves must match in the SAME heading: "polygon" alone appears in prose all
 # over these files, and a bare "137" matches any number.
 CHAIN_HEADING = {
@@ -42,10 +42,12 @@ CHAIN_HEADING = {
     "OP": (r"optimism", r"\b10\b"),
     "Poly": (r"polygon", r"137"),
     "Robin": (r"robinhood", r"4663"),
+    "Arc": (r"\barc\b", r"\b5042\b"),
 }
 
 # The legend's `7`: the seven chains the index started with. Robinhood Chain
-# came later, so a row names it explicitly (`Robin`) in addition to a `7`.
+# and Arc came later, so a row names them explicitly (`Robin`, `Arc`) in
+# addition to a `7`.
 SEVEN = {"ETH", "Base", "BNB", "Avax", "Arb", "OP", "Poly"}
 
 # A heading that documents an ABSENCE. Its section may still quote the address
@@ -132,3 +134,4 @@ def test_the_legend_seven_does_not_claim_robinhood() -> None:
     assert chains_claimed("7 · Robin") == SEVEN | {"Robin"}
     assert chains_claimed("ETH·Base·Robin") == {"ETH", "Base", "Robin"}
     assert chains_claimed("ETH +Other (Robinhood L3)") == {"ETH"}
+    assert chains_claimed("7 · Robin · Arc") == SEVEN | {"Robin", "Arc"}

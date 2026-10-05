@@ -522,11 +522,22 @@ def run_query(
         typer.Option(help="Network name, e.g. ethereum. Omit to load all networks."),
     ] = None,
     duration: Annotated[
-        str, typer.Option(help="Look-back window, e.g. 5m, 24h, 7d")
+        str,
+        typer.Option(
+            help="Look-back window that ends at --end-time (default: now), e.g. 5m, 24h, 7d"
+        ),
     ] = "5m",
+    end_time: Annotated[
+        str | None,
+        typer.Option(
+            help="END of the window (ISO 8601), e.g. 2025-01-01T12:00:00Z. The query reads [end-time - duration, end-time]. Omit for now."
+        ),
+    ] = None,
     start_time: Annotated[
         str | None,
-        typer.Option(help="Start time (ISO 8601), e.g. 2025-01-01T00:00:00Z"),
+        # Deprecated alias: the server field is `default_start_time`, but it anchors
+        # the END of the window, so the old name misled readers into passing a start.
+        typer.Option(hidden=True, help="Deprecated alias for --end-time."),
     ] = None,
     limit: Annotated[int, typer.Option(help="Max rows (max 500)")] = 25,
     offset: Annotated[int, typer.Option(help="Row offset for pagination")] = 0,
@@ -537,7 +548,13 @@ def run_query(
         ),
     ] = 1800.0,
 ) -> None:
-    """Execute a query and print results. Requires --id. Pass SQL as argument or via stdin; omit to run the stored query text. Ctrl-C (or hitting --timeout) revokes the server-side task."""
+    """Execute a query and print results. Requires --id. Pass SQL as argument or via stdin; omit to run the stored query text. The window is [--end-time - --duration, --end-time]. Ctrl-C (or hitting --timeout) revokes the server-side task."""
+    if end_time is not None and start_time is not None:
+        err.print(
+            "Pass only --end-time. --start-time is a deprecated alias of it, not a window start."
+        )
+        raise typer.Exit(2)
+    end_time = end_time if end_time is not None else start_time
     client, _ = _load_client(profile)
     try:
         query_text, entity_id = _resolve_query_text_and_owner(
@@ -549,7 +566,7 @@ def run_query(
             entity_id,
             network=network,
             default_duration=duration,
-            default_start_time=start_time,
+            default_start_time=end_time,
             limit=limit,
             offset=offset,
             poll_timeout=timeout,
