@@ -206,9 +206,17 @@ def test_run_query_rejects_both_end_and_start_time(monkeypatch):
 
 
 def test_run_query_help_documents_end_time_not_start_time():
-    result = runner.invoke(app, ["run-query", "--help"])
-    assert "--end-time" in result.output
-    assert "--start-time" not in result.output
+    # Inspect the option metadata, not the rendered help: CI forces Rich colour,
+    # and the ANSI codes split "--end-time" in the output.
+    import typer.main
+
+    params = {
+        p.name: p for p in typer.main.get_command(app).commands["run-query"].params
+    }
+    assert "--end-time" in params["end_time"].opts
+    assert not params["end_time"].hidden
+    assert "END of the window" in params["end_time"].help
+    assert params["start_time"].hidden
 
 
 def test_generate_query_failed_exits_clean(monkeypatch):
