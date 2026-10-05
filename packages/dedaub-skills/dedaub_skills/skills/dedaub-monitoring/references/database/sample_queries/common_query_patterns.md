@@ -26,7 +26,7 @@ actually write SQL:
 
 ## 1. Schema cheat-sheet
 
-Per-chain schema (`base.`, `ethereum.`, `arbitrum.`, `optimism.`, `polygon.`, `binance.`, `avalanche.`, `robinhood.`; `arc.` once indexed). All tables below exist on every chain unless noted. **Arc (5042)**, Circle's USDC-gas L1, is listed ahead of indexing: today the API rejects `network='arc'`. Run `get-schema --network arc` first; if it returns nothing, tell the user Arc is not indexed yet and stop — never fake an `arc.` query. **Robinhood (4663)** carries all the core tables (`block`/`logs`/`outer_transaction`/`transaction_detail`/`token_ledger`/`token_transfers`/`latest_token_info`/`network_token_info`/`contracts`/`dex_pool`/`dex_pool_activity`) but **not** the legacy non-`_v2` rollups (`address_transfer_stats_daily`/`_weekly`, `address_token_pair_stats_daily`/`_weekly`, `address_cadence_stats_hourly`/`_weekly`, `token_transfer_stats_hourly`/`_weekly`), nor `money_flow_by_day`/`_hour` or `dex_pool_status` — use the `_v2` variants there.
+Per-chain schema (`base.`, `ethereum.`, `arbitrum.`, `optimism.`, `polygon.`, `binance.`, `avalanche.`, `robinhood.`, `arc.`). All tables below exist on every chain unless noted. **Robinhood (4663)** carries all the core tables (`block`/`logs`/`outer_transaction`/`transaction_detail`/`token_ledger`/`token_transfers`/`latest_token_info`/`network_token_info`/`contracts`/`dex_pool`/`dex_pool_activity`) but **not** the legacy non-`_v2` rollups (`address_transfer_stats_daily`/`_weekly`, `address_token_pair_stats_daily`/`_weekly`, `address_cadence_stats_hourly`/`_weekly`, `token_transfer_stats_hourly`/`_weekly`), nor `money_flow_by_day`/`_hour` or `dex_pool_status` — use the `_v2` variants there.
 
 | Table | PK | Purpose |
 |-------|----|---------|

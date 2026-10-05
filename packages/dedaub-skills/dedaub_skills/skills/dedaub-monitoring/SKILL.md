@@ -68,7 +68,7 @@ constants; always open the named `<slug>/<file>.md` for the actual topics/select
    **(b) Network** — pop-up only if not already named; `multiSelect`. Slugs: `ethereum, base, arbitrum,
    optimism, polygon, bnb, avalanche, robinhood, arc`. Surface the 4 most relevant (the protocol's chains, else
    `ethereum/base/arbitrum/polygon`); the rest reach the user via "Other". Multiple picks → **one
-   `UNION ALL` query** (Step 4), deployed under the primary slot. **Arc (5042)**, Circle's USDC-gas L1, is listed ahead of indexing: today the API rejects `network='arc'`. Run `get-schema --network arc` first; if it returns nothing, tell the user Arc is not indexed yet and stop — never fake an `arc.` query.
+   `UNION ALL` query** (Step 4), deployed under the primary slot.
 
    **(c) Frequency** — pop-up, before notifications. Map label → `--frequency` seconds; **only these
    values**: `30, 60, 120, 300, 600` (10m), `3600` (1h), `14400` (4h), `86400` (24h), `259200` (3d).

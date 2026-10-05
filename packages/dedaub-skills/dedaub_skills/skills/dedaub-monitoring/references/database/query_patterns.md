@@ -399,7 +399,7 @@ Collapsing on bare `address` over-sums across chains and mislabels rows.
 **Carry `chain_name` next to `chain_id`** in every VIEW branch (`8453 AS chain_id, 'base' AS chain_name`)
 and project both (group by both — they're 1:1) so the human-readable name rides along with each summed row.
 Mapping: `1` ethereum, `8453` base, `42161` arbitrum, `10` optimism, `137` polygon, `56` bnb,
-`43114` avalanche, `4663` robinhood, `5042` arc (not indexed yet).
+`43114` avalanche, `4663` robinhood, `5042` arc.
 
 ### P13 — Absence / staleness ("X hasn't happened in N")
 
