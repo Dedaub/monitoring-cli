@@ -5,7 +5,10 @@ description: >
   using the dedaub-monitoring CLI. Use when the user wants to query on-chain activity
   (volumes, top actors, event/call discovery) OR set up alerts for it (large transfers,
   drains, liquidations, admin actions, oracle deviations). Routes: query mode (generate +
-  validate SQL) and alert mode (generate + materialize + notify).
+  validate SQL) and alert mode (generate + materialize + notify). Also use when the user
+  gives a contract or token address with no direction (only "what is this" or "let me
+  read its code"): the skill confirms the chain and links the address's Dedaub contract
+  page.
 ---
 
 # Dedaub Monitoring Skill
@@ -28,6 +31,31 @@ chains each covers). Use it to turn a **category or chain** ask ("bridge volume 
 "lending on Arbitrum") into the right `<slug>/` set before Step 2. It's an index only — never a source of
 constants; always open the named `<slug>/<file>.md` for the actual topics/selectors/addresses.
 
+**Address lookup — only for an address with no direction.** Take this branch **only** when the user
+gives one contract/token address (`0x` + 40 hex) **without saying what they want from it**: a bare
+address, or an open "what is this / tell me about it / let me read its code" (e.g. "What can you tell me
+about this token/contract? 0xcd0b…a93c it's on robinhood, I want to read its code"). Then **skip the mode
+question** (§3) and do this instead. **Any direction at all → not this branch:** an event, a metric, a
+signal, a window, a threshold, holders, transfers, volume, a query or an alert ("large transfers from
+0x…", "who holds 0x…", "alert me when 0x… is paused") — the address is just the subject; run the normal
+flow with no link detour. When unsure, the normal flow wins. A tx hash (`0x` + 64 hex) is not an
+address — this branch does not apply.
+- **Chain.** Use the one the user named, or the target chain the host set for this run. Otherwise ask via
+  `AskUserQuestion` — never guess: header `Chain`, single-select, options `ethereum`, `base`, `arbitrum`,
+  `polygon`, plus **"Not sure — find it"**; name the rest (`optimism, bnb, avalanche, robinhood, arc`) in
+  the question text so the user can type one via "Other".
+- **Link.** `https://app.dedaub.com/<app-chain>/address/<address>/overview` — address lowercased,
+  `<app-chain>` = the CLI slug **except `bnb` → `binance`** (the app routes by the platform network name).
+  The same page has a `source` tab (verified source) and a `decompiled` tab (decompiled bytecode):
+  swap `/overview` for `/source` or `/decompiled` and name both when the user wants to read the code.
+- **Then offer to continue** via `AskUserQuestion`, with the link in the question text: **"Open the
+  Dedaub page"** (done — finish with the link; create no folder and no query) vs **"Continue with AI
+  search"** (query mode on that address — identity from `latest_token_info` / `contracts`, recent activity
+  from an address-led `logs` / `token_ledger` scan; Steps 1–5 apply).
+- **"Not sure — find it"** → go straight to query mode: one address-led `UNION ALL` lookup over the chains
+  (`latest_token_info` / `contracts`, literal `chain_id` per branch) finds where the address lives; give
+  the link for each chain it is on, then continue as above.
+
 1. **Auth:** `dedaub-monitoring entities` — if it fails, ask the user to `login` and stop.
 2. **Schema (don't WebFetch):**
    ```bash
@@ -42,8 +70,9 @@ constants; always open the named `<slug>/<file>.md` for the actual topics/select
    pin to \$1 by address — §5 USD rule).
    `logs.topic0` is indexed on most chains but **not Base** →
    on Base lead with `address`, never bare `topic0`.
-3. **Pick mode** — query (run + show) vs alert (deploy on schedule). **If the user didn't explicitly name
-   the mode, ask via `AskUserQuestion` — do not infer it from phrasing.** "summarize …", "show me …",
+3. **Pick mode** (not for an address lookup — see above) — query (run + show) vs alert (deploy on
+   schedule). **If the user didn't explicitly name the mode, ask via `AskUserQuestion` — do not infer it
+   from phrasing.** "summarize …", "show me …",
    "what are the …" can be a one-off read *or* the spec for a recurring feed; the same protocol+event ask
    is valid in both modes. Skip the question only when the words pick the mode ("alert me", "notify",
    "set up monitoring", "every N min" → alert; "run a query", "show me now", "one-off" → query).
@@ -484,6 +513,8 @@ Alert mode: a table of alert | path | query id | network | frequency | status, p
 alert (call it out for notify-off: keeps refreshing, toggle notifications there). Query mode: results +
 final SQL + the query's folder path & id + its UI link `https://app.dedaub.com/tx-monitor?queryId=<id>`
 (the query persists in its own slug-named folder — no deletes; re-running the same question overwrites it).
+Address lookup (Step 0): the contract-page link(s) `https://app.dedaub.com/<app-chain>/address/<address>/overview`
+per chain, plus the query-mode results if the user chose to continue.
 
 ---
 
