@@ -6,8 +6,9 @@ description: >
   (volumes, top actors, event/call discovery) OR set up alerts for it (large transfers,
   drains, liquidations, admin actions, oracle deviations). Routes: query mode (generate +
   validate SQL) and alert mode (generate + materialize + notify). Also use when the user
-  pastes a contract or token address and asks what it is or wants to read its code: the
-  skill confirms the chain and links the address's Dedaub contract page.
+  gives a contract or token address with no direction (only "what is this" or "let me
+  read its code"): the skill confirms the chain and links the address's Dedaub contract
+  page.
 ---
 
 # Dedaub Monitoring Skill
@@ -30,11 +31,15 @@ chains each covers). Use it to turn a **category or chain** ask ("bridge volume 
 "lending on Arbitrum") into the right `<slug>/` set before Step 2. It's an index only — never a source of
 constants; always open the named `<slug>/<file>.md` for the actual topics/selectors/addresses.
 
-**Address lookup — route before anything else.** The user pastes one contract/token address (`0x` + 40
-hex) and asks what it is, or wants to read/see its code — and names no event, metric, window, or alert
-(e.g. "What can you tell me about this token/contract? 0xcd0b…a93c it's on robinhood, I want to read its
-code"). That is a lookup, not a query or an alert: **skip the mode question** (§3) and do this instead.
-A tx hash (`0x` + 64 hex) is not an address — this branch does not apply.
+**Address lookup — only for an address with no direction.** Take this branch **only** when the user
+gives one contract/token address (`0x` + 40 hex) **without saying what they want from it**: a bare
+address, or an open "what is this / tell me about it / let me read its code" (e.g. "What can you tell me
+about this token/contract? 0xcd0b…a93c it's on robinhood, I want to read its code"). Then **skip the mode
+question** (§3) and do this instead. **Any direction at all → not this branch:** an event, a metric, a
+signal, a window, a threshold, holders, transfers, volume, a query or an alert ("large transfers from
+0x…", "who holds 0x…", "alert me when 0x… is paused") — the address is just the subject; run the normal
+flow with no link detour. When unsure, the normal flow wins. A tx hash (`0x` + 64 hex) is not an
+address — this branch does not apply.
 - **Chain.** Use the one the user named, or the target chain the host set for this run. Otherwise ask via
   `AskUserQuestion` — never guess: header `Chain`, single-select, options `ethereum`, `base`, `arbitrum`,
   `polygon`, plus **"Not sure — find it"**; name the rest (`optimism, bnb, avalanche, robinhood, arc`) in

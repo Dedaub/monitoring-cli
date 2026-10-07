@@ -82,3 +82,11 @@ def test_chain_question_names_every_cli_chain(
         assert re.search(rf"\b{slug}\b", question), (
             f"the chain question never names {slug}"
         )
+
+
+def test_branch_is_limited_to_an_address_with_no_direction(lookup: str) -> None:
+    # The detour replaces the mode question, so it must not catch an ask that
+    # already says what to build ("large transfers from 0x…").
+    assert "only for an address with no direction" in lookup
+    assert "Any direction at all → not this branch" in lookup
+    assert "When unsure, the normal flow wins" in lookup
