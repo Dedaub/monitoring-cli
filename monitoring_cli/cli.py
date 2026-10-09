@@ -19,6 +19,7 @@ from monitoring_cli.auth import (
     DeviceFlowExpiredError,
     SessionExpiredError,
     poll_token,
+    revoke_token,
     start_device_flow,
 )
 from monitoring_cli.client import (
@@ -175,8 +176,17 @@ def login(
 
 
 @app.command()
-def logout(profile: ProfileOption = None) -> None:
-    """Remove stored credentials for a profile."""
+def logout(
+    profile: ProfileOption = None,
+    local: Annotated[
+        bool,
+        typer.Option(
+            "--local",
+            help="Remove only the local copy. Tokens exported with `token` keep working.",
+        ),
+    ] = False,
+) -> None:
+    """Remove stored credentials for a profile and revoke them on the server."""
     try:
         config = Config.load()
     except NotLoggedInError:
@@ -185,10 +195,16 @@ def logout(profile: ProfileOption = None) -> None:
 
     key = profile or config.default
     try:
-        config.remove_profile(key)
+        stored = config.get_profile(key)
     except ProfileNotFoundError:
         typer.echo("Not logged in.")
         return
+    if stored.refresh_token and not local:
+        try:
+            revoke_token(stored)
+        except AuthError as e:
+            err.print(f"Warning: could not revoke the token on the server: {e}")
+    config.remove_profile(key)
     config.save()
     typer.echo("Logged out.")
 

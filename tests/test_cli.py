@@ -394,3 +394,43 @@ def test_token_command_prints_stored_token(config_path):
 def test_token_command_fails_when_logged_out(config_path):
     result = runner.invoke(app, ["token"])
     assert result.exit_code == 1
+
+
+def test_logout_revokes_and_removes_profile(config_path, monkeypatch):
+    _save_profile("stored")
+    seen = []
+    monkeypatch.setattr(
+        cli, "revoke_token", lambda profile: seen.append(profile.refresh_token)
+    )
+    result = runner.invoke(app, ["logout"])
+    assert result.exit_code == 0
+    assert seen == ["stored"]
+    assert cli.Config.load().profiles == {}
+
+
+def test_logout_removes_profile_when_revoke_fails(config_path, monkeypatch):
+    _save_profile()
+
+    def fake(profile):
+        raise cli.AuthError("down")
+
+    monkeypatch.setattr(cli, "revoke_token", fake)
+    result = runner.invoke(app, ["logout"])
+    assert result.exit_code == 0
+    out = result.output
+    with contextlib.suppress(ValueError, AttributeError):
+        out += result.stderr
+    assert "could not revoke" in out
+    assert cli.Config.load().profiles == {}
+
+
+def test_logout_local_skips_revoke(config_path, monkeypatch):
+    _save_profile()
+
+    def fake(profile):
+        raise AssertionError("revoke_token must not be called")
+
+    monkeypatch.setattr(cli, "revoke_token", fake)
+    result = runner.invoke(app, ["logout", "--local"])
+    assert result.exit_code == 0
+    assert cli.Config.load().profiles == {}

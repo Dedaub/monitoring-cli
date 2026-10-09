@@ -8,6 +8,7 @@ from monitoring_cli.auth import (
     SessionExpiredError,
     poll_token,
     refresh_tokens,
+    revoke_token,
     start_device_flow,
 )
 from monitoring_cli.config import Profile
@@ -22,6 +23,7 @@ PROFILE = Profile(
 
 DEVICE_URL = "https://auth.dedaub.com/realms/dedaub/protocol/openid-connect/auth/device"
 TOKEN_URL = "https://auth.dedaub.com/realms/dedaub/protocol/openid-connect/token"
+REVOKE_URL = "https://auth.dedaub.com/realms/dedaub/protocol/openid-connect/revoke"
 
 
 @respx.mock
@@ -158,3 +160,27 @@ def test_refresh_tokens_returns_rotated_refresh_token():
     tokens = refresh_tokens(PROFILE)
     assert tokens.refresh_token == "rotated-refresh-tok"
     assert tokens.expires_in == 300
+
+
+@respx.mock
+def test_revoke_token_posts_refresh_token():
+    route = respx.post(REVOKE_URL).mock(return_value=httpx.Response(200))
+    revoke_token(PROFILE)
+    body = route.calls.last.request.content.decode()
+    assert "token_type_hint=refresh_token" in body
+    assert "client_id=watchdog-client" in body
+    assert "token=old-refresh-token" in body
+
+
+@respx.mock
+def test_revoke_token_raises_on_server_error():
+    respx.post(REVOKE_URL).mock(return_value=httpx.Response(503))
+    with pytest.raises(AuthError):
+        revoke_token(PROFILE)
+
+
+@respx.mock
+def test_revoke_token_raises_on_network_error():
+    respx.post(REVOKE_URL).mock(side_effect=httpx.ConnectError("refused"))
+    with pytest.raises(AuthError):
+        revoke_token(PROFILE)

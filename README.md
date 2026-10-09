@@ -60,7 +60,7 @@ The skill picker and the login browser flow are interactive, so you stay in cont
 dedaub-monitoring login    # or: make login
 ```
 
-This opens a browser-based OAuth2 device flow. Your credentials are stored locally and reused across sessions; run `logout` to clear them. Every command accepts `--profile/-p` to keep separate credential sets (e.g. work vs personal).
+This opens a browser-based OAuth2 device flow. Your credentials are stored locally and reused across sessions; run `logout` to clear them. `logout` also revokes the token on the server, which ends that login for every copy of the token. `logout --local` removes only the local copy and keeps exported tokens valid. Every command accepts `--profile/-p` to keep separate credential sets (e.g. work vs personal).
 
 Login asks for an offline token, and every command stores the refreshed token it gets back, so a CLI (or an agent driving it) that runs regularly stays logged in without another browser round-trip. You only log in again after the token sits unused past the server's idle limit, or after `logout`.
 
@@ -74,7 +74,7 @@ export DEDAUB_MONITORING_REFRESH_TOKEN="<that token>"      # on the headless sid
 dedaub-monitoring entities                                # works with no config file
 ```
 
-When `DEDAUB_MONITORING_REFRESH_TOKEN` is set it replaces the stored token. Endpoints come from the selected profile if a config file exists, otherwise from the production defaults. Nothing is written to disk in this mode, so the token is not rotated: it expires at its own expiry time and you export a fresh one then. Treat the value like a password.
+When `DEDAUB_MONITORING_REFRESH_TOKEN` is set it replaces the stored token. Endpoints come from the selected profile if a config file exists, otherwise from the production defaults. Nothing is written to disk in this mode, so the token is not rotated: it expires at its own expiry time and you export a fresh one then. Treat the value like a password. Running `logout` on the machine that exported the token also stops the exported token, unless you use `--local`.
 
 ## Usage
 
@@ -217,7 +217,7 @@ Commands that act on a query or folder take it **either** by `--id <id>` **or** 
 | Command | Description |
 |---------|-------------|
 | `login` | Authenticate via browser (OAuth2 device flow) |
-| `logout` | Remove stored credentials for a profile |
+| `logout` | Remove stored credentials and revoke them on the server (`--local` keeps the server session) |
 | `token` | Print the stored refresh token, for `DEDAUB_MONITORING_REFRESH_TOKEN` in headless setups |
 | `entities` | List entities (your user + orgs) available to you |
 | `entity` | Look up an entity by username |

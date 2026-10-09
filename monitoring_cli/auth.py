@@ -31,6 +31,10 @@ def _token_url(profile: Profile) -> str:
     return f"{profile.oidc_host}/realms/{profile.realm}/protocol/openid-connect/token"
 
 
+def _revoke_url(profile: Profile) -> str:
+    return f"{profile.oidc_host}/realms/{profile.realm}/protocol/openid-connect/revoke"
+
+
 def start_device_flow(profile: Profile) -> dict:
     resp = httpx.post(
         _device_url(profile),
@@ -102,6 +106,23 @@ def refresh_tokens(profile: Profile) -> Tokens:
         )
     except (json.JSONDecodeError, KeyError, TypeError, ValueError) as exc:
         raise AuthError("Token endpoint returned no access_token") from exc
+
+
+def revoke_token(profile: Profile) -> None:
+    try:
+        resp = httpx.post(
+            _revoke_url(profile),
+            data={
+                "token": profile.refresh_token,
+                "token_type_hint": "refresh_token",
+                "client_id": profile.client_id,
+            },
+            timeout=30,
+        )
+    except httpx.HTTPError as exc:
+        raise AuthError(f"Network error revoking token: {exc}") from exc
+    if resp.is_error:
+        raise AuthError(f"Revocation endpoint returned HTTP {resp.status_code}")
 
 
 class DeviceFlowExpiredError(Exception):
