@@ -8,18 +8,39 @@ from typing import Any
 
 import httpx
 
-from monitoring_cli.auth import SessionExpiredError, get_access_token
+from monitoring_cli.auth import SessionExpiredError, refresh_tokens
 from monitoring_cli.config import Profile
+
+# Refresh the access token this many seconds before it expires, so a request
+# never leaves with a token that dies in flight.
+_EXPIRY_MARGIN = 30
 
 
 class MonitoringClient:
-    def __init__(self, profile: Profile) -> None:
+    def __init__(
+        self,
+        profile: Profile,
+        on_refresh_token: Callable[[str], None] | None = None,
+    ) -> None:
         self._profile = profile
         self._base = profile.base_url
+        self._on_refresh_token = on_refresh_token
+        self._access_token: str | None = None
+        self._access_expires_at = 0.0
 
     def _headers(self) -> dict[str, str]:
-        token = get_access_token(self._profile)
-        return {"Authorization": f"Bearer {token}"}
+        if self._access_token is None or time.monotonic() >= self._access_expires_at:
+            tokens = refresh_tokens(self._profile)
+            self._access_token = tokens.access_token
+            self._access_expires_at = (
+                time.monotonic() + tokens.expires_in - _EXPIRY_MARGIN
+            )
+            rotated = tokens.refresh_token
+            if rotated and rotated != self._profile.refresh_token:
+                self._profile.refresh_token = rotated
+                if self._on_refresh_token is not None:
+                    self._on_refresh_token(rotated)
+        return {"Authorization": f"Bearer {self._access_token}"}
 
     def _get(self, path: str, _timeout: float | None = 30.0, **params: Any) -> Any:
         resp = httpx.get(

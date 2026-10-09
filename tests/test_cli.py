@@ -7,8 +7,10 @@ single-fetch stored fallback, and install-skill shipping the whole
 references/ tree (and pruning orphans on re-install).
 """
 
+import base64
 import contextlib
 import io
+import json
 from unittest.mock import MagicMock
 
 import pytest
@@ -333,3 +335,184 @@ def test_install_skill_empty_selection_installs_nothing(tmp_path, monkeypatch):
     result = runner.invoke(app, ["install-skill"])
     assert result.exit_code == 1
     assert not (tmp_path / ".claude" / "skills" / "dedaub-monitoring").exists()
+
+
+# --- headless auth: env token, rotation storage, token command -------------
+
+
+@pytest.fixture
+def config_path(tmp_path, monkeypatch):
+    path = tmp_path / "monitoring.json"
+    monkeypatch.setattr("monitoring_cli.config.CONFIG_PATH", path)
+    monkeypatch.delenv(cli.REFRESH_TOKEN_ENV, raising=False)
+    return path
+
+
+def _save_profile(refresh_token: str = "stored") -> None:
+    profile = cli.Profile(
+        base_url="https://staging.example.com",
+        oidc_host="https://auth.example.com",
+        client_id="c",
+        refresh_token=refresh_token,
+    )
+    cli.Config(default="prod", profiles={"prod": profile}).save()
+
+
+def test_env_token_works_without_config(config_path, monkeypatch):
+    monkeypatch.setenv(cli.REFRESH_TOKEN_ENV, "env-tok")
+    _, profile = cli._load_client(None)
+    assert profile.refresh_token == "env-tok"
+    assert profile.base_url == cli.DEFAULT_BASE_URL
+    assert not config_path.exists()
+
+
+def test_env_token_overrides_stored_token(config_path, monkeypatch):
+    _save_profile()
+    monkeypatch.setenv(cli.REFRESH_TOKEN_ENV, "env-tok")
+    _, profile = cli._load_client(None)
+    assert profile.refresh_token == "env-tok"
+    assert profile.base_url == "https://staging.example.com"
+    assert cli.Config.load().get_profile().refresh_token == "stored"
+
+
+def test_store_refresh_token_persists_rotation(config_path):
+    _save_profile()
+    cli._store_refresh_token("prod", "rotated")
+    assert cli.Config.load().get_profile("prod").refresh_token == "rotated"
+
+
+def test_store_refresh_token_ignores_missing_profile(config_path):
+    cli._store_refresh_token("prod", "rotated")  # no config: no error
+    assert not config_path.exists()
+
+
+def test_token_command_prints_stored_token(config_path):
+    _save_profile("secret-tok")
+    result = runner.invoke(app, ["token"])
+    assert result.exit_code == 0
+    assert result.stdout.strip() == "secret-tok"
+
+
+def test_token_command_fails_when_logged_out(config_path):
+    result = runner.invoke(app, ["token"])
+    assert result.exit_code == 1
+
+
+def test_logout_revokes_and_removes_profile(config_path, monkeypatch):
+    _save_profile("stored")
+    seen = []
+    monkeypatch.setattr(
+        cli, "revoke_token", lambda profile: seen.append(profile.refresh_token)
+    )
+    result = runner.invoke(app, ["logout"])
+    assert result.exit_code == 0
+    assert seen == ["stored"]
+    assert cli.Config.load().profiles == {}
+
+
+def test_logout_removes_profile_when_revoke_fails(config_path, monkeypatch):
+    _save_profile()
+
+    def fake(profile):
+        raise cli.AuthError("down")
+
+    monkeypatch.setattr(cli, "revoke_token", fake)
+    result = runner.invoke(app, ["logout"])
+    assert result.exit_code == 0
+    out = result.output
+    with contextlib.suppress(ValueError, AttributeError):
+        out += result.stderr
+    assert "could not revoke" in out
+    assert cli.Config.load().profiles == {}
+
+
+def test_logout_local_skips_revoke(config_path, monkeypatch):
+    _save_profile()
+
+    def fake(profile):
+        raise AssertionError("revoke_token must not be called")
+
+    monkeypatch.setattr(cli, "revoke_token", fake)
+    result = runner.invoke(app, ["logout", "--local"])
+    assert result.exit_code == 0
+    assert cli.Config.load().profiles == {}
+
+
+def test_session_expired_message_for_login(config_path):
+    assert "dedaub-monitoring login" in cli._session_expired_message()
+
+
+def test_session_expired_message_for_env_token(config_path, monkeypatch):
+    monkeypatch.setenv(cli.REFRESH_TOKEN_ENV, "secret-env-tok")
+    msg = cli._session_expired_message()
+    assert "DEDAUB_MONITORING_REFRESH_TOKEN" in msg
+    assert "dedaub-monitoring token" in msg
+    assert "secret-env-tok" not in msg
+
+
+def test_exit_error_uses_env_message(config_path, monkeypatch, capsys):
+    monkeypatch.setenv(cli.REFRESH_TOKEN_ENV, "secret-env-tok")
+    with pytest.raises(cli.typer.Exit):
+        cli._exit_error(cli.SessionExpiredError())
+    assert "dedaub-monitoring token" in capsys.readouterr().err
+
+
+def test_store_refresh_token_warns_on_write_failure(config_path, monkeypatch, capsys):
+    _save_profile()
+
+    def boom(self):
+        raise OSError("read-only")
+
+    monkeypatch.setattr(cli.Config, "save", boom)
+    cli._store_refresh_token("prod", "rotated")
+    err_text = capsys.readouterr().err
+    assert "could not save" in err_text
+    assert "rotated" not in err_text
+
+
+def test_store_refresh_token_silent_when_logged_out(config_path, capsys):
+    cli._store_refresh_token("prod", "rotated")
+    assert capsys.readouterr().err == ""
+
+
+# --- login: offline token warning -------------------------------------------
+
+
+def _jwt(claims: dict) -> str:
+    def seg(obj: dict) -> str:
+        raw = json.dumps(obj).encode()
+        return base64.urlsafe_b64encode(raw).decode().rstrip("=")
+
+    return f"{seg({'alg': 'none'})}.{seg(claims)}.sig"
+
+
+def _patch_login(monkeypatch, token: str) -> None:
+    monkeypatch.setattr(
+        cli,
+        "start_device_flow",
+        lambda p: {"verification_uri_complete": "https://x", "device_code": "d"},
+    )
+    monkeypatch.setattr(cli, "poll_token", lambda *a, **k: token)
+
+
+def test_login_warns_without_offline_token(config_path, monkeypatch):
+    token = _jwt({"typ": "Refresh"})
+    _patch_login(monkeypatch, token)
+    result = runner.invoke(app, ["login"])
+    assert result.exit_code == 0
+    out = result.output
+    with contextlib.suppress(ValueError, AttributeError):
+        out += result.stderr
+    assert "offline_access" in out
+    assert token not in out
+    assert cli.Config.load().get_profile("prod").refresh_token == token
+
+
+def test_login_silent_with_offline_token(config_path, monkeypatch):
+    _patch_login(monkeypatch, _jwt({"typ": "Offline"}))
+    result = runner.invoke(app, ["login"])
+    assert result.exit_code == 0
+    out = result.output
+    with contextlib.suppress(ValueError, AttributeError):
+        out += result.stderr
+    assert "Warning" not in out

@@ -7,6 +7,15 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 CONFIG_PATH = Path.home() / ".config" / "dedaub" / "monitoring.json"
+# A refresh token in this variable replaces the stored one, so CI jobs and
+# containers can run with no config file and no browser login.
+REFRESH_TOKEN_ENV = "DEDAUB_MONITORING_REFRESH_TOKEN"
+
+DEFAULT_PROFILE = "prod"
+DEFAULT_BASE_URL = "https://api.dedaub.com"
+DEFAULT_OIDC_HOST = "https://auth.dedaub.com"
+DEFAULT_CLIENT_ID = "watchdog-client"
+DEFAULT_REALM = "dedaub"
 
 
 @dataclass
@@ -14,7 +23,7 @@ class Profile:
     base_url: str
     oidc_host: str
     client_id: str
-    realm: str = "dedaub"
+    realm: str = DEFAULT_REALM
     refresh_token: str | None = None
 
 

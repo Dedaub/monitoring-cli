@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import base64
 import json
 import time
+from typing import NamedTuple
 
 import httpx
 
@@ -9,6 +11,17 @@ from monitoring_cli.config import Profile
 
 _DEVICE_GRANT = "urn:ietf:params:oauth:grant-type:device_code"
 _MAX_POLL_INTERVAL = 30
+# offline_access makes Keycloak issue an offline token: it outlives the browser
+# SSO session and its idle window restarts on every refresh.
+_SCOPE = "openid profile email roles offline_access"
+
+
+class Tokens(NamedTuple):
+    access_token: str
+    # Keycloak rotates the refresh token on each refresh; the old one keeps its
+    # original expiry, so callers must store this one to stay logged in.
+    refresh_token: str | None
+    expires_in: int
 
 
 def _device_url(profile: Profile) -> str:
@@ -19,10 +32,14 @@ def _token_url(profile: Profile) -> str:
     return f"{profile.oidc_host}/realms/{profile.realm}/protocol/openid-connect/token"
 
 
+def _revoke_url(profile: Profile) -> str:
+    return f"{profile.oidc_host}/realms/{profile.realm}/protocol/openid-connect/revoke"
+
+
 def start_device_flow(profile: Profile) -> dict:
     resp = httpx.post(
         _device_url(profile),
-        data={"client_id": profile.client_id, "scope": "openid profile email roles"},
+        data={"client_id": profile.client_id, "scope": _SCOPE},
         timeout=30,
     )
     resp.raise_for_status()
@@ -64,7 +81,7 @@ def poll_token(
     raise DeviceFlowExpiredError()
 
 
-def get_access_token(profile: Profile) -> str:
+def refresh_tokens(profile: Profile) -> Tokens:
     try:
         resp = httpx.post(
             _token_url(profile),
@@ -82,9 +99,44 @@ def get_access_token(profile: Profile) -> str:
     if resp.is_error:
         raise AuthError(f"Token endpoint returned HTTP {resp.status_code}")
     try:
-        return resp.json()["access_token"]
-    except (json.JSONDecodeError, KeyError) as exc:
+        data = resp.json()
+        return Tokens(
+            access_token=data["access_token"],
+            refresh_token=data.get("refresh_token"),
+            expires_in=int(data.get("expires_in", 60)),
+        )
+    except (json.JSONDecodeError, KeyError, TypeError, ValueError) as exc:
         raise AuthError("Token endpoint returned no access_token") from exc
+
+
+def revoke_token(profile: Profile) -> None:
+    try:
+        resp = httpx.post(
+            _revoke_url(profile),
+            data={
+                "token": profile.refresh_token,
+                "token_type_hint": "refresh_token",
+                "client_id": profile.client_id,
+            },
+            timeout=30,
+        )
+    except httpx.HTTPError as exc:
+        raise AuthError(f"Network error revoking token: {exc}") from exc
+    if resp.is_error:
+        raise AuthError(f"Revocation endpoint returned HTTP {resp.status_code}")
+
+
+def token_type(token: str) -> str | None:
+    # Reads the unverified `typ` claim only to choose a warning; the server
+    # still verifies the token on each use.
+    try:
+        payload = token.split(".")[1]
+        payload += "=" * (-len(payload) % 4)
+        claims = json.loads(base64.urlsafe_b64decode(payload))
+    except (IndexError, ValueError):
+        return None
+    typ = claims.get("typ") if isinstance(claims, dict) else None
+    return typ if isinstance(typ, str) else None
 
 
 class DeviceFlowExpiredError(Exception):

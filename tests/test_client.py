@@ -494,3 +494,61 @@ def test_update_query_alert_settings():
     body = json.loads(route.calls[0].request.content)
     assert body["alert_template"] == "{{from_a}} sent to {{to_a}}"
     assert body["unique_key"] == ["tx_hash"]
+
+
+@respx.mock
+def test_access_token_is_reused_until_expiry():
+    token_route = respx.post(TOKEN_URL).mock(
+        return_value=httpx.Response(
+            200, json={"access_token": "acc", "expires_in": 300}
+        )
+    )
+    respx.get(f"{BASE}/api/auth/me").mock(
+        return_value=httpx.Response(200, json={"username": "u", "entity_id": 1})
+    )
+    client = MonitoringClient(PROFILE)
+    client.get_me()
+    client.get_me()
+    assert token_route.call_count == 1
+
+
+@respx.mock
+def test_access_token_is_refreshed_after_expiry(monkeypatch):
+    now = [1000.0]
+    monkeypatch.setattr("monitoring_cli.client.time.monotonic", lambda: now[0])
+    token_route = respx.post(TOKEN_URL).mock(
+        return_value=httpx.Response(
+            200, json={"access_token": "acc", "expires_in": 300}
+        )
+    )
+    respx.get(f"{BASE}/api/auth/me").mock(
+        return_value=httpx.Response(200, json={"username": "u", "entity_id": 1})
+    )
+    client = MonitoringClient(PROFILE)
+    client.get_me()
+    now[0] += 300
+    client.get_me()
+    assert token_route.call_count == 2
+
+
+@respx.mock
+def test_rotated_refresh_token_is_reported_and_used():
+    profile = Profile(
+        base_url=BASE,
+        oidc_host="https://auth.dedaub.com",
+        client_id="watchdog-client",
+        refresh_token="old",
+    )
+    respx.post(TOKEN_URL).mock(
+        return_value=httpx.Response(
+            200,
+            json={"access_token": "acc", "refresh_token": "new", "expires_in": 300},
+        )
+    )
+    respx.get(f"{BASE}/api/auth/me").mock(
+        return_value=httpx.Response(200, json={"username": "u", "entity_id": 1})
+    )
+    seen: list[str] = []
+    MonitoringClient(profile, on_refresh_token=seen.append).get_me()
+    assert seen == ["new"]
+    assert profile.refresh_token == "new"
