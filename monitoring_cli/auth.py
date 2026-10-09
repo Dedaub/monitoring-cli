@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import json
 import time
 from typing import NamedTuple
@@ -123,6 +124,19 @@ def revoke_token(profile: Profile) -> None:
         raise AuthError(f"Network error revoking token: {exc}") from exc
     if resp.is_error:
         raise AuthError(f"Revocation endpoint returned HTTP {resp.status_code}")
+
+
+def token_type(token: str) -> str | None:
+    # Reads the unverified `typ` claim only to choose a warning; the server
+    # still verifies the token on each use.
+    try:
+        payload = token.split(".")[1]
+        payload += "=" * (-len(payload) % 4)
+        claims = json.loads(base64.urlsafe_b64decode(payload))
+    except (IndexError, ValueError):
+        return None
+    typ = claims.get("typ") if isinstance(claims, dict) else None
+    return typ if isinstance(typ, str) else None
 
 
 class DeviceFlowExpiredError(Exception):

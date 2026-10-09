@@ -21,6 +21,7 @@ from monitoring_cli.auth import (
     poll_token,
     revoke_token,
     start_device_flow,
+    token_type,
 )
 from monitoring_cli.client import (
     ConflictError,
@@ -176,6 +177,15 @@ def login(
         raise typer.Exit(1)
 
     p.refresh_token = refresh_token
+
+    typ = token_type(refresh_token)
+    if typ != "Offline":
+        err.print(
+            f"Warning: the server gave a {typ or 'unknown'} token, not an offline "
+            "token. This login expires with the normal session, so you must log "
+            f"in again sooner. Ask a Dedaub admin to give the {client_id} client "
+            "and your user the offline_access scope."
+        )
 
     try:
         config = Config.load()

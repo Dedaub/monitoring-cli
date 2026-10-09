@@ -7,8 +7,10 @@ single-fetch stored fallback, and install-skill shipping the whole
 references/ tree (and pruning orphans on re-install).
 """
 
+import base64
 import contextlib
 import io
+import json
 from unittest.mock import MagicMock
 
 import pytest
@@ -471,3 +473,46 @@ def test_store_refresh_token_warns_on_write_failure(config_path, monkeypatch, ca
 def test_store_refresh_token_silent_when_logged_out(config_path, capsys):
     cli._store_refresh_token("prod", "rotated")
     assert capsys.readouterr().err == ""
+
+
+# --- login: offline token warning -------------------------------------------
+
+
+def _jwt(claims: dict) -> str:
+    def seg(obj: dict) -> str:
+        raw = json.dumps(obj).encode()
+        return base64.urlsafe_b64encode(raw).decode().rstrip("=")
+
+    return f"{seg({'alg': 'none'})}.{seg(claims)}.sig"
+
+
+def _patch_login(monkeypatch, token: str) -> None:
+    monkeypatch.setattr(
+        cli,
+        "start_device_flow",
+        lambda p: {"verification_uri_complete": "https://x", "device_code": "d"},
+    )
+    monkeypatch.setattr(cli, "poll_token", lambda *a, **k: token)
+
+
+def test_login_warns_without_offline_token(config_path, monkeypatch):
+    token = _jwt({"typ": "Refresh"})
+    _patch_login(monkeypatch, token)
+    result = runner.invoke(app, ["login"])
+    assert result.exit_code == 0
+    out = result.output
+    with contextlib.suppress(ValueError, AttributeError):
+        out += result.stderr
+    assert "offline_access" in out
+    assert token not in out
+    assert cli.Config.load().get_profile("prod").refresh_token == token
+
+
+def test_login_silent_with_offline_token(config_path, monkeypatch):
+    _patch_login(monkeypatch, _jwt({"typ": "Offline"}))
+    result = runner.invoke(app, ["login"])
+    assert result.exit_code == 0
+    out = result.output
+    with contextlib.suppress(ValueError, AttributeError):
+        out += result.stderr
+    assert "Warning" not in out

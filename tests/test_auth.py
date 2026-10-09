@@ -1,3 +1,6 @@
+import base64
+import json
+
 import httpx
 import pytest
 import respx
@@ -10,6 +13,7 @@ from monitoring_cli.auth import (
     refresh_tokens,
     revoke_token,
     start_device_flow,
+    token_type,
 )
 from monitoring_cli.config import Profile
 
@@ -184,3 +188,28 @@ def test_revoke_token_raises_on_network_error():
     respx.post(REVOKE_URL).mock(side_effect=httpx.ConnectError("refused"))
     with pytest.raises(AuthError):
         revoke_token(PROFILE)
+
+
+def _jwt(claims: dict) -> str:
+    def seg(obj: dict) -> str:
+        raw = json.dumps(obj).encode()
+        return base64.urlsafe_b64encode(raw).decode().rstrip("=")
+
+    return f"{seg({'alg': 'none'})}.{seg(claims)}.sig"
+
+
+def test_token_type_offline():
+    assert token_type(_jwt({"typ": "Offline"})) == "Offline"
+
+
+def test_token_type_refresh():
+    assert token_type(_jwt({"typ": "Refresh"})) == "Refresh"
+
+
+def test_token_type_missing_claim():
+    assert token_type(_jwt({"sub": "u"})) is None
+
+
+@pytest.mark.parametrize("token", ["opaque", "a.!!!.c", "a.bm90LWpzb24.c"])
+def test_token_type_not_a_jwt(token):
+    assert token_type(token) is None
