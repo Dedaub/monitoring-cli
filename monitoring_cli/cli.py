@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import datetime
+import os
 import select
 import shutil
 import sys
@@ -28,6 +29,12 @@ from monitoring_cli.client import (
     resolve_query_id,
 )
 from monitoring_cli.config import (
+    DEFAULT_BASE_URL,
+    DEFAULT_CLIENT_ID,
+    DEFAULT_OIDC_HOST,
+    DEFAULT_PROFILE,
+    DEFAULT_REALM,
+    REFRESH_TOKEN_ENV,
     Config,
     ConfigError,
     NotLoggedInError,
@@ -62,10 +69,16 @@ def _exit_error(e: Exception) -> NoReturn:
 
 
 def _load_client(profile_name: str | None) -> tuple[MonitoringClient, Profile]:
+    env_token = os.environ.get(REFRESH_TOKEN_ENV)
     try:
+        if env_token:
+            return _env_client(profile_name, env_token)
         config = Config.load()
-        profile = config.get_profile(profile_name)
-        return MonitoringClient(profile), profile
+        key = profile_name or config.default
+        profile = config.get_profile(key)
+        return MonitoringClient(
+            profile, on_refresh_token=lambda t: _store_refresh_token(key, t)
+        ), profile
     except NotLoggedInError:
         err.print("Not logged in. Run: dedaub-monitoring login")
         raise typer.Exit(1)
@@ -80,22 +93,47 @@ def _load_client(profile_name: str | None) -> tuple[MonitoringClient, Profile]:
         raise typer.Exit(1)
 
 
+def _env_client(
+    profile_name: str | None, refresh_token: str
+) -> tuple[MonitoringClient, Profile]:
+    # Headless mode: take the endpoints from a stored profile when one exists,
+    # else use the production defaults. The token stays in memory only.
+    try:
+        profile = Config.load().get_profile(profile_name)
+    except NotLoggedInError:
+        profile = Profile(
+            base_url=DEFAULT_BASE_URL,
+            oidc_host=DEFAULT_OIDC_HOST,
+            client_id=DEFAULT_CLIENT_ID,
+            realm=DEFAULT_REALM,
+        )
+    profile.refresh_token = refresh_token
+    return MonitoringClient(profile), profile
+
+
+def _store_refresh_token(profile_name: str, refresh_token: str) -> None:
+    # Reload first so a concurrent login/logout of another profile is kept.
+    # A failed write only costs the rotation; the old token is still valid.
+    try:
+        config = Config.load()
+        config.get_profile(profile_name).refresh_token = refresh_token
+        config.save()
+    except (NotLoggedInError, ProfileNotFoundError, ConfigError, OSError):
+        pass
+
+
 @app.command()
 def login(
-    profile: ProfileOption = "prod",
-    base_url: Annotated[
-        str, typer.Option(help="Backend base URL")
-    ] = "https://api.dedaub.com",
-    oidc_host: Annotated[
-        str, typer.Option(help="Keycloak host")
-    ] = "https://auth.dedaub.com",
+    profile: ProfileOption = DEFAULT_PROFILE,
+    base_url: Annotated[str, typer.Option(help="Backend base URL")] = DEFAULT_BASE_URL,
+    oidc_host: Annotated[str, typer.Option(help="Keycloak host")] = DEFAULT_OIDC_HOST,
     client_id: Annotated[
         str, typer.Option(help="Keycloak client ID")
-    ] = "watchdog-client",
-    realm: Annotated[str, typer.Option(help="Keycloak realm")] = "dedaub",
+    ] = DEFAULT_CLIENT_ID,
+    realm: Annotated[str, typer.Option(help="Keycloak realm")] = DEFAULT_REALM,
 ) -> None:
     """Authenticate via browser (OAuth2 Device Flow)."""
-    profile = profile or "prod"
+    profile = profile or DEFAULT_PROFILE
     p = Profile(
         base_url=base_url, oidc_host=oidc_host, client_id=client_id, realm=realm
     )
@@ -153,6 +191,24 @@ def logout(profile: ProfileOption = None) -> None:
         return
     config.save()
     typer.echo("Logged out.")
+
+
+@app.command()
+def token(profile: ProfileOption = None) -> None:
+    """Print the stored refresh token, for headless use (CI, containers).
+
+    Export it as DEDAUB_MONITORING_REFRESH_TOKEN where no browser login is
+    possible. Treat the value as a password.
+    """
+    try:
+        config = Config.load()
+        stored = config.get_profile(profile).refresh_token
+    except (NotLoggedInError, ProfileNotFoundError, ConfigError):
+        stored = None
+    if not stored:
+        err.print("Not logged in. Run: dedaub-monitoring login")
+        raise typer.Exit(1)
+    typer.echo(stored)
 
 
 @app.command()

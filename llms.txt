@@ -20,6 +20,7 @@
 ## Key commands
 
 - `login` — authenticate via browser OAuth2 device flow
+- `token` — print the stored refresh token; set it as `DEDAUB_MONITORING_REFRESH_TOKEN` to run headless (CI, containers)
 - `tree` — show your query file tree
 - `create-folder` / `create-query` — create folders and queries
 - `write-query` / `read-query` — set or print a query's SQL

@@ -62,6 +62,20 @@ dedaub-monitoring login    # or: make login
 
 This opens a browser-based OAuth2 device flow. Your credentials are stored locally and reused across sessions; run `logout` to clear them. Every command accepts `--profile/-p` to keep separate credential sets (e.g. work vs personal).
 
+Login asks for an offline token, and every command stores the refreshed token it gets back, so a CLI (or an agent driving it) that runs regularly stays logged in without another browser round-trip. You only log in again after the token sits unused past the server's idle limit, or after `logout`.
+
+### Headless (CI, containers, remote agents)
+
+Log in once on a machine with a browser, then hand the token to the headless environment:
+
+```bash
+dedaub-monitoring token                                   # or: make token — prints the stored refresh token
+export DEDAUB_MONITORING_REFRESH_TOKEN="<that token>"      # on the headless side
+dedaub-monitoring entities                                # works with no config file
+```
+
+When `DEDAUB_MONITORING_REFRESH_TOKEN` is set it replaces the stored token. Endpoints come from the selected profile if a config file exists, otherwise from the production defaults. Nothing is written to disk in this mode, so the token is not rotated: it expires at its own expiry time and you export a fresh one then. Treat the value like a password.
+
 ## Usage
 
 ### Browse your queries
@@ -204,6 +218,7 @@ Commands that act on a query or folder take it **either** by `--id <id>` **or** 
 |---------|-------------|
 | `login` | Authenticate via browser (OAuth2 device flow) |
 | `logout` | Remove stored credentials for a profile |
+| `token` | Print the stored refresh token, for `DEDAUB_MONITORING_REFRESH_TOKEN` in headless setups |
 | `entities` | List entities (your user + orgs) available to you |
 | `entity` | Look up an entity by username |
 | `tree` | Show the query file tree for an entity |

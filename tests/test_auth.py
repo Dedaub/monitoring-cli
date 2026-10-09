@@ -6,8 +6,8 @@ from monitoring_cli.auth import (
     AuthError,
     DeviceFlowExpiredError,
     SessionExpiredError,
-    get_access_token,
     poll_token,
+    refresh_tokens,
     start_device_flow,
 )
 from monitoring_cli.config import Profile
@@ -89,19 +89,20 @@ def test_poll_token_keeps_polling_on_authorization_pending(monkeypatch):
 
 
 @respx.mock
-def test_get_access_token_returns_token():
+def test_refresh_tokens_returns_token():
     respx.post(TOKEN_URL).mock(
         return_value=httpx.Response(
             200,
             json={"access_token": "fresh-access-tok", "token_type": "Bearer"},
         )
     )
-    token = get_access_token(PROFILE)
-    assert token == "fresh-access-tok"
+    tokens = refresh_tokens(PROFILE)
+    assert tokens.access_token == "fresh-access-tok"
+    assert tokens.refresh_token is None
 
 
 @respx.mock
-def test_get_access_token_raises_session_expired():
+def test_refresh_tokens_raises_session_expired():
     respx.post(TOKEN_URL).mock(
         return_value=httpx.Response(
             400,
@@ -109,7 +110,7 @@ def test_get_access_token_raises_session_expired():
         )
     )
     with pytest.raises(SessionExpiredError):
-        get_access_token(PROFILE)
+        refresh_tokens(PROFILE)
 
 
 @respx.mock
@@ -121,7 +122,7 @@ def test_poll_token_raises_on_network_error(monkeypatch):
 
 
 @respx.mock
-def test_get_access_token_raises_session_expired_on_401():
+def test_refresh_tokens_raises_session_expired_on_401():
     respx.post(TOKEN_URL).mock(
         return_value=httpx.Response(
             401,
@@ -129,4 +130,31 @@ def test_get_access_token_raises_session_expired_on_401():
         )
     )
     with pytest.raises(SessionExpiredError):
-        get_access_token(PROFILE)
+        refresh_tokens(PROFILE)
+
+
+@respx.mock
+def test_start_device_flow_requests_offline_access():
+    route = respx.post(DEVICE_URL).mock(
+        return_value=httpx.Response(200, json={"device_code": "d"})
+    )
+    start_device_flow(PROFILE)
+    body = route.calls.last.request.content.decode()
+    assert "offline_access" in body
+
+
+@respx.mock
+def test_refresh_tokens_returns_rotated_refresh_token():
+    respx.post(TOKEN_URL).mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "access_token": "acc",
+                "refresh_token": "rotated-refresh-tok",
+                "expires_in": 300,
+            },
+        )
+    )
+    tokens = refresh_tokens(PROFILE)
+    assert tokens.refresh_token == "rotated-refresh-tok"
+    assert tokens.expires_in == 300

@@ -333,3 +333,64 @@ def test_install_skill_empty_selection_installs_nothing(tmp_path, monkeypatch):
     result = runner.invoke(app, ["install-skill"])
     assert result.exit_code == 1
     assert not (tmp_path / ".claude" / "skills" / "dedaub-monitoring").exists()
+
+
+# --- headless auth: env token, rotation storage, token command -------------
+
+
+@pytest.fixture
+def config_path(tmp_path, monkeypatch):
+    path = tmp_path / "monitoring.json"
+    monkeypatch.setattr("monitoring_cli.config.CONFIG_PATH", path)
+    monkeypatch.delenv(cli.REFRESH_TOKEN_ENV, raising=False)
+    return path
+
+
+def _save_profile(refresh_token: str = "stored") -> None:
+    profile = cli.Profile(
+        base_url="https://staging.example.com",
+        oidc_host="https://auth.example.com",
+        client_id="c",
+        refresh_token=refresh_token,
+    )
+    cli.Config(default="prod", profiles={"prod": profile}).save()
+
+
+def test_env_token_works_without_config(config_path, monkeypatch):
+    monkeypatch.setenv(cli.REFRESH_TOKEN_ENV, "env-tok")
+    _, profile = cli._load_client(None)
+    assert profile.refresh_token == "env-tok"
+    assert profile.base_url == cli.DEFAULT_BASE_URL
+    assert not config_path.exists()
+
+
+def test_env_token_overrides_stored_token(config_path, monkeypatch):
+    _save_profile()
+    monkeypatch.setenv(cli.REFRESH_TOKEN_ENV, "env-tok")
+    _, profile = cli._load_client(None)
+    assert profile.refresh_token == "env-tok"
+    assert profile.base_url == "https://staging.example.com"
+    assert cli.Config.load().get_profile().refresh_token == "stored"
+
+
+def test_store_refresh_token_persists_rotation(config_path):
+    _save_profile()
+    cli._store_refresh_token("prod", "rotated")
+    assert cli.Config.load().get_profile("prod").refresh_token == "rotated"
+
+
+def test_store_refresh_token_ignores_missing_profile(config_path):
+    cli._store_refresh_token("prod", "rotated")  # no config: no error
+    assert not config_path.exists()
+
+
+def test_token_command_prints_stored_token(config_path):
+    _save_profile("secret-tok")
+    result = runner.invoke(app, ["token"])
+    assert result.exit_code == 0
+    assert result.stdout.strip() == "secret-tok"
+
+
+def test_token_command_fails_when_logged_out(config_path):
+    result = runner.invoke(app, ["token"])
+    assert result.exit_code == 1

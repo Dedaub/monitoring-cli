@@ -56,7 +56,9 @@ address — this branch does not apply.
   (`latest_token_info` / `contracts`, literal `chain_id` per branch) finds where the address lives; give
   the link for each chain it is on, then continue as above.
 
-1. **Auth:** `dedaub-monitoring entities` — if it fails, ask the user to `login` and stop.
+1. **Auth:** `dedaub-monitoring entities` — if it fails, ask the user to `login` and stop. With no
+   browser (CI, container, remote agent), ask them instead to run `dedaub-monitoring token` where they
+   are logged in and set the output as `DEDAUB_MONITORING_REFRESH_TOKEN` here. Never print the token yourself.
 2. **Schema (don't WebFetch):**
    ```bash
    dedaub-monitoring get-schema --macros            # macro/table set
