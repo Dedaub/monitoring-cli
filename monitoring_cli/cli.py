@@ -61,9 +61,19 @@ def _parse_ts(ts: str | None) -> float | None:
     return datetime.datetime.fromisoformat(ts.replace("Z", "+00:00")).timestamp()
 
 
+def _session_expired_message() -> str:
+    if os.environ.get(REFRESH_TOKEN_ENV):
+        return (
+            f"Session expired: the token in {REFRESH_TOKEN_ENV} is no longer valid.\n"
+            "Run `dedaub-monitoring token` where you are logged in, "
+            f"and set {REFRESH_TOKEN_ENV} to the new value."
+        )
+    return "Session expired. Run: dedaub-monitoring login"
+
+
 def _exit_error(e: Exception) -> NoReturn:
     if isinstance(e, SessionExpiredError):
-        err.print("Session expired. Run: dedaub-monitoring login")
+        err.print(_session_expired_message())
     else:
         err.print(f"Error: {e}")
     raise typer.Exit(1)
@@ -85,9 +95,6 @@ def _load_client(profile_name: str | None) -> tuple[MonitoringClient, Profile]:
         raise typer.Exit(1)
     except ProfileNotFoundError as e:
         err.print(str(e))
-        raise typer.Exit(1)
-    except SessionExpiredError:
-        err.print("Session expired. Run: dedaub-monitoring login")
         raise typer.Exit(1)
     except ConfigError as e:
         err.print(f"{e}\nRun: dedaub-monitoring login")
@@ -114,13 +121,18 @@ def _env_client(
 
 def _store_refresh_token(profile_name: str, refresh_token: str) -> None:
     # Reload first so a concurrent login/logout of another profile is kept.
-    # A failed write only costs the rotation; the old token is still valid.
+    # A failed write only costs the rotation, so warn and continue.
     try:
         config = Config.load()
         config.get_profile(profile_name).refresh_token = refresh_token
         config.save()
-    except (NotLoggedInError, ProfileNotFoundError, ConfigError, OSError):
+    except (NotLoggedInError, ProfileNotFoundError):
         pass
+    except (ConfigError, OSError) as e:
+        err.print(
+            f"Warning: could not save the renewed login token ({e}). "
+            "The login will expire at its original time."
+        )
 
 
 @app.command()

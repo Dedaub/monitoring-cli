@@ -434,3 +434,40 @@ def test_logout_local_skips_revoke(config_path, monkeypatch):
     result = runner.invoke(app, ["logout", "--local"])
     assert result.exit_code == 0
     assert cli.Config.load().profiles == {}
+
+
+def test_session_expired_message_for_login(config_path):
+    assert "dedaub-monitoring login" in cli._session_expired_message()
+
+
+def test_session_expired_message_for_env_token(config_path, monkeypatch):
+    monkeypatch.setenv(cli.REFRESH_TOKEN_ENV, "secret-env-tok")
+    msg = cli._session_expired_message()
+    assert "DEDAUB_MONITORING_REFRESH_TOKEN" in msg
+    assert "dedaub-monitoring token" in msg
+    assert "secret-env-tok" not in msg
+
+
+def test_exit_error_uses_env_message(config_path, monkeypatch, capsys):
+    monkeypatch.setenv(cli.REFRESH_TOKEN_ENV, "secret-env-tok")
+    with pytest.raises(cli.typer.Exit):
+        cli._exit_error(cli.SessionExpiredError())
+    assert "dedaub-monitoring token" in capsys.readouterr().err
+
+
+def test_store_refresh_token_warns_on_write_failure(config_path, monkeypatch, capsys):
+    _save_profile()
+
+    def boom(self):
+        raise OSError("read-only")
+
+    monkeypatch.setattr(cli.Config, "save", boom)
+    cli._store_refresh_token("prod", "rotated")
+    err_text = capsys.readouterr().err
+    assert "could not save" in err_text
+    assert "rotated" not in err_text
+
+
+def test_store_refresh_token_silent_when_logged_out(config_path, capsys):
+    cli._store_refresh_token("prod", "rotated")
+    assert capsys.readouterr().err == ""
