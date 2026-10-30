@@ -1,6 +1,6 @@
 # Eco Routes — Topics, Selectors, Addresses (Ethereum, Base, Arbitrum, Optimism, Polygon, Arc; retired Portal on BNB and Robinhood Chain; NOT Avalanche)
 
-**Status:** verified on 2026-09-29 and re-verified on 2026-10-05 (Portal migration of 2026-09-29, routes-ts 3.2.23/3.2.24) against live RPC on all nine target chains, the `@eco-foundation/routes-ts` npm package (the `deployAddresses.csv` of every published version from 0.0.714-beta to 3.2.24, and the Portal, Executor, IntentSource, Inbox and prover ABIs), the verified sources on Blockscout (Portal, Executor, HyperProver, CCIPProver, ECDSAExecutor), and the Eco docs (architecture, provers, contract addresses, the `/v1/chains` API reference). Topic0s and selectors are recomputed as `keccak256(sig)`. Addresses are existence-checked with `eth_getCode`. `executor()`, `version()`, `getProofType()` and `PORTAL()` are read live.
+**Status:** verified on 2026-09-29 and re-verified on 2026-10-05 (Portal migration of 2026-09-29, routes-ts 3.2.23/3.2.24) against live RPC on all nine target chains, the `@eco-foundation/routes-ts` npm package (the `deployAddresses.csv` of every published version from 0.0.714-beta to 3.2.24, and the Portal, Executor, IntentSource, Inbox and prover ABIs), the verified sources on Blockscout (Portal, Executor, HyperProver, CCIPProver, ECDSAExecutor), and the Eco docs (architecture, provers, contract addresses, the `/v1/chains` API reference). Topic0s and selectors are recomputed as `keccak256(sig)`. Addresses are existence-checked with `eth_getCode`. `executor()`, `version()`, `getProofType()` and `PORTAL()` are read live. Re-checked on 2026-10-30: routes-ts 3.2.24 is still the latest version; the current Portal and Executor still have no code on BNB, Robinhood Chain and Avalanche; two more contracts found on Arc (§10).
 **Scope:** Eco Routes, the intent bridge of Eco: the current **Portal** generation (routes-ts 3.2.23+: Portal, Executor, per-intent Vaults, provers), the older Portal addresses, and the legacy **IntentSource + Inbox** pairs of routes-ts 1.x and 2.x. Chains: Ethereum (1), Base (8453), Arbitrum One (42161), Optimism (10), Polygon PoS (137), Arc (5042) carry the current Portal; BNB Smart Chain (56) and Robinhood Chain (4663) carry only the retired 3.2.19–3.2.22 Portal; Avalanche C-Chain (43114) has no deployment. Topics and selectors are chain-agnostic. Addresses are network-specific.
 
 Eco Routes is an intent protocol. On the source chain, a user **publishes** an intent on the Portal and **funds** a Vault that belongs to that intent alone. On the destination chain, a solver **fulfills** the intent through the Portal: the solver's tokens go through the Executor to the recipient. The destination Portal then **dispatches a proof** through the prover that the user chose (for example Hyperlane, Polymer, LayerZero, CCIP or Metalayer). When the proof arrives, the source-chain prover records it, and the solver **withdraws** the reward from the Vault. If no solver fulfills before the deadline, the creator **refunds** the Vault. The Portal holds no funds between transactions.
@@ -282,7 +282,7 @@ MetaProver, CCIPProver and the 1.21.2 pair: `eth_getCode` = `0x` on Polygon.
 
 ## 8. Addresses — BNB Smart Chain (chain ID 56): retired Portal only
 
-routes-ts 3.2.23+ drops chain 56. The current Portal, Executor, Vault implementation and provers have no code on BNB (`eth_getCode` = `0x`, 2026-10-05).
+routes-ts 3.2.23+ drops chain 56. The current Portal, Executor, Vault implementation and provers have no code on BNB (`eth_getCode` = `0x`, 2026-10-05 and 2026-10-30).
 
 | Role | Address | One-liner |
 |------|---------|-----------|
@@ -298,7 +298,7 @@ The 3.2.21–3.2.22 HyperProver, both PolymerProvers, CCIPProver, LayerZeroProve
 
 ## 9. Addresses — Robinhood Chain (chain ID 4663): unlisted retired Portal
 
-The 3.2.19–3.2.22 Portal, its Executor and its Vault implementation have code at their usual addresses on Robinhood Chain. `executor()` returns the same Executor, and `version()` returns "2.6". The current Portal `0xEC000769A73b70e16f361a442292500b3BCf4A85`, its Executor and its provers have no code on Robinhood Chain (2026-10-05). The routes-ts address file (3.2.22 to 3.2.24) and the `/v1/chains` example (2026-09-15) do not list Robinhood Chain. The Portal is a permissionless deployment through the EIP-2470 factory, so its presence does not prove that Eco solvers serve the chain. Eco announced a Robinhood Chain integration on 2026-07-29.
+The 3.2.19–3.2.22 Portal, its Executor and its Vault implementation have code at their usual addresses on Robinhood Chain. `executor()` returns the same Executor, and `version()` returns "2.6". The current Portal `0xEC000769A73b70e16f361a442292500b3BCf4A85`, its Executor and its provers have no code on Robinhood Chain (2026-10-05 and 2026-10-30; the retired Portal's contract nonce is still 4). The routes-ts address file (3.2.22 to 3.2.24) and the `/v1/chains` example (2026-09-15) do not list Robinhood Chain. The Portal is a permissionless deployment through the EIP-2470 factory, so its presence does not prove that Eco solvers serve the chain. Eco announced a Robinhood Chain integration on 2026-07-29.
 
 | Role | Address | One-liner |
 |------|---------|-----------|
@@ -321,8 +321,10 @@ routes-ts 3.2.23+ lists Arc with the shared current addresses. All rows were exi
 | **PolymerProver** | `0xEC0DeD087Ee6C55991Bb4D4567ca1134c5353Ed6` | Same code as Ethereum. |
 | Portal (3.2.19–3.2.22, Arc only, retired) | `0xEC002CA16cE20c2a9F3C6200EF04E7d92a3dfBD8` | `version()` = "2.10.0", `executor()` = `0x95b2d45F49c68a54BDBa0356fc3034751A43b3D4`. 0 logs in the last 20,000 blocks. |
 | HyperProver (3.2.21–3.2.22) | `0xec004Ab4870c4e177c66949329dCdb503CE41022` | Code present. |
+| PolymerProver (unlisted, Arc retired Portal) | `0xEC00993f947cecBBfB261f25d4af2C95F97c91F9` | 11,784 B. `getProofType()` = "Polymer", `version()` = "2.10.0", `PORTAL()` = `0xEC002CA16cE20c2a9F3C6200EF04E7d92a3dfBD8` (2026-10-30). |
+| ECDSAExecutor (not Routes) | `0xEc2C96e75B09e29b66bf2Ee5C37fa749eF9AA7c7` | 4,432 B, same size as on Ethereum. |
 
-The 3.2.19–3.2.22 shared Portal `0xEC000064576f9C95a8623Bc0eff3db6d296ea6df`, its Executor and its Vault implementation have no code on Arc. The current CCIPProver `0xEC0B53A81C996da376F125E541E40082815CDcDc` has no code on Arc. LayerZeroProver and the legacy contracts were not checked on Arc.
+The 3.2.19–3.2.22 shared Portal `0xEC000064576f9C95a8623Bc0eff3db6d296ea6df`, its Executor and its Vault implementation have no code on Arc. The current CCIPProver `0xEC0B53A81C996da376F125E541E40082815CDcDc` has no code on Arc. The EIP-2470 factory `0xce0042B868300000d44A59004Da54A005ffdcf9f` is on Arc and Robinhood Chain too (shared infrastructure). LayerZeroProver and the legacy contracts were not checked on Arc.
 
 ---
 
@@ -444,6 +446,7 @@ ETH_VAULT_IMPLEMENTATION_3_2_19     = '\x9f70b0c839fe2d7190a09ae87ed658b6d1cba4f
 ETH_HYPER_PROVER_3_2_21             = '\xec004ab4870c4e177c66949329dcdb503ce41022'   -- also Base, Arb, OP, Poly, Arc
 ETH_POLYMER_PROVER_3_2_20           = '\xe3e4e6f284f1c8e17bafe4268eb98c36886b4d8b'   -- also Base, Arb, OP, Poly
 ETH_POLYMER_PROVER_UNLISTED         = '\xec00993f947cecbbfb261f25d4af2c95f97c91f9'   -- also Base, Arb, OP, Poly
+ARC_POLYMER_PROVER_UNLISTED         = '\xec00993f947cecbbfb261f25d4af2c95f97c91f9'   -- PORTAL() = ARC_PORTAL_3_2_19
 ETH_CCIP_PROVER_3_2_19              = '\xcebb7cddba4734c7130bf114a37c2da4c5f3c473'   -- also Base
 ETH_LAYERZERO_PROVER                = '\x0c4e3063239c9f4f323a956c79738916594d8fd4'
 BASE_META_PROVER                    = '\x3d529efaedb3b999a404c1b8543441ae616cb914'   -- also Arb

@@ -1,6 +1,6 @@
 # Avalanche Bridge — BTC.b — Topics, Selectors, Addresses (Avalanche C-Chain only; Bitcoin + CCIP counterparties)
 
-**Status:** verified against live Avalanche C-Chain RPC (`https://avalanche-c-chain-rpc.publicnode.com`) and all six other target-chain RPCs, the on-chain verified source (`BridgeToken` / `BridgeTokenAdapter` on Snowtrace/Routescan), and recomputed keccak256 locally, on 2026-06-09.
+**Status:** verified against live Avalanche C-Chain RPC (`https://avalanche-c-chain-rpc.publicnode.com`) and all six other target-chain RPCs, the on-chain verified source (`BridgeToken` / `BridgeTokenAdapter` on Snowtrace/Routescan), and recomputed keccak256 locally, on 2026-06-09. Re-checked on 2026-10-30: the adapter proxy was upgraded on 2026-10-29 to the impl `0x64c8675FaA1527EadE17F83c9979eE843D60f243` (§3, §6); its events are unchanged, and it drops `spendDeposit` and `changeBridgeToken`.
 **Scope:** the Avalanche-side contracts that mint, burn and govern **BTC.b** (`symbol()="BTC.b"`, `name()="Bitcoin"`, 8 decimals) — the canonical wrapped-Bitcoin token of the Avalanche Bridge. Event topics and function selectors are **chain-agnostic**; addresses are network-specific. **BTC.b is a single-chain minted token: it exists ONLY on Avalanche C-Chain (43114).** The Bitcoin side is non-EVM (no contract); the modern mint/burn path is additionally wired to **Chainlink CCIP** for EVM↔EVM transfers (counterparties outside the seven target chains — see §9).
 
 BTC.b is a non-upgradeable `BridgeToken` (ERC-20, solc 0.8.11) deployed by the original Avalanche Bridge warden EOA `0xf5163f69…`. The token itself is **immutable** (no proxy — EIP-1967 impl/admin slots both read `0x0`); its only mutable surface is a single `Roles.Role bridgeRoles` allow-list that gates `mint`. The mint authority has been **migrated exactly once** (`MigrateBridgeRole`, block 76740088) from the original warden EOA to a **`BridgeTokenAdapter`** (a Lombard-consortium-style minter behind a `TransparentUpgradeableProxy` at `0x85d1d52e…`). So today: wardens / CCIP relayers prove a deposit → the adapter (or its `MINTER_ROLE` holders) calls `BridgeToken.mint` → BTC.b is minted; a holder calls `BridgeToken.unwrap` (or burns) to redeem back to native Bitcoin or bridge out via CCIP.
@@ -14,7 +14,7 @@ BTC.b is a non-upgradeable `BridgeToken` (ERC-20, solc 0.8.11) deployed by the o
 | Contract | Role | Proxy? | Verified name on chain |
 |----------|------|--------|------------------------|
 | **BTC.b token** | The ERC-20 wrapped-Bitcoin token. Holds `mint`/`unwrap`/`burn` + the `bridgeRoles` allow-list. | **No** (10 032 B immutable) | `BridgeToken` (solc 0.8.11) |
-| **BridgeTokenAdapter** (minter) | Current sole holder of BTC.b's `bridgeRoles`. Consortium/Bascule-gated minter (Lombard-style: `mintV1`, `batchMint`, `RedeemRequest`, `MintProofConsumed`). Calls `BridgeToken.mint`. | **Transparent (EIP-1967)** proxy `0x85d1d52e…` → impl `0x80A23cB6…` | `BridgeTokenAdapter` (solc 0.8.24) |
+| **BridgeTokenAdapter** (minter) | Current sole holder of BTC.b's `bridgeRoles`. Consortium/Bascule-gated minter (Lombard-style: `mintV1`, `batchMint`, `RedeemRequest`, `MintProofConsumed`). Calls `BridgeToken.mint`. | **Transparent (EIP-1967)** proxy `0x85d1d52e…` → impl `0x64c8675F…` | `BridgeTokenAdapter` (solc 0.8.24) |
 | **ProxyAdmin** | Owns/upgrades the adapter proxy. | **No** (1 063 B) | `ProxyAdmin` |
 | **TimelockController** | `defaultAdmin`/`owner` of the adapter **and** owner of the ProxyAdmin — root governance. | **No** (6 712 B) | `TimelockController` |
 | **Consortium** | Off-chain notary set whose threshold signatures the adapter verifies before minting (`getConsortium()`). | Transparent proxy `0xdad58dfa…` | (Lombard Consortium) |
@@ -117,7 +117,7 @@ There is **no `owner()`** (`owner()` reverts), **no `mint(address,uint256)`**, *
 | `0x68573107` | `batchMint(address[] to, uint256[] amount)` | Batch direct mint (MINTER_ROLE). |
 | `0x9dc29fac` | `burn(address from, uint256 amount)` | Burn on behalf (CCIP/redeem). |
 | `0x42966c68` | `burn(uint256 amount)` | Self-burn. |
-| `0xe1c88f39` | `spendDeposit(bytes payload, bytes proof)` | Consume a Bascule-attested deposit. |
+| `0xe1c88f39` | `spendDeposit(bytes payload, bytes proof)` | Consume a Bascule-attested deposit. **Absent from the impl of 2026-10-29** (`PUSH4` scan). |
 | `0xd5391393` | `MINTER_ROLE()` → `bytes32` | = `0x9f2df0fed2c77648de5860a4cc508cd0818c85b8b8a1ab4ceeef8d981c8956a6`. |
 | `0xe63ab1e9` | `PAUSER_ROLE()` → `bytes32` | |
 | `0xa217fddf` | `DEFAULT_ADMIN_ROLE()` → `bytes32` | = `0x0`. |
@@ -128,7 +128,7 @@ There is **no `owner()`** (`owner()` reverts), **no `mint(address,uint256)`**, *
 | `0xaec64aac` | `getBascule()` → `address` | = `0x10fa7a47…`. |
 | `0xfe9c6aa6` | `getAssetRouter()` → `address` | = `0x9ece5fb1…`. |
 | `0x3b19e84a` | `getTreasury()` → `address` | = `0xaa4bc534…` (Gnosis Safe). |
-| `0x170efac3` | `changeBridgeToken(address)` | Admin. Emits `BridgeTokenChanged`. |
+| `0x170efac3` | `changeBridgeToken(address)` | Admin. Emits `BridgeTokenChanged`. **Absent from the impl of 2026-10-29** (`PUSH4` scan). |
 | `0x56712139` | `changeConsortium(address)` | Admin. Emits `ConsortiumChanged`. |
 | `0x7f56945e` | `changeBascule(address)` | Admin. Emits `BasculeChanged`. |
 | `0x84ef8ffc` | `defaultAdmin()` → `address` | = `0xe4b5166b…` (Timelock). |
@@ -145,7 +145,7 @@ All verified via `eth_getCode` returning non-empty bytecode on `https://avalanch
 | Role | Address | Bytecode | One-liner |
 |------|---------|----------|-----------|
 | **BTC.b token** (`BridgeToken`) | `0x152b9d0FdC40C096757F570A51E494bd4b943E50` | 10 032 B, **not a proxy** | The ERC-20. `name="Bitcoin"`, `symbol="BTC.b"`, `decimals=8`. Sole minter = the adapter (its `bridgeRoles` bearer). |
-| **BridgeTokenAdapter (minter)** | `0x85d1d52e11290f174444d21c2a167bedbe36e4d2` | 1 159 B `TransparentUpgradeableProxy` → impl `0x80A23cB6eCEDa270889Eb165C41f55bcd300053c` (11 969 B) | Holds BTC.b's `bridgeRoles`. Consortium/Bascule-gated mint; redeem-to-BTC. |
+| **BridgeTokenAdapter (minter)** | `0x85d1d52e11290f174444d21c2a167bedbe36e4d2` | 1 159 B `TransparentUpgradeableProxy` → impl `0x64c8675FaA1527EadE17F83c9979eE843D60f243` (12 728 B, verified `BridgeTokenAdapter`; since 2026-10-29, Avalanche block 98,854,014). Previous impl `0x80A23cB6eCEDa270889Eb165C41f55bcd300053c` (11 969 B). | Holds BTC.b's `bridgeRoles`. Consortium/Bascule-gated mint; redeem-to-BTC. |
 | **ProxyAdmin** (adapter) | `0x813dd65fc4db761d0cc1799a769dcb1e9518b1b7` | 1 063 B | Upgrades the adapter proxy. `owner()` = the Timelock. |
 | **TimelockController** (root gov) | `0xe4b5166b1d60c2208a934176522461c470a37d56` | 6 712 B | Adapter `defaultAdmin`/`owner` **and** ProxyAdmin owner. Governs everything. |
 | **Consortium** | `0xdad58dfa5c1a7a34419afdbe1f0d610efeea95e4` | `TransparentUpgradeableProxy` | Notary set; threshold sigs verified on `mintV1`. |
@@ -175,7 +175,7 @@ Verified via `eth_getCode` = `0x` (empty) on 2026-06-09 for the BTC.b token **an
 | Optimism | 10 | optimism-rpc.publicnode.com | `0x` (none) | `0x` (none) | `0x` (none) |
 | Polygon PoS | 137 | polygon-bor-rpc.publicnode.com | `0x` (none) | `0x` (none) | `0x` (none) |
 
-> **Address-collision decoy:** the adapter **implementation** address `0x80A23cB6eCEDa270889Eb165C41f55bcd300053c` returns bytecode on **Ethereum (21 693 B)** and **BNB (12 678 B)** too — but those are **unrelated** contracts at the same address (on Ethereum it is verified as **`LBTC`**, Lombard's Liquid Bitcoin token; same Lombard codebase, solc 0.8.24, different deployment). This is NOT a BTC.b deployment. The only BTC.b-relevant code at `0x80A23cB6…` is the **`BridgeTokenAdapter` on Avalanche**. Always key on `(chainId, address)` and check the verified contract name.
+> **Address-collision decoy:** the previous adapter **implementation** address `0x80A23cB6eCEDa270889Eb165C41f55bcd300053c` returns bytecode on **Ethereum (21 693 B)** and **BNB (12 678 B)** too — but those are **unrelated** contracts at the same address (on Ethereum it is verified as **`LBTC`**, Lombard's Liquid Bitcoin token; same Lombard codebase, solc 0.8.24, different deployment). This is NOT a BTC.b deployment. The only BTC.b-relevant code at `0x80A23cB6…` is the **`BridgeTokenAdapter` on Avalanche**. Always key on `(chainId, address)` and check the verified contract name.
 
 ---
 
@@ -183,7 +183,7 @@ Verified via `eth_getCode` = `0x` (empty) on 2026-06-09 for the BTC.b token **an
 
 | Chain | ID | BTC.b token | Adapter (minter) | Verdict |
 |---|---|---|---|---|
-| **Avalanche C-Chain** | 43114 | ✅ `0x152b9d0F…3E50` (10 032 B) | ✅ `0x85d1d52e…` → `0x80A23cB6…` | **Full deployment** |
+| **Avalanche C-Chain** | 43114 | ✅ `0x152b9d0F…3E50` (10 032 B) | ✅ `0x85d1d52e…` → `0x64c8675F…` | **Full deployment** |
 | Ethereum | 1 | ❌ `0x` | ❌ (but `0x80A23cB6…` = `LBTC` decoy) | Not deployed |
 | Base | 8453 | ❌ `0x` | ❌ `0x` | Not deployed |
 | BNB | 56 | ❌ `0x` | ❌ (`0x80A23cB6…` unverified decoy) | Not deployed |
@@ -195,7 +195,7 @@ Verified via `eth_getCode` = `0x` (empty) on 2026-06-09 for the BTC.b token **an
 - **Bitcoin (non-EVM)** — the native source/sink. Mints carry the BTC txid in `Mint.originTxId`; redemptions emit `RedeemRequest` with a Bitcoin `scriptPubkey`. `originChainId=0` in `Mint` denotes the native-Bitcoin path.
 - **Chainlink CCIP lanes** — BTC.b additionally moves EVM↔EVM via the `BridgeTokenPool` / `EVM2EVMOffRamp 1.5.0`. CCIP path mints carry `originChainId = 2^256-1` and a `remoteChainSelector` (a CCIP selector, NOT an EVM chainId). The set of connected CCIP chains is configured on the pool, not on BTC.b, and may include chains beyond the seven targets.
 
-**Vanity tell:** the BTC.b token address `0x152b9d0F…` is not a vanity address. The adapter impl `0x80A23cB6…` deliberately collides with Lombard `LBTC` on Ethereum (shared codebase), which is the main look-alike trap.
+**Vanity tell:** the BTC.b token address `0x152b9d0F…` is not a vanity address. The previous adapter impl `0x80A23cB6…` collides with Lombard `LBTC` on Ethereum (shared codebase), which is the main look-alike trap.
 
 ---
 
@@ -204,7 +204,7 @@ Verified via `eth_getCode` = `0x` (empty) on 2026-06-09 for the BTC.b token **an
 | Contract | Pattern | Detection | Upgrade auth |
 |----------|---------|-----------|--------------|
 | **BTC.b token** (`BridgeToken`) | **Immutable — not a proxy** | 10 032 B full contract; EIP-1967 impl slot `0x360894…bbc` = `0x0`, admin slot `0xb53127…6103` = `0x0` (both read live). No `upgradeTo`/`proxiableUUID`. | None. Only mutable state = the `bridgeRoles` allow-list (changed via `migrateBridgeRole`). |
-| **BridgeTokenAdapter** | **Transparent proxy (EIP-1967)** | Proxy `0x85d1d52e…`: impl slot = `0x…80a23cb6eceda270889eb165c41f55bcd300053c`; admin slot = `0x…813dd65fc4db761d0cc1799a769dcb1e9518b1b7` (the ProxyAdmin). Impl `0x80A23cB6…` exposes AccessControl + DefaultAdminRules. | `ProxyAdmin` `0x813dd65f…`, owned by the Timelock `0xe4b5166b…`. Watch `Upgraded(address)` topic0 `0xbc7cd75a20ee27fd9adebab32041f755214dbc6bffa90cc0225b39da2e5c2d3b` on the proxy. |
+| **BridgeTokenAdapter** | **Transparent proxy (EIP-1967)** | Proxy `0x85d1d52e…`: impl slot = `0x…64c8675faa1527eade17f83c9979ee843d60f243` (since 2026-10-29; was `0x…80a23cb6…`); admin slot = `0x…813dd65fc4db761d0cc1799a769dcb1e9518b1b7` (the ProxyAdmin). Impl `0x64c8675F…` exposes AccessControl + DefaultAdminRules. | `ProxyAdmin` `0x813dd65f…`, owned by the Timelock `0xe4b5166b…`. Watch `Upgraded(address)` topic0 `0xbc7cd75a20ee27fd9adebab32041f755214dbc6bffa90cc0225b39da2e5c2d3b` on the proxy. |
 | **Consortium** | Transparent proxy | impl slot populated (`0x…12364c9d…`); admin via ProxyAdmin. | Timelock. |
 | **ProxyAdmin / TimelockController / BasculeV2** | **Not proxies** | Full bytecode; EIP-1967 impl slot = `0x0`. | n/a. |
 
@@ -224,7 +224,7 @@ Verified via `eth_getCode` = `0x` (empty) on 2026-06-09 for the BTC.b token **an
 6. **8 decimals, not 18.** BTC.b mirrors Bitcoin's 8-dec precision. A "1.0 BTC.b" amount is `100000000`, not `1e18`. `totalSupply()` ≈ wrapped-BTC reserves.
 7. **`Transfer` from/to `0x0` is the mint/burn tell**, but the same address also receives **fee** transfers on native mints (`feeAddress` gets a second `Transfer` when `feeAmount>0`). Don't double-count the fee transfer as a user mint.
 8. **The token is NOT Ownable and NOT Pausable.** `owner()` reverts; there is no `pause()`/`Paused` on `0x152b9d0F…`. The Pausable/AccessControl surface lives on the **adapter** `0x85d1d52e…`. If a "BTC.b paused" alert is needed, watch the adapter's `Paused`/`Unpaused`.
-9. **Address-collision decoy `0x80A23cB6…`.** That adapter-impl address also hosts unrelated code on Ethereum (verified **`LBTC`**) and BNB. Seeing bytecode there does **not** mean BTC.b is on those chains — only the Avalanche `0x152b9d0F…` token + `0x85d1d52e…` proxy constitute BTC.b. Key on `(chainId, address)` and verify the contract name.
+9. **Address-collision decoy `0x80A23cB6…`.** That previous adapter-impl address also hosts unrelated code on Ethereum (verified **`LBTC`**) and BNB. Seeing bytecode there does **not** mean BTC.b is on those chains — only the Avalanche `0x152b9d0F…` token + `0x85d1d52e…` proxy constitute BTC.b. Key on `(chainId, address)` and verify the contract name.
 10. **CCIP `remoteChainSelector` ≠ EVM chainId.** On `BridgeTokenPool.LockedOrBurned`/`ReleasedOrMinted`, the `uint64` is a Chainlink CCIP chain selector. Translate via the CCIP directory before attributing a counterparty chain.
 11. **Governance root = a Timelock + Gnosis Safe.** `TimelockController` `0xe4b5166b…` is the adapter `defaultAdmin` and ProxyAdmin owner; the fee/treasury sink is a Gnosis Safe `0xaa4bc534…`. Admin actions (consortium rotation, upgrades, role grants) originate there and surface as `ConsortiumChanged`/`Upgraded`/`RoleGranted`/`DefaultAdminTransferScheduled`.
 12. **`AddSupportedChainId` (token) lists unwrap destinations**; `chainIds(uint256)` is the public view. An `Unwrap(amount, chainId)` to a non-supported chainId would revert, so the supported-set + `AddSupportedChainId` define valid bridge-out targets.
@@ -277,11 +277,11 @@ SEL_ADAPTER_MINT                = '\x40c10f19'  -- mint(address,uint256)
 SEL_ADAPTER_MINT_V1             = '\x8307f738'  -- mintV1(bytes,bytes)
 SEL_ADAPTER_BATCH_MINT_V1       = '\x0fd3f6e5'  -- batchMintV1(bytes[],bytes[])
 SEL_ADAPTER_BATCH_MINT          = '\x68573107'  -- batchMint(address[],uint256[])
-SEL_ADAPTER_SPEND_DEPOSIT       = '\xe1c88f39'  -- spendDeposit(bytes,bytes)
+SEL_ADAPTER_SPEND_DEPOSIT       = '\xe1c88f39'  -- spendDeposit(bytes,bytes); not in the impl of 2026-10-29
 SEL_ADAPTER_GRANT_ROLE          = '\x2f2ff15d'
 SEL_ADAPTER_REVOKE_ROLE         = '\xd547741f'
 SEL_ADAPTER_CHANGE_CONSORTIUM   = '\x56712139'
-SEL_ADAPTER_CHANGE_BRIDGE_TOKEN = '\x170efac3'
+SEL_ADAPTER_CHANGE_BRIDGE_TOKEN = '\x170efac3'  -- not in the impl of 2026-10-29
 SEL_ADAPTER_PAUSE               = '\x8456cb59'
 
 -- ===== Proxy slots & roles =====
@@ -291,8 +291,9 @@ ADAPTER_MINTER_ROLE             = '\x9f2df0fed2c77648de5860a4cc508cd0818c85b8b8a
 
 -- ===== Avalanche C-Chain (chain ID 43114) — the ONLY chain with BTC.b =====
 AVAX_BTCB_TOKEN                 = '\x152b9d0fdc40c096757f570a51e494bd4b943e50'  -- BridgeToken, 8 dec, immutable
-AVAX_BRIDGE_ADAPTER_PROXY       = '\x85d1d52e11290f174444d21c2a167bedbe36e4d2'  -- minter; impl 0x80a23cb6...
-AVAX_BRIDGE_ADAPTER_IMPL        = '\x80a23cb6eceda270889eb165c41f55bcd300053c'  -- BridgeTokenAdapter (== LBTC on ETH: decoy)
+AVAX_BRIDGE_ADAPTER_PROXY       = '\x85d1d52e11290f174444d21c2a167bedbe36e4d2'  -- minter; impl 0x64c8675f...
+AVAX_BRIDGE_ADAPTER_IMPL        = '\x64c8675faa1527eade17f83c9979ee843d60f243'  -- BridgeTokenAdapter (since 2026-10-29)
+AVAX_BRIDGE_ADAPTER_IMPL_OLD    = '\x80a23cb6eceda270889eb165c41f55bcd300053c'  -- previous impl (== LBTC on ETH: decoy)
 AVAX_ADAPTER_PROXY_ADMIN        = '\x813dd65fc4db761d0cc1799a769dcb1e9518b1b7'
 AVAX_TIMELOCK_GOV               = '\xe4b5166b1d60c2208a934176522461c470a37d56'  -- adapter defaultAdmin + ProxyAdmin owner
 AVAX_CONSORTIUM                 = '\xdad58dfa5c1a7a34419afdbe1f0d610efeea95e4'
@@ -316,7 +317,7 @@ How every constant was verified (2026-06-09):
 - **Topic0 + selectors:** recomputed locally as `keccak256(canonical signature)` (full 32 bytes for topics, `[0:4]` for selectors) from the on-chain-verified `BridgeToken`, `BridgeTokenAdapter`, and `BridgeTokenPool` ABIs. Every BTC.b selector was additionally cross-checked against the live contract's `PUSH4` dispatcher (`eth_getCode` on `0x152b9d0F…` → 19 selectors, all accounted for). `Mint` (`0xc5532043…`), `Unwrap` (`0x37a06799…`) and `MigrateBridgeRole` (`0x871b00a4…`) topic0s were confirmed against **live `eth_getLogs`**: native-mint pattern at block ~60,000,000 (`feeAddress=0x6283184a…`, `originChainId=0`, real BTC `originTxId`) and the CCIP-mint pattern at block 87,562,725 (`originChainId=2^256-1`, paired `ReleasedOrMinted` on the pool). `MigrateBridgeRole` returned exactly **one** event (block 76,740,088 → `0x85d1d52e…`).
 - **Addresses & bytecode:** `eth_getCode` on each of the seven target-chain publicnode RPCs. BTC.b token (10 032 B), adapter proxy (1 159 B), ProxyAdmin (1 063 B) exist **only on Avalanche 43114**; all three return `0x` on Ethereum/Base/BNB/Arbitrum/Optimism/Polygon. The adapter-impl address `0x80A23cB6…` was checked on every chain — it is `LBTC` (verified) on Ethereum and an unrelated contract on BNB (the documented decoy).
 - **Mint-authority graph:** the token's `Roles.Role bridgeRoles` was located at struct base slot **5** (`_balances`=0, `_allowances`=1, `_totalSupply`=2, `_name`=3, `_symbol`=4, then the role struct), and `bearer[addr]` read via `keccak256(addr ‖ 5)` — confirming `bearer[0x85d1d52e…]=1` and `bearer[0xf5163f69…]=0` (old warden removed). Adapter `MINTER_ROLE` (`0x9f2df0fe…`) membership confirmed via live `hasRole`: AssetRouter and CCIP minter = true; Treasury Safe = **false** (fee sink only).
-- **Proxy classification:** EIP-1967 impl/admin slots read live. BTC.b token = both `0x0` → immutable. Adapter proxy impl slot = `0x…80a23cb6…`, admin slot = `0x…813dd65f…` (ProxyAdmin) → Transparent. ProxyAdmin owner and adapter `defaultAdmin` both read `0xe4b5166b…` (TimelockController).
+- **Proxy classification:** EIP-1967 impl/admin slots read live. BTC.b token = both `0x0` → immutable. Adapter proxy impl slot = `0x…64c8675f…` (2026-10-30; `0x…80a23cb6…` before 2026-10-29), admin slot = `0x…813dd65f…` (ProxyAdmin) → Transparent. ProxyAdmin owner and adapter `defaultAdmin` both read `0xe4b5166b…` (TimelockController).
 - **Contract names / versions:** verified-source `ContractName` via the Avalanche explorer API (`BridgeToken` solc 0.8.11; `BridgeTokenAdapter` / `LBTC` solc 0.8.24; `BasculeV2`; `EVM2EVMOffRamp 1.5.0` and `LombardTokenPoolV2 1.6.1` via `typeAndVersion()`).
 
 **Authoritative sources:**

@@ -1,6 +1,6 @@
-# Squid Router — Topics, Selectors, Addresses (Ethereum, Base, Arbitrum, Optimism, Polygon, BNB, Avalanche; Robinhood Chain unlisted)
+# Squid Router — Topics, Selectors, Addresses (Ethereum, Base, Arbitrum, Optimism, Polygon, BNB, Avalanche; Robinhood Chain and Arc unlisted)
 
-**Status:** verified on 2026-09-29 to 2026-10-01 against live RPC on all eight target chains, the verified source of the SquidRouter implementation (`contracts/router/SquidRouter.sol`, Solidity 0.8.23) and of `SquidRouterProxy`, the official Squid docs and the Squid API (`/v2/chains`). Topic0 and selectors recomputed as `keccak256(signature)`. Addresses existence-checked with `eth_getCode`. Implementations read from the EIP-1967 slot. Router wiring read with `eth_call`.
+**Status:** verified on 2026-09-29 to 2026-10-01 against live RPC on all eight target chains, the verified source of the SquidRouter implementation (`contracts/router/SquidRouter.sol`, Solidity 0.8.23) and of `SquidRouterProxy`, the official Squid docs and the Squid API (`/v2/chains`). Topic0 and selectors recomputed as `keccak256(signature)`. Addresses existence-checked with `eth_getCode`. Implementations read from the EIP-1967 slot. Router wiring read with `eth_call`. Re-checked on 2026-10-30: the unlisted alternate router is also on Arc (5042), deployed 2026-09-16 (block 21,100,386), with the same proxy, implementation, SquidMulticall and EOA owner as on Robinhood Chain (§7a).
 **Scope:** the SquidRouter proxy and implementation, SquidMulticall and SquidFeeCollector: the contracts of Squid's Axelar-based cross-chain swaps (`bridgeCall`, `callBridgeCall`), its CCTP and Chainflip entry points and its destination executor. The AxelarGateway, AxelarGasService and ITS are in [`../axelar/core.md`](../axelar/core.md). Squid Intents (Coral) is in [`coral.md`](coral.md). Topics and selectors are chain-agnostic. Addresses are network-specific.
 
 Squid is a router on top of bridges. It has no bridge of its own. On the source chain, the router swaps the user's token into an Axelar gateway token (for example `axlUSDC`) through SquidMulticall, then calls `AxelarGateway.callContractWithToken`. **The router emits no event on the source chain.** The source leg is the gateway's `ContractCallWithToken` with `sender` (topic1) = the SquidRouter. On the destination chain, the Axelar relayer (or an express executor) calls the destination SquidRouter. The router runs the payload's swaps and emits `CrossMulticallExecuted(payloadHash)`.
@@ -197,6 +197,19 @@ Squid does not list Robinhood Chain: it is absent from the contracts page and fr
 
 `gateway()`, `interchainTokenService()` and `axelarGasService()` return the placeholder `0x1000000000000000000000000000000000000000`; `usdc()`, `cctpTokenMessenger()` and `chainflipVault()` return zero. So only `fundAndRunMulticall` can work here: no Axelar, CCTP or Chainflip leg. The router emitted 0 logs in the pinned window. SquidMulticall `0xaD6Cea45f98444a922a2b4fE96b8C90F0862D2F4` and FeeCollector `0x19cd4F3820E7BBed45762a30BFA37dFC6c9C145b` have no code here. `0xEa749Fd6bA492dbc14c24FE8A3d08769229b896c` holds unrelated 1,835-byte code here (not identified).
 
+
+## 7a. Addresses — Arc (chain ID 5042) — deployed, not listed
+
+Squid does not list Arc. The standard router address `0xce16F69375520ab01377ce7B88f5BA8C48F8D666` has no code here. The alternate router has code here. It was deployed on 2026-09-16 (block 21,100,386). Every contract below has the same code hash as on Robinhood Chain:
+
+| Role | Address | Evidence |
+|------|---------|----------|
+| SquidRouter (proxy, alternate address) | `0x2B4d4Cf15dAD79D3426D19674Bd237C1dc9144aa` | 1,690-byte proxy; `contractId()` = `keccak256("squid-router")`; EIP-1967 implementation `0xa96495fce38a6020fc7edaee111216f6e6c0ca53` (20,062 B, same address and code hash as on Robinhood Chain) |
+| SquidMulticall | `0x073e81d92bd8b39562106819d12346240606f04a` | `squidMulticall()` of that router; 3,348 B |
+| Router owner and pauser (EOA) | `0xb5e6C16Cb726bb24075075E0993971Aa8D73f764` | Owner slot and `pauser()`; no code, nonce 4 |
+
+The wiring is the same as on Robinhood Chain: `gateway()`, `interchainTokenService()` and `axelarGasService()` return the placeholder `0x1000000000000000000000000000000000000000`; `usdc()`, `cctpTokenMessenger()` and `chainflipVault()` return zero; `paused()` = `false`. So only `fundAndRunMulticall` can work here. SquidMulticall `0xaD6Cea45f98444a922a2b4fE96b8C90F0862D2F4` and FeeCollector `0x19cd4F3820E7BBed45762a30BFA37dFC6c9C145b` have no code here. `0xEa749Fd6bA492dbc14c24FE8A3d08769229b896c` holds the same unrelated 1,835-byte code as on Robinhood Chain.
+
 ---
 
 ## 8. Cross-chain summary
@@ -211,6 +224,7 @@ Squid does not list Robinhood Chain: it is absent from the contracts page and fr
 | BNB Smart Chain | 56 | `0xce16F69375520ab01377ce7B88f5BA8C48F8D666` | `0xaD6Cea45f98444a922a2b4fE96b8C90F0862D2F4` | `0x19cd4F3820E7BBed45762a30BFA37dFC6c9C145b` | yes | no | no |
 | Avalanche C-Chain | 43114 | `0xce16F69375520ab01377ce7B88f5BA8C48F8D666` | `0xaD6Cea45f98444a922a2b4fE96b8C90F0862D2F4` | `0x19cd4F3820E7BBed45762a30BFA37dFC6c9C145b` | yes | wired | no |
 | Robinhood Chain | 4663 | `0x2B4d4Cf15dAD79D3426D19674Bd237C1dc9144aa` (unlisted) | `0x073e81d92bd8b39562106819d12346240606f04a` | — (no code) | no (placeholder) | no | no |
+| Arc | 5042 | `0x2B4d4Cf15dAD79D3426D19674Bd237C1dc9144aa` (unlisted) | `0x073e81d92bd8b39562106819d12346240606f04a` | — (no code) | no (placeholder) | no | no |
 
 "Wired" means a non-zero `cctpTokenMessenger()`. The `cctpBridge` path produced 0 `DepositForBurn` logs with `depositor` = SquidRouter in the pinned window on all six wired chains (§11).
 
@@ -220,7 +234,7 @@ Squid does not list Robinhood Chain: it is absent from the contracts page and fr
 
 | Contract | Pattern | Detection | Upgrade auth |
 |----------|---------|-----------|--------------|
-| **SquidRouter** | Axelar `Proxy` (`SquidRouterProxy`, Solidity 0.8.17). Implementation in the EIP-1967 slot `0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc`; owner in slot `0x02016836a56b71f0d02689e69e326f4f4c1b9057164ef592671cf0d37c8040c0` (`keccak256("owner")`). The proxy's `receive()` reverts; payable calls go through the fallback | Slot read live on all eight chains; `implementation()` agrees | `upgrade(address,bytes32,bytes)` on the implementation, `onlyOwner`; emits `Upgraded`. The owner is a per-chain Safe (§3–§6); an EOA on Robinhood Chain |
+| **SquidRouter** | Axelar `Proxy` (`SquidRouterProxy`, Solidity 0.8.17). Implementation in the EIP-1967 slot `0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc`; owner in slot `0x02016836a56b71f0d02689e69e326f4f4c1b9057164ef592671cf0d37c8040c0` (`keccak256("owner")`). The proxy's `receive()` reverts; payable calls go through the fallback | Slot read live on all eight chains; `implementation()` agrees | `upgrade(address,bytes32,bytes)` on the implementation, `onlyOwner`; emits `Upgraded`. The owner is a per-chain Safe (§3–§6); an EOA on Robinhood Chain and Arc |
 | SquidFeeCollector | Same Axelar proxy style, EIP-1967 slot | Implementation per chain (§3–§6) | `upgrade`, owner only |
 | SquidMulticall (all three) | Immutable | No implementation slot; plain runtime code | none |
 
@@ -240,7 +254,7 @@ The router implementations differ by chain only because of the constructor immut
 8. **Topic0 collisions.** `ExpressExecuted`, `ExpressExecutedWithToken`, `ExpressExecutionFulfilled` and `ExpressExecutionWithTokenFulfilled` are the generic Axelar express-executable events: ITS and other apps emit the same topic0. In the pinned window, `ExpressExecutedWithToken` also came from `0x1f1d37a3bf840e35c6a860c7c2da71fe555123ca` (Ethereum) and `0x77accd23cc3ccc5e36a543cedcd03764bf6ad401` (Base), which are not Squid. Filter on the emitter. `Upgraded` and `Paused()` are generic too.
 9. **Amounts.** `ExpressExecutedWithToken.amount` is indexed (topic2) and is in the gateway token's decimals. The router's `CrossMulticallExecuted` has no amount; take it from the `Transfer` logs of the same tx.
 10. **Other exits through the same router.** `cctpBridge` emits only CCTP's `DepositForBurn` (`depositor` = SquidRouter); see [`../cctp/v1.md`](../cctp/v1.md). Chainflip deliveries arrive through `cfReceive` from the Chainflip Vault and end in `CrossMulticallExecuted`. `fundAndRunMulticall` is also the deposit step of Squid Intents (see [`coral.md`](coral.md)).
-11. **Robinhood Chain uses another address.** The router there is `0x2B4d4Cf15dAD79D3426D19674Bd237C1dc9144aa`, owned by an EOA, with no Axelar wiring. A filter on `0xce16F69375520ab01377ce7B88f5BA8C48F8D666` sees nothing on chain 4663.
+11. **Robinhood Chain and Arc use another address.** The router there is `0x2B4d4Cf15dAD79D3426D19674Bd237C1dc9144aa`, owned by an EOA, with no Axelar wiring. A filter on `0xce16F69375520ab01377ce7B88f5BA8C48F8D666` sees nothing on chains 4663 and 5042.
 12. **Admin triggers.** Watch `Upgraded`, `Paused()`, `OwnershipTransferred(address)`, `PauserUpdated` and calls to `rescueFunds` (`0x6ccae054`) on the router proxy of every chain.
 
 ---
@@ -294,6 +308,7 @@ POLY_SQUID_ROUTER                       = '\xce16f69375520ab01377ce7b88f5ba8c48f
 BNB_SQUID_ROUTER                        = '\xce16f69375520ab01377ce7b88f5ba8c48f8d666'
 AVAX_SQUID_ROUTER                       = '\xce16f69375520ab01377ce7b88f5ba8c48f8d666'
 RH_SQUID_ROUTER                         = '\x2b4d4cf15dad79d3426d19674bd237c1dc9144aa'
+ARC_SQUID_ROUTER                        = '\x2b4d4cf15dad79d3426d19674bd237c1dc9144aa'
 ETH_SQUID_MULTICALL                     = '\xad6cea45f98444a922a2b4fe96b8c90f0862d2f4'
 BASE_SQUID_MULTICALL                    = '\xad6cea45f98444a922a2b4fe96b8c90f0862d2f4'
 ARB_SQUID_MULTICALL                     = '\xad6cea45f98444a922a2b4fe96b8c90f0862d2f4'
@@ -302,6 +317,7 @@ POLY_SQUID_MULTICALL                    = '\xad6cea45f98444a922a2b4fe96b8c90f086
 BNB_SQUID_MULTICALL                     = '\xad6cea45f98444a922a2b4fe96b8c90f0862d2f4'
 AVAX_SQUID_MULTICALL                    = '\xad6cea45f98444a922a2b4fe96b8c90f0862d2f4'
 RH_SQUID_MULTICALL                      = '\x073e81d92bd8b39562106819d12346240606f04a'
+ARC_SQUID_MULTICALL                     = '\x073e81d92bd8b39562106819d12346240606f04a'
 ETH_SQUID_MULTICALL_OLD                 = '\xea749fd6ba492dbc14c24fe8a3d08769229b896c'
 ETH_SQUID_MULTICALL_OLDEST              = '\x4fd39c9e151e50580779bd04b1f7ecc310079fd3'
 ETH_SQUID_FEE_COLLECTOR                 = '\x19cd4f3820e7bbed45762a30bfa37dfc6c9c145b'
@@ -314,6 +330,7 @@ POLY_SQUID_ROUTER_OWNER_SAFE            = '\xffea68f72655c4acc1d1f9523aeb6e65a6d
 BNB_SQUID_ROUTER_OWNER_SAFE             = '\x44a0d096d3820607fce018e48d791ca282ff5e01'
 AVAX_SQUID_ROUTER_OWNER_SAFE            = '\x2f39d85df6e5501d95aa8db11032ee1570347838'
 RH_SQUID_ROUTER_OWNER_EOA               = '\xb5e6c16cb726bb24075075e0993971aa8d73f764'
+ARC_SQUID_ROUTER_OWNER_EOA              = '\xb5e6c16cb726bb24075075e0993971aa8d73f764'
 -- the gateway that each router trusts (gateway() view); full Axelar list in ../axelar/core.md
 ETH_AXELAR_GATEWAY                      = '\x4f4495243837681061c4743b74b3eedf548d56a5'
 BASE_AXELAR_GATEWAY                     = '\xe432150cce91c13a887f7d836923d5597add8e31'
@@ -348,7 +365,7 @@ How the constants were verified (2026-09-29 to 2026-10-01):
 
   Positive control for the CCTP row: the same TokenMessengers emitted `DepositForBurn` from any depositor 106 times (Ethereum) and 52 times (Base) in the window. Robinhood row: the router `0x2B4d4Cf15dAD79D3426D19674Bd237C1dc9144aa` emitted 0 logs of any topic. These counts are one 12-hour window; they say nothing about other periods.
 - **Sample transactions read** (`eth_getTransactionReceipt`): source Ethereum `0xf1fa0012d68f0a5f36eb348369a9e1f9ae32531b6bcf56b56d611525c3dd0033` (`callBridgeCall` with ETH, swap to USDC, USDC router → gateway, express gas paid, `ContractCallWithToken`); source Base `0x23886f55ffa87adf77ef8d6382fb9b9e50ed3a088c949786155adadfdc0ce8ba` (through an integrator, `axlUSDC` burned router → `0x0`); BNB → Base transfer of §10 item 2; refund Ethereum `0x2a70d77f49176d212edcf6a86aa9d94227bc3b69c6b8353aaea522d9ff144e91` (USDC gateway → router → refund recipient, `CrossMulticallFailed`).
-- **Chain coverage:** the seven listed chains carry the router at the standard address (proxy code hash identical). Robinhood Chain: standard address empty (nonce 0); alternate address deployed but not listed by Squid.
+- **Chain coverage:** the seven listed chains carry the router at the standard address (proxy code hash identical). Robinhood Chain and Arc: standard address empty; alternate address deployed but not listed by Squid. The Arc router was not scanned for logs.
 
 Sources:
 - [Squid docs — Contracts](https://docs.squidrouter.com/additional-resources/contracts) · [Fee collector contract addresses](https://docs.squidrouter.com/api-and-sdk-integration/key-concepts/collect-fees-1/fee-collector-contract-addresses) · [Architecture](https://docs.squidrouter.com/additional-resources/architecture) · [Squid API `/v2/chains`](https://v2.api.squidrouter.com/v2/chains)

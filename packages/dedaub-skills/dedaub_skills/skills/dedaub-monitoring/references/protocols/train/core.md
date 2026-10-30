@@ -1,6 +1,6 @@
-# Train Protocol — Topics, Selectors, Addresses (v3: Ethereum + Base + Arbitrum + Optimism + Polygon + BNB + Robinhood; legacy HTLC: Ethereum + Base + Arbitrum + Optimism; NOT Avalanche)
+# Train Protocol — Topics, Selectors, Addresses (v3: Ethereum + Base + Arbitrum + Optimism + Polygon + BNB + Robinhood; legacy HTLC: Ethereum + Base + Arbitrum + Optimism; NOT Avalanche or Arc)
 
-**Status:** verified on 2026-09-29 against live RPC on all eight chains, the official `TrainProtocol/contracts` repository (`chains/evm/solidity/src/Train.sol`, `chains/evm/solidity/DEPLOYMENTS.md`), the official docs repository (`TrainProtocol/docs`, `deployments.mdx`), and the Sourcify-verified sources of the v3 `Train` (Ethereum, solc 0.8.34) and of the legacy `Train` contracts (Ethereum, Base, Arbitrum; solc 0.8.23).
+**Status:** verified on 2026-09-29 against live RPC on all eight chains, the official `TrainProtocol/contracts` repository (`chains/evm/solidity/src/Train.sol`, `chains/evm/solidity/DEPLOYMENTS.md`), the official docs repository (`TrainProtocol/docs`, `deployments.mdx`), and the Sourcify-verified sources of the v3 `Train` (Ethereum, solc 0.8.34) and of the legacy `Train` contracts (Ethereum, Base, Arbitrum; solc 0.8.23). Re-checked on 2026-10-30: no Train contract on Arc (5042); the deployment file (last updated 2026-07-31) lists no new mainnet.
 **Scope:** the two generations of Train's EVM HTLC contract: **v3** (current, one CreateX address on every chain, events `UserLocked` / `SolverLocked` / `…Redeemed` / `…Refunded`) and the **legacy native-ETH HTLC** of 2025 (events `TokenCommitted` / `TokenLocked` / `TokenLockAdded` / `TokenRedeemed` / `TokenRefunded`). Topics and selectors are chain-agnostic. Addresses are network-specific.
 
 Train is a trust-minimized intent bridge built on hashed time-locked contracts (HTLC). The user locks funds on the source chain; a solver locks funds for the user on the destination chain under the **same hashlock** (`sha256(secret)`, not keccak). Revealing the secret on the destination pays the user, and the same revealed secret then lets the solver take the user's lock on the source. If the secret is never revealed, both sides refund after their timelocks.
@@ -104,6 +104,7 @@ Side: `TokenCommitted` = source deposit (no hashlock yet). `TokenLocked` = desti
 | BNB Smart Chain | 56 | `0x265978c3e2E5dB9C3Ea665cC40C5925A5fc13Ee8` | 15108 B |
 | Robinhood Chain | 4663 | `0x265978c3e2E5dB9C3Ea665cC40C5925A5fc13Ee8` | 15108 B (deploy tx `0x4e2f6a26ec2a3013f521a3567b3588d293b0099375d79b93ed708428058d1a95`) |
 | Avalanche C-Chain | 43114 | — | `0x`: not deployed, not in the official list |
+| Arc | 5042 | — | `0x` (2026-10-30): not deployed, not in the official list. CreateX `0xba5Ed099633D3B313e4D5F7bdc1305d3c28ba5Ed` exists on Arc, so a later deployment would land at the same address. |
 
 The runtime code is byte-identical on the seven chains (no immutables). The official deployment file reserves `TrainRouter` `0xF406475230bE1A65d06bd87A2724F78F4b6A2928` and `ConstantPayoutCurve` `0xf5522F01B44D95f3A8d8be5d78F3eee91d26543C` and states they are not deployed on mainnets (not existence-checked here). Off-target v3: Starknet `0x0397630513a04161f0f73bc1aaf76c6e10f85d8b17b42d00d11e8767a1cf5255` (zero-padded felt), Fuel `0x445464bf4d8f2ad1cdffefa8345438f6769c44fc4aedf0eb9c2e34f5756f5750`, Tempo `0xCb74407724c463EAA9bC661818364b532F8B5Cb5`.
 
@@ -115,7 +116,7 @@ The runtime code is byte-identical on the seven chains (no immutables). The offi
 | Base | 8453 | `0xAE90b87324DA77113075E149455C53a88F6a01fb` | 6472 B | Sourcify-verified, block 26,627,704 |
 | Arbitrum One | 42161 | `0x126Fc543AA75D1D8511390aEb0a5E49Ad8a245BC` | 6472 B | Sourcify-verified, block 307,992,760 |
 | Optimism | 10 | `0x126Fc543AA75D1D8511390aEb0a5E49Ad8a245BC` | 6472 B | listed by a third-party bridge indexer; same size as the verified copies |
-| Polygon, BNB, Avalanche, Robinhood | — | — | — | no legacy deployment found (`0x` at the three addresses, except the decoys below) |
+| Polygon, BNB, Avalanche, Robinhood, Arc | — | — | — | no legacy deployment found (`0x` at the three addresses, except the decoys below) |
 
 All legacy contracts were deployed by `0x0D424e1a805C4c5fe8a276E986031860421141D1`. **Decoys:** `0xAE90b87324DA77113075E149455C53a88F6a01fb` holds unrelated code on Ethereum (428 B), Arbitrum (429 B) and BNB (7757 B).
 
@@ -133,6 +134,7 @@ All legacy contracts were deployed by `0x0D424e1a805C4c5fe8a276E986031860421141D
 | BNB Smart Chain | 56 | `0x265978c3e2E5dB9C3Ea665cC40C5925A5fc13Ee8` | — |
 | Avalanche C-Chain | 43114 | — | — |
 | Robinhood Chain | 4663 | `0x265978c3e2E5dB9C3Ea665cC40C5925A5fc13Ee8` | — |
+| Arc | 5042 | — | — |
 
 Off-target legacy deployments named by a third-party indexer: zkSync Era `0xB4863f53332C89078575320C01E270032f71e486`, Linea `0x320818EEFCF46ED1ec722f3bbC5B463EA1F5B619` (not checked).
 
@@ -190,7 +192,7 @@ SEL_TRAIN_LEGACY_ADD_LOCK_SIG    = '\x35be7d8b'
 SEL_TRAIN_LEGACY_REDEEM          = '\x673da154'
 SEL_TRAIN_LEGACY_REFUND          = '\x7249fbb6'
 
--- ===== v3 Train (same address on seven chains; not on Avalanche) =====
+-- ===== v3 Train (same address on seven chains; not on Avalanche or Arc) =====
 ETH_TRAIN_V3                     = '\x265978c3e2e5db9c3ea665cc40c5925a5fc13ee8'
 BASE_TRAIN_V3                    = '\x265978c3e2e5db9c3ea665cc40c5925a5fc13ee8'
 ARB_TRAIN_V3                     = '\x265978c3e2e5db9c3ea665cc40c5925a5fc13ee8'

@@ -1,13 +1,13 @@
 # SparkLend — Topics, Selectors, Addresses (Ethereum + Gnosis; Spark non-lending footprint on Base/Arbitrum/Optimism/Avalanche/Unichain/World Chain)
 
-**Status:** verified against Ethereum and Gnosis mainnet RPC, the canonical `sparkdotfi/spark-address-registry` `.sol` libraries, and `aave-dao/aave-v3-origin`, on 2026-05-29. Non-obvious claims additionally fact-checked against primary sources (Spark docs/forum, Sky governance, GitHub) — see §11.
+**Status:** verified against Ethereum and Gnosis mainnet RPC, the canonical `sparkdotfi/spark-address-registry` `.sol` libraries, and `aave-dao/aave-v3-origin`, on 2026-05-29. Non-obvious claims additionally fact-checked against primary sources (Spark docs/forum, Sky governance, GitHub) — see §11. Re-checked on 2026-10-30: there is no SparkLend `Pool` on Robinhood Chain or Arc. The `spark-address-registry` `Robinhood.sol` lists only the governance relay, the Liquidity Layer (ALM) and a Spark Vault; there is no Arc file. The CCTP `TokenMessengerV2` `0x28b5a0e9…cf5d` (§6) has code on both chains because it is Circle's shared address ([cctp/v2.md](../cctp/v2.md)), not a Spark contract. Re-checked on 2026-10-30: `liquidationCall` present as `PUSH3 0xa718a9` in the live ETH (`0x5aE329…`) and Gnosis (`0xCF86A657…`) Pool impls.
 **Scope:** the user requested Ethereum, Base, BNB, Avalanche, Arbitrum, Optimism, Polygon PoS. **The SparkLend lending market exists on only two chains — Ethereum (chain 1, active) and Gnosis Chain (chain 100, winding down).** None of Base / BNB / Avalanche / Arbitrum / Optimism / Polygon runs a SparkLend `Pool`. Base/Arbitrum/Optimism/Avalanche (plus Unichain & World Chain) host only the **Spark Savings + Spark Liquidity Layer** products (sUSDS/sUSDC, PSM3, ALM) — documented in §6 since the user asked for "all possible deployments." **BNB Smart Chain and Polygon PoS have no Spark contracts at all** (no registry file).
 
 SparkLend is a **soft fork of Aave V3** (V3.0.x-era; built by Phoenix Labs), so **its event topics and function selectors are byte-for-byte identical to Aave V3** — see [aave/v3.md](../aave/v3.md). It deployed to Ethereum mainnet in March 2023 and **officially launched 2023-05-09**; the Gnosis instance followed in **September 2023** (its first and only cross-chain lending deployment). This doc records what is *specific* to SparkLend: which Aave features it has/lacks (it predates v3.2–v3.4), its Spark-specific contracts (FreezerMom, KillSwitchOracle, CapAutomator, fixed-$1 stable oracles, Sky D3M DAI source), its governance (`SPARK_PROXY`, the Spark subDAO), and its network-specific addresses. Every core contract is a **fully upgradeable proxy**; aTokens are branded **spTokens** (spWETH, spDAI, …) but are mechanically identical Aave aTokens.
 
 > **Version / lineage note (verified on-chain 2026-05-29):** the live Ethereum Pool impl `0x5aE329203E00f76891094DcfedD5Aca082a50e1b` (= the registry `POOL_IMPL`, **no drift** — Spark keeps its registry current, unlike `aave-address-book`) is an **Aave V3.0/V3.1-era** Pool. Confirmed by bytecode selector scan: `supply`/`borrow`/`repay`/`withdraw`/`flashLoan`/`flashLoanSimple`/`mintUnbacked`/`backUnbacked`/`swapBorrowRateMode`/`rebalanceStableBorrowRate`/`rescueTokens`/eMode are **present**; the Aave **v3.3** (`getReserveDeficit`, `eliminateReserveDeficit`, `DeficitCreated`/`DeficitCovered`) and **v3.4** (`multicall`, `approvePositionManager`, `getReserveAToken`, Position Managers) additions are **all absent**. Stable-rate code is present-but-disabled by config (`stableBorrowEnabled = false` on every reserve) — SparkLend predates Aave v3.2's stable-rate removal but never enabled it. SparkLend has **no v2** and **no hub-and-spoke v4**; it is one continuously-patched deployment.
 
-> **Liquidation dispatcher anomaly (verified, same as Aave):** the canonical `liquidationCall` selector `0x00a718a9` is **absent from the live Pool impl bytecode** (raw + PUSH4 scan = 0 occurrences) even though `supply`/`borrow`/`flashLoan` are present, yet `LiquidationCall` events fire normally (8 logs in a 45k-block window) and liquidations succeed (routed through bots/adapters, e.g. `0x1f2f10d1…`). **Detect SparkLend liquidations by the `LiquidationCall` event topic0 `0xe413a321…`, never by the function selector.** See §8.2.
+> **Liquidation selector is a PUSH3 (verified, same as Aave):** the canonical `liquidationCall` selector `0x00a718a9` **is in the live Pool impl dispatcher** as `PUSH3 0xa718a9` (bytes `62a718a9`), because the selector starts with a zero byte. A `PUSH4` scan or a raw scan for `00a718a9` misses it. Liquidations route through bots/adapters (e.g. `0x1f2f10d1…`), so `tx.to` is not the Pool. **Detect SparkLend liquidations by the `LiquidationCall` event topic0 `0xe413a321…`.** See §8.2.
 
 ---
 
@@ -81,7 +81,7 @@ Identical to Aave V3 (SparkLend is a fork). All values below recomputed locally 
 
 ## 2. Function signatures (chain-agnostic)
 
-Selectors = `keccak256(canonical signature)[0:4]`. All Pool selectors below verified **present** in the live Ethereum Pool impl bytecode (`0x5aE329…`) on 2026-05-29 **except `liquidationCall`** (§8.2). The Aave v3.3/v3.4 selectors are listed at the end as **absent on SparkLend**.
+Selectors = `keccak256(canonical signature)[0:4]`. All Pool selectors below verified **present** in the live Ethereum Pool impl bytecode (`0x5aE329…`) on 2026-05-29. `liquidationCall` is present as `PUSH3 0xa718a9` (§8.2). The Aave v3.3/v3.4 selectors are listed at the end as **absent on SparkLend**.
 
 ### 2.1 Pool — state-changing
 
@@ -96,7 +96,7 @@ Selectors = `keccak256(canonical signature)[0:4]`. All Pool selectors below veri
 | `0x2dad97d4` | `repayWithATokens(address asset, uint256 amount, uint256 interestRateMode)` → `uint256` | `Repay.useATokens = true`. |
 | `0x94ba89a2` | `swapBorrowRateMode(address asset, uint256 interestRateMode)` | Present but stable disabled. |
 | `0xcd112382` | `rebalanceStableBorrowRate(address asset, address user)` | Present but stable disabled. |
-| `0x00a718a9` | `liquidationCall(address collateralAsset, address debtAsset, address user, uint256 debtToCover, bool receiveAToken)` | Emits `LiquidationCall`. **NOT in impl dispatcher — detect via event (§8.2).** |
+| `0x00a718a9` | `liquidationCall(address collateralAsset, address debtAsset, address user, uint256 debtToCover, bool receiveAToken)` | Emits `LiquidationCall`. In impl dispatcher as `PUSH3 0xa718a9` — detect via event (§8.2). |
 | `0xab9c4b5d` | `flashLoan(address receiverAddress, address[] assets, uint256[] amounts, uint256[] interestRateModes, address onBehalfOf, bytes params, uint16 referralCode)` | Multi-asset. |
 | `0x42b0b77c` | `flashLoanSimple(address receiverAddress, address asset, uint256 amount, bytes params, uint16 referralCode)` | Single-asset, no-debt. |
 | `0x5a3b74b9` | `setUserUseReserveAsCollateral(address asset, bool useAsCollateral)` | |
@@ -297,6 +297,8 @@ Stable debt tokens (rarely needed): WXDAI `0xab1B…EA22`, WETH `0xe21B…2f93`,
 
 ## 6. Spark non-lending footprint on the other requested chains (NO SparkLend market here)
 
+> **Cross-reference (2026-10-30):** the full topics, selectors and addresses for these products are in [liquidity-layer.md](liquidity-layer.md) (ALMProxy, controllers, rate limits) and [savings.md](savings.md) (Spark Vaults V2, sUSDC, PSM3, SSR oracles). Those files supersede this summary. They also cover Robinhood Chain and the BNB SPK OFT. See [README.md](README.md).
+
 The user listed Base, BNB, Avalanche, Arbitrum, Optimism, Polygon. **None runs a SparkLend `Pool`.** What Spark *does* deploy on the satellite chains is **Spark Savings** (sUSDS/sUSDC ERC-4626-style vaults) fed by the **Spark Liquidity Layer (ALM)** through a **PSM3** (USDC↔USDS↔sUSDS swap module), with Sky Savings Rate piped in via SSR/DSR oracles. These are a *different product* from SparkLend lending — no `Supply`/`Borrow`/`LiquidationCall`, no spTokens, no health factors. Addresses are network-specific (verified present in the registry; chain IDs noted).
 
 | Chain | ID | ALM Controller | ALM Proxy | PSM3 | sUSDS | sUSDC |
@@ -352,9 +354,9 @@ EIP-1967 implementation slot: `0x360894a13ba1a3210667c828492db98dca3e2076cc3735a
 
 spToken proxies → impl `0x6175ddEc…` (verified for spWETH/spDAI/spUSDC); variableDebtToken proxies → impl `0x86C71796…` (verified for variableDebtWETH). Still, **read the live EIP-1967 slot — never hard-code an impl.**
 
-### 8.2 The `liquidationCall` dispatcher gotcha (verified, same as Aave)
+### 8.2 The `liquidationCall` PUSH3 detection trap (verified, same as Aave)
 
-On the live Ethereum Pool impl `0x5aE329…` (21,754 bytes), selector `0x00a718a9` (`liquidationCall`) is **absent from the bytecode** (raw scan + `63`-prefixed PUSH4 scan both return 0), while `supply` (`617ba037`), `borrow` (`a415bcad`), `flashLoan` (`ab9c4b5d`) are present. Yet `LiquidationCall` events fire (8 in 45k blocks) and liquidations execute — the sampled liquidation tx called a bot/adapter `0x1f2f10d1…` which reaches `Pool.liquidationCall` internally. The Pool delegatecalls **LiquidationLogic** (`0x6aEa9269…`). **Takeaway: detect liquidations by `LiquidationCall` topic0 `0xe413a321…`, never by selector** — and most liquidations arrive via third-party bots, so `tx.to` ≠ Pool.
+On the live Ethereum Pool impl `0x5aE329…` (21,754 bytes), selector `0x00a718a9` (`liquidationCall`) **is in the dispatcher** as `PUSH3 0xa718a9` (bytes `62a718a9`). The selector starts with a zero byte, so solc does not use `PUSH4`. A raw scan for `00a718a9` or a `63`-prefixed `PUSH4` scan returns 0 and gives a false "absent" result (re-checked 2026-10-30; same on the Gnosis impl `0xCF86A657…`). **Rule:** a selector that starts with `0x00` appears as `PUSH3`, so scan for both forms. `LiquidationCall` events fire (8 in 45k blocks) — the sampled liquidation tx called a bot/adapter `0x1f2f10d1…` which reaches `Pool.liquidationCall` internally. The Pool delegatecalls **LiquidationLogic** (`0x6aEa9269…`). **Takeaway: detect liquidations by `LiquidationCall` topic0 `0xe413a321…`, never by selector** — and most liquidations arrive via third-party bots, so `tx.to` ≠ Pool.
 
 ---
 
@@ -364,7 +366,7 @@ On the live Ethereum Pool impl `0x5aE329…` (21,754 bytes), selector `0x00a718a
 2. **It's an Aave V3 fork** — `Supply`/`Borrow`/`Repay`/`Withdraw`/`LiquidationCall`/`FlashLoan` topics and selectors are identical to [aave/v3.md](../aave/v3.md). Reuse that detection set.
 3. **No v3.3/v3.4 features.** Don't scan for `DeficitCreated`/`DeficitCovered`, `multicall`, `approvePositionManager`, `getReserveDeficit`, `getReserveAToken` — absent (§2.5). No Position Managers, no batched Multicall, no bad-debt deficit accounting.
 4. **Stable rate exists in code but is config-disabled** (`stableBorrowEnabled = false` on every reserve; `interestRateMode = 1` reverts). `SwapBorrowRateMode`/`RebalanceStableBorrowRate` are dead. Gnosis reserves still have stableDebtToken contracts (~0 supply).
-5. **Detect liquidations by the `LiquidationCall` event, not the selector** (§8.2) — selector absent from impl; bots route liquidations so `tx.to` ≠ Pool.
+5. **Detect liquidations by the `LiquidationCall` event, not the selector** (§8.2) — bots route liquidations so `tx.to` ≠ Pool. The selector is in the impl as `PUSH3 0xa718a9`.
 6. **spTokens rebase every block.** Store `scaledBalanceOf` + reconstruct with the reserve `liquidityIndex` (ray). Same for debt with `variableBorrowIndex`. `Mint`/`Burn` topic0 is shared between spToken and debt token — disambiguate by emitting address.
 7. **`onBehalfOf` ≠ `tx.from`.** Attribute positions to `onBehalfOf`/`user` from the event, not the sender (WETHGateway, credit delegation, relayers).
 8. **DAI is D3M-supplied, $1-fixed, DSR-rate.** DAI liquidity is minted by the Sky/Maker D3M (not user supply); the borrow rate is governance/DSR-set via a custom IRM (`0x8a959986…`); the oracle pins DAI at exactly `1e8`. Spikes in DAI `MintedToTreasury`/`ReserveDataUpdated` reflect Maker actions, not organic demand.
@@ -414,7 +416,7 @@ SEL_WITHDRAW                 = '\x69328dec'
 SEL_BORROW                   = '\xa415bcad'
 SEL_REPAY                    = '\x573ade81'
 SEL_REPAY_WITH_ATOKENS       = '\x2dad97d4'
-SEL_LIQUIDATION_CALL         = '\x00a718a9'   -- canonical; NOT in impl dispatcher (detect via event)
+SEL_LIQUIDATION_CALL         = '\x00a718a9'   -- canonical; in impl dispatcher as PUSH3 0xa718a9 (detect via event)
 SEL_FLASHLOAN                = '\xab9c4b5d'
 SEL_FLASHLOAN_SIMPLE         = '\x42b0b77c'
 SEL_SET_USE_RESERVE_AS_COLL  = '\x5a3b74b9'
@@ -462,7 +464,7 @@ EIP1967_IMPL_SLOT            = '\x360894a13ba1a3210667c828492db98dca3e2076cc3735
 How constants in this doc were verified (2026-05-29):
 
 - **Event topic0 / selectors:** all recomputed locally as `keccak256(signature)` (pycryptodome). `Supply`/`Borrow`/`LiquidationCall` confirmed against live `eth_getLogs` on the Ethereum Pool `0xC13e…BE987` (614 Supply, 311 Borrow, 8 LiquidationCall in a 45k-block window); spToken `Mint`/`Burn` confirmed on spDAI `0x4DEDf261…` (33 / 24 logs).
-- **Selector presence:** PUSH4 + raw byte-scan of the live Pool impl `0x5aE329…`. Present: supply/borrow/withdraw/repay/repayWithATokens/flashLoan/flashLoanSimple/supplyWithPermit/repayWithPermit/swapBorrowRateMode/rebalanceStableBorrowRate/mintUnbacked/backUnbacked/mintToTreasury/rescueTokens/eMode/views. **Absent:** `liquidationCall` (§8.2) and all v3.3/v3.4 additions (§2.5).
+- **Selector presence:** PUSH4 + PUSH3 + raw byte-scan of the live Pool impl `0x5aE329…`. Present: supply/borrow/withdraw/repay/repayWithATokens/flashLoan/flashLoanSimple/supplyWithPermit/repayWithPermit/swapBorrowRateMode/rebalanceStableBorrowRate/mintUnbacked/backUnbacked/mintToTreasury/rescueTokens/eMode/views. `liquidationCall` is present as `PUSH3 0xa718a9` (§8.2; re-checked 2026-10-30). **Absent:** all v3.3/v3.4 additions (§2.5).
 - **Addresses:** parsed from `sparkdotfi/spark-address-registry` (`src/SparkLend.sol`, `Ethereum.sol`, `Gnosis.sol`, `Base.sol`, `Arbitrum.sol`, `Optimism.sol`, `Avalanche.sol`, `Unichain.sol`, `WorldChain.sol`) and existence-checked via `eth_getCode`. Pool wiring (`ADDRESSES_PROVIDER`/`getPool`/`getPriceOracle`/`getACLAdmin`/`getMarketId`), token proxy impls (EIP-1967 slot), and oracle prices (`getAssetPrice(DAI)=1e8`, fixed-$1) read live. Live Pool impls equal the registry `POOL_IMPL` on both chains (no drift).
 - **Chain coverage:** confirmed there is **no `Binance.sol` / `Polygon.sol`** in the registry and **no Pool** in the satellite-chain files (only ALM/PSM3/Savings) — so SparkLend lending is Ethereum + Gnosis only.
 

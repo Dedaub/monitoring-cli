@@ -1,15 +1,15 @@
 # RealT RMM (RealToken Money Market) — Topics, Selectors, Addresses (Gnosis Chain only)
 
-**Status:** verified against Gnosis Chain mainnet RPC (`https://gnosis-rpc.publicnode.com`), the live RMM contracts (recomputed keccak + live `eth_getLogs` + `eth_getCode` + EIP-1967 slot reads), and cross-checked against RealT docs / Aave governance / GnosisScan, on 2026-06-08. **RMM exists on Gnosis Chain (chain ID 100) ONLY. It is NOT deployed on any of the seven monitored chains — Ethereum (1), Base (8453), BNB (56), Avalanche (43114), Arbitrum (42161), Optimism (10), Polygon (137) — every RMM address returns `0x` (empty bytecode) on all seven (swept and confirmed).**
+**Status:** verified against Gnosis Chain mainnet RPC (`https://gnosis-rpc.publicnode.com`), the live RMM contracts (recomputed keccak + live `eth_getLogs` + `eth_getCode` + EIP-1967 slot reads), and cross-checked against RealT docs / Aave governance / GnosisScan, on 2026-06-08. **RMM exists on Gnosis Chain (chain ID 100) ONLY. It is NOT deployed on any of the seven monitored chains — Ethereum (1), Base (8453), BNB (56), Avalanche (43114), Arbitrum (42161), Optimism (10), Polygon (137) — every RMM address returns `0x` (empty bytecode) on all seven (swept and confirmed).** Re-checked on 2026-10-30: `liquidationCall` present as `PUSH3 0xa718a9` in both live Pool impls (v2 `0xa7d3066b…`, v3 `0xd9cf63c4…`).
 **Scope:** the RMM money market — RealT's Aave fork for tokenized-real-estate collateral. Two coexisting generations live on Gnosis: **RMM v2** (an Aave **V2** fork, marketId `"RealToken Money Market"`, now largely dormant) and **RMM v3** (an Aave **V3** fork, marketId `"RMM V3"`, the active deployment). Topics/selectors are chain-agnostic and inherited from Aave V2 / V3 respectively; addresses are Gnosis-network-specific. RealT also runs a peer-to-peer marketplace (**YAM**) and RealToken (RWA) ERC-20s — those are out of scope here and mentioned only as context.
 
 RMM lets RealToken holders (and stablecoin lenders) collateralize tokenized US-real-estate ERC-20s to borrow WXDAI / USDC / USDT. Both generations are **fully proxied, upgradeable** Aave forks. Each contract sits behind an Aave proxy controlled by the addresses-provider / ACL governance stack, and the **owner / pool-admin / ACL-admin on both generations is the same governance key `0x5fc96c182bb7e0413c08e8e03e9d7efc6cf0b099`** (an EOA-controlled multisig — empty code).
 
-> **Two generations, one chain — the non-obvious fact.** RealT first shipped RMM on **Aave V2** (`LendingPool`, `Deposit` event, ETH-style account math) where **each RealToken is its own reserve** (58 reserves total). To get past Aave V3's 128-market health-factor gas ceiling for hundreds of properties, RealT then shipped **RMM v3** on **Aave V3** with a **wrapper token** (`RTWxusd` / "RealToken Wrapped USD" — `RTW-USD-01`, `REUSD`) that pools many RealTokens into a **single** reserve. So RMM v3 has only **4 reserves** (WXDAI, USDC, RTW-USD-01, REUSD), and the per-property risk lives *inside* the wrapper, not in the Pool. A monitoring engineer must treat these as **two separate Aave deployments** (different Pool/Provider/aToken sets, different event ABIs) that happen to share governance.
+> **Two generations, one chain — the non-obvious fact.** RealT first shipped RMM on **Aave V2** (`LendingPool`, `Deposit` event, Aave-V2 account math with an 8-dec USD base, not ETH) where **each RealToken is its own reserve** (58 reserves total). To get past Aave V3's 128-market health-factor gas ceiling for hundreds of properties, RealT then shipped **RMM v3** on **Aave V3** with a **wrapper token** (`RTWxusd` / "RealToken Wrapped USD" — `RTW-USD-01`, `REUSD`) that pools many RealTokens into a **single** reserve. So RMM v3 has only **4 reserves** (WXDAI, USDC, RTW-USD-01, REUSD), and the per-property risk lives *inside* the wrapper, not in the Pool. A monitoring engineer must treat these as **two separate Aave deployments** (different Pool/Provider/aToken sets, different event ABIs) that happen to share governance.
 
 > **Lineage determined on-chain (not from docs).** The RealT governance forum discusses "deploying RMM with the V3 version," but the live contracts are unambiguous from bytecode: the **RMM v2 Pool** (`0x5b8d…cb2a`) impl exposes `deposit` (`0xe8eda9df`), `getAddressesProvider` (`0xfe65acfe`), `paused`, `swapBorrowRateMode` and emits the V2 `Deposit`/`Borrow`/aToken-`Mint` topics → **Aave V2**. The **RMM v3 Pool** (`0xFb9b…fdb3`) impl exposes `supply` (`0x617ba037`), `flashLoanSimple`, `setUserEMode`, `mintToTreasury`, `repayWithATokens`, `ADDRESSES_PROVIDER` (`0x0542975c`) and emits the V3 `Supply`/`Borrow`/aToken-`Mint` topics → **Aave V3** (a V3.0/V3.1-era fork that still carries `stableDebtToken`s, like SparkLend; pre-v3.2). Both verified by live `eth_getLogs`.
 
-> **`liquidationCall` dispatcher note (both generations).** On both the RMM v2 and RMM v3 Pool impls, the `liquidationCall` selector `0x00a718a9` is **not present in the Pool implementation dispatcher** (RMM v2 routes liquidations through the `LendingPoolCollateralManager` delegatecall target; RMM v3 reaches liquidation logic via the same V3 split-impl pattern as Aave/SparkLend). The `LiquidationCall` event topic0 `0xe413a321…` is the canonical detector for both. **Detect liquidations by event, never by selector.**
+> **`liquidationCall` selector note (both generations).** On both the RMM v2 and RMM v3 Pool impls, the `liquidationCall` selector `0x00a718a9` **is in the Pool implementation dispatcher** as `PUSH3 0xa718a9` (bytes `62a718a9`). The selector starts with a zero byte, so a `PUSH4` scan misses it; scan for both forms. RMM v2 runs the liquidation logic in the `LendingPoolCollateralManager` by delegatecall. The `LiquidationCall` event topic0 `0xe413a321…` is the canonical detector for both, because bots make `tx.to` differ from the Pool. **Detect liquidations by event.**
 
 ---
 
@@ -120,7 +120,7 @@ All selectors recomputed locally 2026-06-08 and probed against the live impl dis
 | `0x94ba89a2` | `swapBorrowRateMode(address asset, uint256 rateMode)` | yes | stable↔variable (functional in V2). |
 | `0xcd112382` | `rebalanceStableBorrowRate(address asset, address user)` | (V2) | |
 | `0x5a3b74b9` | `setUserUseReserveAsCollateral(address asset, bool useAsCollateral)` | yes | shared with V3. |
-| `0x00a718a9` | `liquidationCall(address collateralAsset, address debtAsset, address user, uint256 debtToCover, bool receiveAToken)` | **NO** | Routed via `LendingPoolCollateralManager` delegatecall. **Detect via event.** |
+| `0x00a718a9` | `liquidationCall(address collateralAsset, address debtAsset, address user, uint256 debtToCover, bool receiveAToken)` | yes (as `PUSH3 0xa718a9`) | Logic runs in `LendingPoolCollateralManager` by delegatecall. **Detect via event.** |
 | `0xab9c4b5d` | `flashLoan(address receiverAddress, address[] assets, uint256[] amounts, uint256[] modes, address onBehalfOf, bytes params, uint16 referralCode)` | yes | |
 | `0xfe65acfe` | `getAddressesProvider()` → `address` | yes | **V2 getter** (V3 uses `ADDRESSES_PROVIDER` `0x0542975c`, absent here). |
 | `0x5c975abb` | `paused()` → `bool` | yes | V2-only on the Pool. |
@@ -144,7 +144,7 @@ All selectors recomputed locally 2026-06-08 and probed against the live impl dis
 | `0xab9c4b5d` | `flashLoan(address,address[],uint256[],uint256[],address,bytes,uint16)` | yes | multi-asset. |
 | `0x28530a47` | `setUserEMode(uint8 categoryId)` | yes | V3-only. Emits `UserEModeSet`. |
 | `0x9cd19996` | `mintToTreasury(address[] assets)` | yes | V3-only. |
-| `0x00a718a9` | `liquidationCall(address,address,address,uint256,bool)` | **NO** | Same split-impl pattern as Aave V3 / SparkLend. **Detect via event.** |
+| `0x00a718a9` | `liquidationCall(address,address,address,uint256,bool)` | yes (as `PUSH3 0xa718a9`) | Same as Aave V3 / SparkLend. **Detect via event.** |
 | `0x0542975c` | `ADDRESSES_PROVIDER()` → `address` | yes | **V3 getter.** |
 | `0xbf92857c` | `getUserAccountData(address)` → (…, healthFactor) | yes | first five in 8-dec USD (oracle base = USD, `1e8`); HF `1e18`. |
 | `0x35ea6a75` / `0xd1946dbc` | `getReserveData(address)` / `getReservesList()` | yes | 4 reserves. |
@@ -290,7 +290,7 @@ Every RMM core contract on both generations is an **upgradeable Aave proxy** (`I
 2. **Two coexisting generations — never conflate them.** RMM v2 = Aave **V2** fork (`LendingPool 0x5b8d…cb2a`, `Deposit` event, marketId "RealToken Money Market", 58 reserves, dormant). RMM v3 = Aave **V3** fork (`Pool 0xFb9b…fdb3`, `Supply` event, marketId "RMM V3", 4 reserves, **active**). Different Pool addresses, different event ABIs. Key all detection on `(generation, emitter address)`.
 3. **`Deposit` vs `Supply`.** RMM v2 supply = `Deposit` topic `0xde685721…` (selector `deposit` `0xe8eda9df`). RMM v3 supply = `Supply` topic `0x2b627736…` (selector `supply` `0x617ba037`). Picking the wrong topic silently misses half the protocol.
 4. **aToken `Mint`/`Burn` topics differ by generation.** RMM v2: aToken `Mint` `0x4c209b5f` ≠ varDebt `Mint` `0x2f00e3cd` (different topics per token type). RMM v3: aToken **and** varDebt share `Mint` `0x458f5fa4` — disambiguate by emitter. The two generations also use different aToken `Mint` topics from each other.
-5. **Detect liquidations by the `LiquidationCall` event** `0xe413a321…`, never by the `liquidationCall` selector `0x00a718a9` — it is absent from both Pool impl dispatchers (v2 → CollateralManager delegatecall; v3 → split-impl). The event is emitted by the Pool address in both cases.
+5. **Detect liquidations by the `LiquidationCall` event** `0xe413a321…`, not by the `liquidationCall` selector `0x00a718a9`, because bots make `tx.to` differ from the Pool. The selector is in both Pool impl dispatchers as `PUSH3 0xa718a9` (a `PUSH4` scan misses it). The event is emitted by the Pool address in both cases.
 6. **Attribute to `onBehalfOf`/`user` from the event, not `tx.from`.** The WETHGateway, credit delegation, and the RTWxusd wrapper flows mean the sender is often not the position owner.
 7. **RMM v2 account math is USD, not ETH.** Unlike stock Aave V2 (ETH/wei base), RMM v2's oracle base is a synthetic USD unit (`0x678df341…`, 8-dec) so `getUserAccountData` returns 8-dec **USD** for collateral/debt/borrows (HF in `1e18`). Same units as RMM v3. Don't apply the "V2 = ETH" rule here.
 8. **RMM v3 is an early V3 fork (pre-v3.2).** It still carries `stableDebtToken`s, and it lacks V3.3 (`DeficitCreated`/`DeficitCovered`, `getReserveDeficit`) and V3.4 (`multicall`, Position Managers, `getReserveAToken`) — do not scan for those.
@@ -341,7 +341,7 @@ SEL_V3_SUPPLY              = '\x617ba037'
 SEL_WITHDRAW               = '\x69328dec'
 SEL_BORROW                 = '\xa415bcad'
 SEL_REPAY                  = '\x573ade81'
-SEL_LIQUIDATION_CALL       = '\x00a718a9'   -- absent from both impl dispatchers; use the event
+SEL_LIQUIDATION_CALL       = '\x00a718a9'   -- in both impls as PUSH3 0xa718a9; use the event
 SEL_FLASHLOAN              = '\xab9c4b5d'
 SEL_V3_FLASHLOAN_SIMPLE    = '\x42b0b77c'
 SEL_SCALED_BALANCE_OF      = '\x1da24f3e'
@@ -401,15 +401,3 @@ EIP1967_IMPL_SLOT          = '\x360894a13ba1a3210667c828492db98dca3e2076cc3735a9
 - Aave governance forum — ["Deploy the RMM V2 with the Aave V3 version"](https://governance.aave.com/t/deploy-the-rmm-v2-with-the-aave-v3-version/11249) and ["Add armmWXDAI to Aave v3 Gnosis"](https://governance.aave.com/t/temp-check-add-armmwxdai-realt-rmm-xdai-deposit-token-to-aave-v3-gnosis/22378) (the RTWxusd wrapper / 128-market motivation).
 - Canonical fork sources — [`aave/protocol-v2`](https://github.com/aave/protocol-v2) (RMM v2 ABI: LendingPool, Configurator, aToken/debt tokens) and [`aave-dao/aave-v3-origin`](https://github.com/aave-dao/aave-v3-origin) (RMM v3 ABI). Address parsing cross-checked against [`bgd-labs/aave-address-book`](https://github.com/bgd-labs/aave-address-book) Gnosis libraries for the standard Aave-Gnosis WXDAI/USDC underlyings.
 - Explorer — [GnosisScan](https://gnosisscan.io/) (armmWXDAI `0x7349…f8a0`, RMM v3 Pool `0xFb9b…fdb3`, RTW-USD token `0xf3220cd8…`).
-
-### Independent fact-check (2026-06-08)
-
-| Claim | Verdict | Basis |
-|------|---------|-------|
-| RMM is deployed on Gnosis only; absent on all 7 monitored chains | **confirmed** | `eth_getCode` = `0x` for every RMM address on ETH/Base/BNB/Avax/Arb/OP/Polygon; non-empty on Gnosis. |
-| Two generations coexist: RMM v2 (Aave V2) + RMM v3 (Aave V3) | **confirmed** | Distinct Pools with marketIds "RealToken Money Market" and "RMM V3"; impl-bytecode selector scans + live event ABIs differ as expected. |
-| RMM is an "Aave V2 fork" (per the task brief) | **corrected/refined** | The *original* RMM is Aave V2, but the **active** market is an Aave **V3** fork (RMM v3). Both documented here. |
-| RMM v3 caps at 4 reserves via an RTWxusd wrapper to dodge Aave's 128-market limit | **confirmed** | `getReservesList()` returns 4 (WXDAI, USDC, RTW-USD-01, REUSD); wrapper underlyings verified (`RealToken Wrapped USD 01`, `Realtoken Ecosystem USD`); matches the Aave-governance rationale. |
-| RMM v2 account data is in USD (not ETH like stock Aave V2) | **confirmed** | Oracle `BASE_CURRENCY_UNIT = 1e8` with a synthetic 8-dec USD base token (`0x678df341…`). |
-| `liquidationCall` selector absent from both Pool impls; detect via event | **confirmed** | PUSH4 scan = 0 occurrences on both impls; `LiquidationCall` topic is the canonical detector (same pattern as Aave V3 / SparkLend). |
-| RMM v3 lacks Aave v3.3/v3.4 features | **confirmed** | `multicall` / `getReserveDeficit` absent from the v3 impl; it is an early V3 fork still carrying stableDebtTokens. |

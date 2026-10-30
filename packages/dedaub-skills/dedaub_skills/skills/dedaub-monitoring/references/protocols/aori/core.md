@@ -1,6 +1,6 @@
-# Aori — Topics, Selectors, Addresses (Ethereum, Base, Arbitrum, Optimism, BNB live; v0.4.0 proxy also on Polygon and Avalanche; NOT Robinhood)
+# Aori — Topics, Selectors, Addresses (Ethereum, Base, Arbitrum, Optimism, BNB live; v0.4.0 proxy also on Polygon and Avalanche; NOT Robinhood or Arc)
 
-**Status:** verified on 2026-09-29 against live RPC on all eight target chains, the canonical `aori-io/aori` repository (`master` = v0.3.1, branch `v0.4.0`), the official Aori docs, the live Aori API (`https://api.aori.io/chains`) and the Blockscout explorers. Every topic0 and selector was recomputed as `keccak256(signature)`. Every address was existence-checked with `eth_getCode`. The live wiring was read on chain (`ENDPOINT_ID()`, `peers(eid)`, `isSupportedChain(eid)`, `owner()`, `eip712Domain()`).
+**Status:** verified on 2026-09-29 against live RPC on all eight target chains, the canonical `aori-io/aori` repository (`master` = v0.3.1, branch `v0.4.0`), the official Aori docs, the live Aori API (`https://api.aori.io/chains`) and the Blockscout explorers. Every topic0 and selector was recomputed as `keccak256(signature)`. Every address was existence-checked with `eth_getCode`. The live wiring was read on chain (`ENDPOINT_ID()`, `peers(eid)`, `isSupportedChain(eid)`, `owner()`, `eip712Domain()`). Re-checked on 2026-10-30: still no Aori contract on Robinhood Chain (4663) or Arc (5042) (§8.1, §8.2); the live API still returns the same eight chains.
 **Scope:** the Aori intent-settlement contract: one `Aori` contract per chain that holds the source-side escrow and executes the destination-side fill, with LayerZero v2 messages for settlement and cancellation. Live (release 0.3.1): Ethereum (1), Base (8453), Arbitrum One (42161), Optimism (10), BNB Smart Chain (56). The next release (0.4.0, UUPS proxy, one CREATE3 address) is deployed and wired on Ethereum, Base, Arbitrum, Optimism, Polygon PoS (137), BNB and Avalanche C-Chain (43114), but it is not in the official list and it emitted no log in the measured window. **Robinhood Chain (4663) has no Aori contract.** Topics and selectors are chain-agnostic. Addresses are network-specific.
 
 Aori is a peer-to-peer intent protocol. A user (the *offerer*) signs an order. On the source chain the order locks the input tokens in the Aori contract (`Deposit`). On the destination chain a whitelisted solver pays the output tokens to the recipient (`Fill`). The solver then sends a LayerZero settlement message from the destination Aori to the source Aori (`SettleSent`). On arrival the source Aori moves the locked input to the solver's internal balance (`Settle`), and the solver takes it out later (`Withdraw`). A same-chain swap uses the same contract and settles at once.
@@ -257,7 +257,11 @@ LayerZero eids 30109 (Polygon) and 30106 (Avalanche). **No live Aori contract.**
 
 ### 8.1 Robinhood Chain (chain ID 4663) — NO Aori deployment
 
-LayerZero lists Robinhood Chain as eid 30416 (EndpointV2 `0x6f475642a6e85809b1c36fa62763669b1b48dd5b`). `eth_getCode` returns `0x` at every Aori address of this doc on Robinhood Chain. No Aori contract has a peer for 30416, and the official list and the API do not name the chain.
+LayerZero lists Robinhood Chain as eid 30416 (EndpointV2 `0x6f475642a6e85809b1c36fa62763669b1b48dd5b`). `eth_getCode` returns `0x` at every Aori contract of this doc on Robinhood Chain. Only the CREATE3 factory `0x2dfcc7415d89af828cbef005f0d072d8b3f23183` has code there (1,595 B, the Ethereum code with a different metadata hash, checked 2026-10-30); it is a deployer, not an Aori contract, and it emits no Aori topic. No Aori contract has a peer for 30416 (`peers(30416)` = 0 on the Ethereum 0.3.1 and 0.4.0 contracts), and the official list and the API do not name the chain.
+
+### 8.2 Arc (chain ID 5042) — NO Aori deployment
+
+LayerZero EndpointV2 on Arc is `0x6f475642a6e85809b1c36fa62763669b1b48dd5b` (24,005 B; `eid()` = 30417, read 2026-10-30). `eth_getCode` returns `0x` at every Aori address of this doc on Arc, the CREATE3 factory included. `peers(30417)` = 0 and `isSupportedChain(30417)` = false on the Ethereum 0.3.1 contract, and the API does not name the chain.
 
 ---
 
@@ -272,7 +276,8 @@ LayerZero lists Robinhood Chain as eid 30416 (EndpointV2 `0x6f475642a6e85809b1c3
 | Polygon PoS | 137 | 30109 | — (`0x`) | ✓ (staged) | — |
 | BNB Smart Chain | 56 | 30102 | `0xffe691a6ddb5d2645321e0a920c2e7bdd00dd3d8` | ✓ (staged) | — |
 | Avalanche C-Chain | 43114 | 30106 | — (`0x`) | ✓ (staged) | — |
-| Robinhood Chain | 4663 | 30416 | — (`0x`) | — (`0x`) | — |
+| Robinhood Chain | 4663 | 30416 | — (`0x`) | — (`0x`) | — (CREATE3 factory only) |
+| Arc | 5042 | 30417 | — (`0x`) | — (`0x`) | — |
 
 **Chains outside the eight** (official list, same live address `0xffe691a6ddb5d2645321e0a920c2e7bdd00dd3d8`): Plasma (9745, eid 30383), Monad (143, eid 30390), MegaETH (4326, eid 30398); the docs also list Stable (988, eid 30396) and Rootstock (30, eid 30333), which the live API does not return. The live Ethereum contract has a peer for all five.
 
@@ -381,7 +386,7 @@ BASE_AORI                        = '\xc6868edf1d2a7a8b759856cb8afa333210dfeda6'
 ARB_AORI                         = '\xc6868edf1d2a7a8b759856cb8afa333210dfeda6'
 OP_AORI                          = '\xc6868edf1d2a7a8b759856cb8afa333210dfeda6'
 BNB_AORI                         = '\xffe691a6ddb5d2645321e0a920c2e7bdd00dd3d8'
--- ===== Aori 0.4.0 proxy (same address on ETH BASE ARB OP POLY BNB AVAX; 0x on Robinhood) =====
+-- ===== Aori 0.4.0 proxy (same address on ETH BASE ARB OP POLY BNB AVAX; 0x on Robinhood and Arc) =====
 ETH_AORI_V040_PROXY              = '\xa041a8f5d796de4ae21da10e90908549c17d1107'
 BASE_AORI_V040_PROXY             = '\xa041a8f5d796de4ae21da10e90908549c17d1107'
 ARB_AORI_V040_PROXY              = '\xa041a8f5d796de4ae21da10e90908549c17d1107'
@@ -409,6 +414,7 @@ ETH_AORI_CREATE3_FACTORY         = '\x2dfcc7415d89af828cbef005f0d072d8b3f23183'
 ETH_LZ_ENDPOINT_V2               = '\x1a44076050125825900e736c501f859c50fe728c'   -- same on BASE ARB OP POLY BNB AVAX
 AORI_NATIVE_TOKEN                = '\xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee'   -- native-token sentinel in inputToken / outputToken
 -- Robinhood Chain (4663): no Aori contract; LayerZero eid 30416
+-- Arc (5042): no Aori contract; LayerZero eid 30417
 ```
 
 ---
@@ -419,7 +425,7 @@ How every constant was verified (2026-09-29):
 
 - **Topic0 / selectors:** recomputed as `keccak256(canonical signature)` from `contracts/IAori.sol` and `contracts/Aori.sol` of `aori-io/aori` (`master`, version 0.3.1), from `contracts/interfaces/IAori.sol` and `contracts/types/AoriTypes.sol` of the `v0.4.0` branch, and from the verified 0.4.0 implementation ABI on Blockscout. Every 0.3.1 selector of §2.1 to §2.3 was found as a `PUSH4` constant in the live Ethereum bytecode, and every 0.3.1 topic of §1.1 and §1.2 was found in the same bytecode. The legacy `1` build has no `Cancel(bytes32)` topic, no `depositNative` (`0x1c0166aa`), no `withdraw(address,uint256)` (`0xf3fef3a3`) and no `emergencyCancel` (`0xe898841f`); it has `withdraw(address)` (`0x51cff8d9`).
 - **Addresses and wiring:** the live set comes from the Aori docs "Deployments" page and the live API `https://api.aori.io/chains`. On chain: `ENDPOINT_ID()` = 30101 / 30184 / 30110 / 30111 / 30102; `peers(eid)` of the live Ethereum contract gives Base, Arbitrum and Optimism `0xc6868edf1d2a7a8b759856cb8afa333210dfeda6` and BNB, Plasma, Monad, Stable, MegaETH and Rootstock `0xffe691a6ddb5d2645321e0a920c2e7bdd00dd3d8`; the peers for 30106, 30109 and 30416 are zero; the Base and BNB contracts point back to `0x0736bdc975af0675b9a045384efed91360d25479`. `eip712Domain()` gives the version of each build (0.3.1, 0.4.0, 0.3.0, `1`). The 0.4.0 proxy was found through the owner EOA's transactions (a CREATE3 deployment on 2026-05-20 through `0x2dfcc7415d89af828cbef005f0d072d8b3f23183`) and matches the `v0.4.0` branch (`deploy/DEPLOY.md`: CREATE3, one address on every chain).
-- **Chain coverage:** `eth_getCode` at `0x0736bdc975af0675b9a045384efed91360d25479`, `0xc6868edf1d2a7a8b759856cb8afa333210dfeda6` and `0xffe691a6ddb5d2645321e0a920c2e7bdd00dd3d8` on all eight chains: code only where §9 shows it; `0x` on Polygon, Avalanche and Robinhood. The 0.4.0 proxy has code on seven chains and `0x` on Robinhood.
+- **Chain coverage:** `eth_getCode` at `0x0736bdc975af0675b9a045384efed91360d25479`, `0xc6868edf1d2a7a8b759856cb8afa333210dfeda6` and `0xffe691a6ddb5d2645321e0a920c2e7bdd00dd3d8` on all eight chains: code only where §9 shows it; `0x` on Polygon, Avalanche, Robinhood and Arc. The 0.4.0 proxy has code on seven chains and `0x` on Robinhood and Arc.
 - **Activity, pinned 12-hour window 2026-09-28 00:00–12:00 UTC** (all logs of each address):
   - Ethereum `0x0736bdc975af0675b9a045384efed91360d25479`: 42 logs — `Deposit` 11, `Fill` 10, `Settle` 10, `DstHookExecuted` 5, `Withdraw` 3, `SrcHookExecuted` 1, `Cancel` 1, `CancelSent` 1.
   - Base `0xc6868edf1d2a7a8b759856cb8afa333210dfeda6`: 117 — `Settle` 38, `Deposit` 25, `Fill` 20, `SrcHookExecuted` 18, `DstHookExecuted` 11, `Withdraw` 4, `SettleSent` 1.

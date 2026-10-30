@@ -1,6 +1,6 @@
 # Tessera ("Tessera V") — Topics, Selectors, Addresses (EVM: Base + BNB Chain + Robinhood Chain)
 
-**Status:** verified against live RPC (publicnode), the **verified Blockscout source** of `TesseraSwap` on Base, locally-recomputed keccak topic0/selectors, and DefiLlama's own volume adapter, on **2026-06-05**. Robinhood Chain (4663) and Arc (5042) checked on-chain 2026-10-05.
+**Status:** verified against live RPC (publicnode), the **verified Blockscout source** of `TesseraSwap` on Base, locally-recomputed keccak topic0/selectors, and DefiLlama's own volume adapter, on **2026-06-05**. Robinhood Chain (4663) and Arc (5042) checked on-chain 2026-10-05. Re-checked on 2026-10-30: TesseraSwap storage slots 0–2 (engine, treasury, owner) unchanged on Base, BSC and Robinhood Chain; still no code on Arc, Ethereum or Arbitrum.
 **Scope:** Tessera is a Wintermute-operated **proprietary / "dark" oracle-priced AMM**. Its primary venue is **Solana** (program `TessVdML9pBGgG9yGks7o4HewRaXVAMuoVj4x83GLQH`, branded "Tessera V", live on Jupiter since 2025‑06). On **EVM** it is deployed as a single immutable settlement contract, `TesseraSwap`, on **three** chains (Robinhood Chain added 2026-09-03):
 
 | Chain | Chain ID | TesseraSwap | Live since | Verified |

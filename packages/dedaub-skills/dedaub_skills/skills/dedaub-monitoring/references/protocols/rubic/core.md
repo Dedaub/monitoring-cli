@@ -1,6 +1,6 @@
-# Rubic — Topics, Selectors, Addresses (Ethereum, Base, Arbitrum, Optimism, Polygon, BNB, Avalanche, Robinhood Chain)
+# Rubic — Topics, Selectors, Addresses (Ethereum, Base, Arbitrum, Optimism, Polygon, BNB, Avalanche, Robinhood Chain; NOT Arc)
 
-**Status:** verified on 2026-09-29 to 2026-10-01 against live RPC on all eight target chains and the canonical `Cryptorubic/multi-proxy-rubic` repository (`deployments/<chain>.json`, `deployments/<chain>.diamond.json`, `src/`). Topic0 and selectors recomputed as `keccak256(signature)`. Addresses existence-checked with `eth_getCode`. The live facet table read with `facets()` on every chain.
+**Status:** verified on 2026-09-29 to 2026-10-01 against live RPC on all eight target chains and the canonical `Cryptorubic/multi-proxy-rubic` repository (`deployments/<chain>.json`, `deployments/<chain>.diamond.json`, `src/`). Topic0 and selectors recomputed as `keccak256(signature)`. Addresses existence-checked with `eth_getCode`. The live facet table read with `facets()` on every chain. Re-checked on 2026-10-30: the Robinhood facet table is unchanged; Rubic has no contract on Arc (5042) and the repository has no Arc deployment file (last deployment commit 2026-09-15).
 **Scope:** Rubic's cross-chain aggregator contracts: the **RubicMultiProxy** diamond (EIP-2535; a fork of the LI.FI diamond), its approval front **ERC20Proxy**, and the destination helpers **Executor**, **Receiver** and **StargateV2Receiver**. Rubic's older single-provider proxies (`Cryptorubic/proxy-instant-trades`, `Multichain-proxy`, `only-source-cross-chain-proxy`, 2022) are out of scope. Topics and selectors are chain-agnostic. Addresses are network-specific.
 
 Rubic is an aggregator that sits on top of other bridges. One user transaction calls `ERC20Proxy.startViaRubic` (or the diamond directly for native coin). The ERC20Proxy pulls the tokens into the diamond. The diamond takes Rubic's and the integrator's fees, optionally swaps, calls the chosen provider (Relay, Symbiosis, Across, LI.FI, Rango, Squid, Stargate, Allbridge, a deposit address, and others), and then emits **`RubicTransferStarted(bridgeData)`**. That event is the source leg. The destination leg belongs to the provider: Rubic emits `RubicTransferCompleted` only when its own Executor or Receiver performs a destination swap, and that did not happen in the pinned window.
@@ -156,7 +156,7 @@ Selectors live in the diamond but without verified source (unverified, not decod
 | **Executor** | `0x9E4B1205291d21eDaB4f710b2905628640e8D0F1` | Destination swap helper |
 | **Receiver** | `0xb15A66101ac2A6de589dAd1dCbbd7566DCCaB61D` | Stargate v1 / Connext receiver |
 | StargateV2Receiver | `0x15A50d8417c2cD58d0A3535F1b1533b312346623` | `lzCompose` receiver |
-| Diamond owner | `0x00009cc27c811a3e0fdd2fd737afcc721b67ee8e` | Same owner on all eight chains. Here it has 23 B of code: an EIP-7702 delegation (`0xef0100` + `0x63c0c19a282a1b52b07dd5a65b58948a07dae32b`). Not a Safe |
+| Diamond owner | `0x00009cc27c811a3e0fdd2fd737afcc721b67ee8e` | Same owner on all eight chains. Here it has 23 B of code: an EIP-7702 delegation (`0xef0100` + `0x63c0c19a282a1b52b07dd5a65b58948a07dae32b`). Not a Safe. The delegate target is not a Rubic contract; an 11,185-byte contract also sits at that address on Robinhood Chain and Arc |
 | Fee treasury (`feeTreasure()`) | `0x60745f5a9742fe905bbde2f57808416edf2b8696` | EOA (nonce 22,818); same on Ethereum, Base and Robinhood Chain |
 
 ## 4. Addresses — the other chains, and the facet tables
@@ -234,6 +234,7 @@ Only generic, transfer-with-bytes and swap routes exist here. No Executor, Recei
 | BNB Smart Chain | 56 | `0x6AA981bFF95eDfea36Bdae98C26B274FfcafE8d3` | `0x3335733c454805df6a77f825f266e136FB4a3333` | yes | yes | 11 |
 | Avalanche C-Chain | 43114 | `0x6AA981bFF95eDfea36Bdae98C26B274FfcafE8d3` | `0x3335733c454805df6a77f825f266e136FB4a3333` | yes | yes | 0 |
 | Robinhood Chain | 4663 | `0xDEDC96a5FA4C3C4A329816E167b620C38A3BB228` | `0x3335733c454805df6a77f825f266e136FB4a3333` | no | no | 0 |
+| Arc | 5042 | none (`eth_getCode` = `0x` at both diamond addresses and at the ERC20Proxy) | none | no | no | — |
 
 ---
 

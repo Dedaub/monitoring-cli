@@ -1,7 +1,7 @@
 # Relay (relay.link) — Topics, Selectors, Addresses (Ethereum + Base + Arbitrum + Optimism + Polygon + BNB + Avalanche + Robinhood Chain + Arc)
 
-**Status:** verified on 2026-09-29 against live RPC on all eight chains, the official repositories `relayprotocol/relay-settlement` (depository source and `packages/networks`), `relayprotocol/relay-depository` (archived; its `addresses.prod.json` lists Robinhood Chain), `relayprotocol/relay-periphery` (router, approval proxy, receiver and their `deployments/*/addresses.json`), the Relay Chains API (`https://api.relay.link/chains`) and docs.relay.link. Every topic0 and selector was recomputed as `keccak256(signature)` and matched against live logs or deployed bytecode. Every address was existence-checked with `eth_getCode`. Arc (5042) added on 2026-10-05 (`eth_getCode`, `owner()`/`allocator()` and `eth_getLogs` on `https://rpc.mainnet.arc.io`; the Chains API lists `arc`, id 5042).
-**Scope:** the EVM contracts of Relay: the RelayDepository escrow of the settlement protocol (production, staging and dev instances), the periphery that builds deposits and fills (RelayRouter and RelayApprovalProxy, generations v2, v2.1, v3.0 and v3.1), the RelayReceiver native forwarder, the public solver addresses, and the ids that link a deposit to its fill. All nine target chains (the eight above plus Arc, 5042) have the production Depository and the v3.0 periphery at the same addresses. Robinhood Chain (4663) and Arc (5042) have no RelayReceiver. Topics and selectors are chain-agnostic; addresses are network-specific.
+**Status:** verified on 2026-09-29 against live RPC on all eight chains, the official repositories `relayprotocol/relay-settlement` (depository source and `packages/networks`), `relayprotocol/relay-depository` (archived; its `addresses.prod.json` lists Robinhood Chain), `relayprotocol/relay-periphery` (router, approval proxy, receiver and their `deployments/*/addresses.json`), the Relay Chains API (`https://api.relay.link/chains`) and docs.relay.link. Every topic0 and selector was recomputed as `keccak256(signature)` and matched against live logs or deployed bytecode. Every address was existence-checked with `eth_getCode`. Arc (5042) added on 2026-10-05 (`eth_getCode`, `owner()`/`allocator()` and `eth_getLogs` on `https://rpc.mainnet.arc.io`; the Chains API lists `arc`, id 5042). Re-checked on 2026-10-30: a new periphery pair, RelayRouter v3.2 `0x0729e2a4716d9f7dd17858d5d504426d228697f7` and its RelayApprovalProxy `0x5567954cd026cebfe486062cb75848e0f1c12e58`, is live on all nine chains and is now the default `erc20Router` / `approvalProxy` of the Chains API. Its `SolverCallExecuted` has a new signature and topic0 (§1.3).
+**Scope:** the EVM contracts of Relay: the RelayDepository escrow of the settlement protocol (production, staging and dev instances), the periphery that builds deposits and fills (RelayRouter and RelayApprovalProxy, generations v2, v2.1, v3.0, v3.1 and v3.2), the RelayReceiver native forwarder, the public solver addresses, and the ids that link a deposit to its fill. All nine target chains (the eight above plus Arc, 5042) have the production Depository and the v3.0 and v3.2 periphery at the same addresses. Robinhood Chain (4663) and Arc (5042) have no RelayReceiver. Topics and selectors are chain-agnostic; addresses are network-specific.
 
 Relay is an intent bridge. The user deposits on the origin chain. A solver fills the request on the destination chain with its own funds. The Oracle then attests the deposit and the fill, and the Hub on Relay Chain (chain id 537713, outside the eight chains) credits the solver. Later the solver withdraws from the origin Depository with a CallRequest that the Allocator (MPC signer on Aurora) signs.
 
@@ -20,10 +20,12 @@ Three facts to know before indexing:
 | **RelayDepository** (production) | `0x4cD00E387622C35bDDB9b4c962C136462338BC31` | all 9 (incl. Arc) | Escrow. `depositNative` / `depositErc20` take user funds; `execute` releases funds with an allocator signature. | No. Plain contract with solady `Ownable`; the owner can only change the allocator and the ownership. |
 | RelayDepository (staging) | `0x9ddC6a541e8F8B50B0996786A3eC275AB4d3A76C` | all 9 (incl. Arc) | The `stag` depository of `relay-settlement/packages/networks`. Same 8,628-byte code, other owner (`0x71d8be89d9f2339f0fe9cba39496c6c9cbff9da6`) and allocator (`0x49103cbe01afa376ed2de1fc5e59c19e0bc53e71`). Emits the same events. | No |
 | RelayDepository (dev) | `0x5CB1De3603A71Ac2f67b12bFbF095013FE4Ac299` | see §11 | The `dev` depository of the same config (Ethereum, Base, Arbitrum, Optimism, Polygon only). | No |
-| **RelayRouter v3.0** | `0xb92fe925dc43a0ecde6c8b1a2709c170ec4fff4f` | all 9 (incl. Arc) | Stateless multicall router. The Chains API names it `erc20Router`. Emits `FundsMovement`, `SolverCallExecuted`, `SolverNativeTransfer`. | No |
-| **RelayApprovalProxy v3.0** | `0xccc88a9d1b4ed6b0eaba998850414b24f1c315be` | all 9 (incl. Arc) | Pulls the user's tokens (approval, ERC-2612, Permit2 or ERC-3009) into the router, then calls `multicall`. The Chains API names it `approvalProxy`. | No. `owner()` can `withdraw` stranded tokens. |
+| **RelayRouter v3.0** | `0xb92fe925dc43a0ecde6c8b1a2709c170ec4fff4f` | all 9 (incl. Arc) | Stateless multicall router. The Chains API lists it under `contracts.v3.erc20Router` (until about 2026-10 it was the default `erc20Router`). Emits `FundsMovement`, `SolverCallExecuted`, `SolverNativeTransfer`. | No |
+| **RelayApprovalProxy v3.0** | `0xccc88a9d1b4ed6b0eaba998850414b24f1c315be` | all 9 (incl. Arc) | Pulls the user's tokens (approval, ERC-2612, Permit2 or ERC-3009) into the router, then calls `multicall`. The Chains API lists it under `contracts.v3.approvalProxy`. | No. `owner()` can `withdraw` stranded tokens. |
 | RelayRouter v3.1 | `0xe6b730e58088884704cdf11cbe95c224d4d34154` | all 9 (incl. Arc) | Newest router in `relay-periphery` (`VERSION()` = "3.1", recorded 2026-08-28). Not yet in the Chains API. | No |
 | RelayApprovalProxy v3.1 | `0x5a0fa369d634f49c76b08dc6c299800c1a2af977` | all 9 (incl. Arc) | Newest approval proxy. Adds EIP-712 multicall authorization; code hash differs per chain. | No |
+| **RelayRouter v3.2** | `0x0729e2a4716d9f7dd17858d5d504426d228697f7` | all 9 (incl. Arc) | Current router: the Chains API default `erc20Router` and `contracts.v3.2.erc20Router` (2026-10-30). `VERSION()` = "3.2"; verified `RelayRouter` (Solidity 0.8.28) on Etherscan/Blockscout. Same 7,185-byte code hash on every chain. Emits `FundsMovement`, `SolverNativeTransfer` and the new `SolverCallExecuted(address,bytes32,uint256)` (§1.3). Deployed on Arc on 2026-10-05 (block 24,446,293). | No |
+| **RelayApprovalProxy v3.2** | `0x5567954cd026cebfe486062cb75848e0f1c12e58` | all 9 (incl. Arc) | Approval proxy of the v3.2 router (the router address is an immutable). The Chains API default `approvalProxy`. **`VERSION()` returns "3.1"**; same selectors as the v3.1 proxy (§2.3). 13,884 B; code hash differs per chain. `owner()` = `0x463cb782c8dd0a1887b77336dff74d60f006f56e`. | No. `owner()` can `withdraw` stranded tokens. |
 | RelayRouter v2.1 / RelayApprovalProxy v2.1 | `0x3ec130b627944cad9b2750300ecb0a695da522b6` / `0x58cc3e0aa6cd7bf795832a225179ec2d848ce3e7` | see §11 | Legacy generation (2025-10). The router emits `SolverCallExecuted` and `SolverNativeTransfer` only. | No |
 | RelayRouter v2 / ApprovalProxy v2 | `0xf5042e6ffac5a625d4e7848e0b01373d8eb9e222` / `0xbbbfd134e9b44bfb5123898ba36b01de7ab93d98` | see §11 | Legacy generation (2025-06). | No |
 | v1 periphery (historical) | ERC20Router `0xE0B062D028236FA09Fe33dB8019FFEEEe6bF79Ed`, ApprovalProxy `0xfD06C0018318BF78705ccFf2b961Ef8eBC0bacA0`, RelayReceiver v1 `0xa06e1351E2fD2D45b5D35633ca7eCF328684a109` | 7 (not Robinhood, not Arc) | The expected addresses in the old `relay-periphery` deployer script (`script/BaseDeployer.s.sol` at commit `1957475c95`). Kept for older incidents; their events are not covered here. | No |
@@ -63,12 +65,13 @@ It emits `RelayErc20Deposit` and `RelayCallExecuted` with the topic0 values of �
 | `0x4ba112082ec7c5f4560417c7baff6813dfd8babd0f46e63ce2eb897f2d60e90d` | `UsdcInitialized(address usdc)` — admin, status only. |
 | `0xeb68b6c7ff0e24f32ff5050ed7cf86fbe6abbdb204f11f97377013888cd5be58` | `DepositsEnabledSet(bool enabled)` — admin, status only (pause switch for deposits). |
 
-### 1.3 RelayRouter and RelayApprovalProxy (v3.0 and v3.1)
+### 1.3 RelayRouter and RelayApprovalProxy (v3.0, v3.1 and v3.2)
 
 | topic0 | Event |
 |--------|-------|
 | `0xafbab204e8271965231d37baed9b1abca8725b7409c70314455f68bc89142b91` | `FundsMovement(address from, address to, address currency, uint256 amount, bytes metadata)` — a value movement that the periphery performs. The ApprovalProxy emits it when it pulls user tokens into the router; the router emits it when it sends value out (`cleanupErc20s`, `cleanupNative`, `cleanupErc20sViaCall`, `cleanupNativeViaCall`) and when `multicall` receives `msg.value`. `currency` = zero for native. `metadata` is caller-supplied and opaque (§13). |
 | `0x93485dcd31a905e3ffd7b012abe3438fa8fa77f98ddc9f50e879d3fa7ccdc324` | `SolverCallExecuted(address to, bytes data, uint256 amount)` — RelayRouter only (also v2 and v2.1): one log per successful call inside `multicall`. Status of the call; the value moves in the call itself. |
+| `0x41b532d633b984408c6cb99e0de889a69f64dac4d263e6771fb826cacfa84b6d` | `SolverCallExecuted(address to, bytes32 dataHash, uint256 amount)` — **RelayRouter v3.2 only**: one log per successful call inside `multicall`, with `keccak256(callData)` in place of the calldata. A filter on the old topic0 `0x93485dcd…` misses every v3.2 call. On Base, 1,000 blocks to 2026-10-30 gave 922 of these logs at the v3.2 router and 12 old-topic logs at the v3.0 router. |
 | `0xd35467972d1fda5b63c735f59d3974fa51785a41a92aa3ed1b70832836f8dba6` | `SolverNativeTransfer(address to, uint256 amount)` — RelayRouter only (also v2 and v2.1): native currency leaves the router (`cleanupNative`), or the router receives native currency (`to` = the router). |
 | `0x7aed1d3e8155a07ccf395e44ea3109a0e2d6c9b29bbbe9f142d9790596f4dc80` | `RouterUpdated(address newRouter)` — ApprovalProxy v2.1 only; admin. |
 | `0xaecfd826d6b270962e6ff81f57b75e8527073ef343cbb38af801b8a972c78461` | `Permit2Updated(address newPermit2)` — ApprovalProxy v2.1 only; admin. |
@@ -114,7 +117,7 @@ All selectors below are present in the deployed bytecode (PUSH4 in the dispatche
 | `0xeae335b3` | `_CALL_REQUEST_TYPEHASH()` | view → the CallRequest typehash. |
 | `0x84b0196e` | `eip712Domain()` | view. Name `RelayDepository`, version `1`, chain id, verifying contract (read live). |
 
-### 2.2 RelayRouter (v3.0 `0xb92fe925dc43a0ecde6c8b1a2709c170ec4fff4f` and v3.1 `0xe6b730e58088884704cdf11cbe95c224d4d34154`; v2 and v2.1 share `multicall` and the cleanup functions)
+### 2.2 RelayRouter (v3.0 `0xb92fe925dc43a0ecde6c8b1a2709c170ec4fff4f`, v3.1 `0xe6b730e58088884704cdf11cbe95c224d4d34154` and v3.2 `0x0729e2a4716d9f7dd17858d5d504426d228697f7`; v2 and v2.1 share `multicall` and the cleanup functions)
 
 Tuple `Call3Value = (address target, bool allowFailure, uint256 value, bytes callData)`.
 
@@ -125,7 +128,7 @@ Tuple `Call3Value = (address target, bool allowFailure, uint256 value, bytes cal
 | `0x73b7bb2f` | `cleanupErc20sViaCall(address[] tokens, address[] tos, bytes[] datas, uint256[] amounts)` | Approves `to` and calls it (for example `depositErc20` on the Depository). Emits `FundsMovement` with empty metadata. |
 | `0xa6bd8c96` | `cleanupNative(uint256 amount, address recipient, bytes metadata)` | Sends native currency out. Emits `SolverNativeTransfer` and `FundsMovement`. |
 | `0x5d1fe6a2` | `cleanupNativeViaCall(uint256 amount, address to, bytes data)` | Calls `to` with value (for example `depositNative`). Emits `FundsMovement`. |
-| `0xffa1ad74` | `VERSION()` | view → `"3.1"`. v3.1 only (absent from the v3.0 bytecode). |
+| `0xffa1ad74` | `VERSION()` | view → `"3.1"` (v3.1) or `"3.2"` (v3.2). Absent from the v3.0 bytecode. The v3.2 ApprovalProxy also returns `"3.1"`. |
 
 ### 2.3 RelayApprovalProxy
 
@@ -138,7 +141,7 @@ Tuple `Call3Value = (address target, bool allowFailure, uint256 value, bytes cal
 | `0xf80f00fb` | `permit3009TransferAndMulticall((address from, uint256 value, uint256 validAfter, uint256 validBefore, uint8 v, bytes32 r, bytes32 s)[] permits, address[] tokens, (address target, bool allowFailure, uint256 value, bytes callData)[] calls, address refundTo, address nftRecipient, bytes metadata)` | v3.0 only. |
 | `0x745599f3` | `permit3009TransferAndMulticall((address from, uint256 value, uint256 validAfter, uint256 validBefore, uint8 v, bytes32 r, bytes32 s)[] permits, address[] tokens, (address target, bool allowFailure, uint256 value, bytes callData)[] calls, address refundTo, address nftRecipient, bytes metadata, bytes[] multicallSignatures)` | v3.1 only. |
 | `0x51cff8d9` | `withdraw(address token)` | v3.0, owner-only rescue of stranded balances. |
-| `0xf940e385` | `withdraw(address token, address recipient)` | v3.1, owner-only rescue. |
+| `0xf940e385` | `withdraw(address token, address recipient)` | v3.1 and v3.2, owner-only rescue. The v3.2 ApprovalProxy has the v3.1 selector set. |
 
 ### 2.4 RelayReceiver
 
@@ -162,6 +165,8 @@ All verified with `eth_getCode` on 2026-09-29. Relay uses the EVM chain id (1) i
 | **RelayApprovalProxy v3.0** | `0xccc88a9d1b4ed6b0eaba998850414b24f1c315be` | 7,746 B (same hash on all eight). `owner()` = `0x463cb782c8dd0a1887b77336dff74d60f006f56e` (EOA; the canonical owner named in `relay-periphery`). |
 | RelayRouter v3.1 | `0xe6b730e58088884704cdf11cbe95c224d4d34154` | 5,373 B. |
 | RelayApprovalProxy v3.1 | `0x5a0fa369d634f49c76b08dc6c299800c1a2af977` | 10,923 B (hash differs per chain). |
+| **RelayRouter v3.2** | `0x0729e2a4716d9f7dd17858d5d504426d228697f7` | 7,185 B. Chains API default `erc20Router` (2026-10-30). |
+| **RelayApprovalProxy v3.2** | `0x5567954cd026cebfe486062cb75848e0f1c12e58` | 13,884 B (hash differs per chain). Chains API default `approvalProxy`. |
 | RelayRouter v2.1 | `0x3ec130b627944cad9b2750300ecb0a695da522b6` | 4,153 B. |
 | RelayApprovalProxy v2.1 | `0x58cc3e0aa6cd7bf795832a225179ec2d848ce3e7` | 7,076 B. |
 | RelayRouter v2 | `0xf5042e6ffac5a625d4e7848e0b01373d8eb9e222` | 8,925 B. |
@@ -185,6 +190,8 @@ All verified with `eth_getCode` on 2026-09-29. Relay uses the EVM chain id (8453
 | **RelayApprovalProxy v3.0** | `0xccc88a9d1b4ed6b0eaba998850414b24f1c315be` | 7,746 B. Same `owner()` as on Ethereum. |
 | RelayRouter v3.1 | `0xe6b730e58088884704cdf11cbe95c224d4d34154` | 5,373 B. |
 | RelayApprovalProxy v3.1 | `0x5a0fa369d634f49c76b08dc6c299800c1a2af977` | 10,923 B. |
+| **RelayRouter v3.2** | `0x0729e2a4716d9f7dd17858d5d504426d228697f7` | 7,185 B. Chains API default `erc20Router` (2026-10-30). |
+| **RelayApprovalProxy v3.2** | `0x5567954cd026cebfe486062cb75848e0f1c12e58` | 13,884 B (hash differs per chain). Chains API default `approvalProxy`. |
 | RelayRouter v2.1 / RelayApprovalProxy v2.1 | `0x3ec130b627944cad9b2750300ecb0a695da522b6` / `0x58cc3e0aa6cd7bf795832a225179ec2d848ce3e7` | 4,153 B / 7,076 B. |
 | RelayRouter v2 / RelayApprovalProxy v2 | `0xf5042e6ffac5a625d4e7848e0b01373d8eb9e222` / `0xbbbfd134e9b44bfb5123898ba36b01de7ab93d98` | 8,925 B / 11,652 B. |
 | **RelayReceiver** | `0xa5f565650890fba1824ee0f21ebbbf660a179934` | 1,102 B. |
@@ -206,6 +213,8 @@ All verified with `eth_getCode` on 2026-09-29. Relay uses the EVM chain id (4216
 | **RelayApprovalProxy v3.0** | `0xccc88a9d1b4ed6b0eaba998850414b24f1c315be` | 7,746 B. Same `owner()` as on Ethereum. |
 | RelayRouter v3.1 | `0xe6b730e58088884704cdf11cbe95c224d4d34154` | 5,373 B. |
 | RelayApprovalProxy v3.1 | `0x5a0fa369d634f49c76b08dc6c299800c1a2af977` | 10,923 B. |
+| **RelayRouter v3.2** | `0x0729e2a4716d9f7dd17858d5d504426d228697f7` | 7,185 B. Chains API default `erc20Router` (2026-10-30). |
+| **RelayApprovalProxy v3.2** | `0x5567954cd026cebfe486062cb75848e0f1c12e58` | 13,884 B (hash differs per chain). Chains API default `approvalProxy`. |
 | RelayRouter v2.1 / RelayApprovalProxy v2.1 | `0x3ec130b627944cad9b2750300ecb0a695da522b6` / `0x58cc3e0aa6cd7bf795832a225179ec2d848ce3e7` | 4,153 B / 7,076 B. |
 | RelayRouter v2 / RelayApprovalProxy v2 | `0xf5042e6ffac5a625d4e7848e0b01373d8eb9e222` / `0xbbbfd134e9b44bfb5123898ba36b01de7ab93d98` | 8,925 B / 11,652 B. |
 | **RelayReceiver** | `0xa5f565650890fba1824ee0f21ebbbf660a179934` | 1,102 B. |
@@ -227,6 +236,8 @@ All verified with `eth_getCode` on 2026-09-29. Relay uses the EVM chain id (10);
 | **RelayApprovalProxy v3.0** | `0xccc88a9d1b4ed6b0eaba998850414b24f1c315be` | 7,746 B. Same `owner()` as on Ethereum. |
 | RelayRouter v3.1 | `0xe6b730e58088884704cdf11cbe95c224d4d34154` | 5,373 B. |
 | RelayApprovalProxy v3.1 | `0x5a0fa369d634f49c76b08dc6c299800c1a2af977` | 10,923 B. |
+| **RelayRouter v3.2** | `0x0729e2a4716d9f7dd17858d5d504426d228697f7` | 7,185 B. Chains API default `erc20Router` (2026-10-30). |
+| **RelayApprovalProxy v3.2** | `0x5567954cd026cebfe486062cb75848e0f1c12e58` | 13,884 B (hash differs per chain). Chains API default `approvalProxy`. |
 | RelayRouter v2.1 / RelayApprovalProxy v2.1 | `0x3ec130b627944cad9b2750300ecb0a695da522b6` / `0x58cc3e0aa6cd7bf795832a225179ec2d848ce3e7` | 4,153 B / 7,076 B. |
 | RelayRouter v2 / RelayApprovalProxy v2 | `0xf5042e6ffac5a625d4e7848e0b01373d8eb9e222` / `0xbbbfd134e9b44bfb5123898ba36b01de7ab93d98` | 8,925 B / 11,652 B. |
 | **RelayReceiver** | `0xa5f565650890fba1824ee0f21ebbbf660a179934` | 1,102 B. |
@@ -248,6 +259,8 @@ All verified with `eth_getCode` on 2026-09-29. Relay uses the EVM chain id (137)
 | **RelayApprovalProxy v3.0** | `0xccc88a9d1b4ed6b0eaba998850414b24f1c315be` | 7,746 B. Same `owner()` as on Ethereum. |
 | RelayRouter v3.1 | `0xe6b730e58088884704cdf11cbe95c224d4d34154` | 5,373 B. |
 | RelayApprovalProxy v3.1 | `0x5a0fa369d634f49c76b08dc6c299800c1a2af977` | 10,923 B. |
+| **RelayRouter v3.2** | `0x0729e2a4716d9f7dd17858d5d504426d228697f7` | 7,185 B. Chains API default `erc20Router` (2026-10-30). |
+| **RelayApprovalProxy v3.2** | `0x5567954cd026cebfe486062cb75848e0f1c12e58` | 13,884 B (hash differs per chain). Chains API default `approvalProxy`. |
 | RelayRouter v2.1 / RelayApprovalProxy v2.1 | `0x3ec130b627944cad9b2750300ecb0a695da522b6` / `0x58cc3e0aa6cd7bf795832a225179ec2d848ce3e7` | 4,153 B / 7,076 B. |
 | RelayRouter v2 / RelayApprovalProxy v2 | `0xf5042e6ffac5a625d4e7848e0b01373d8eb9e222` / `0xbbbfd134e9b44bfb5123898ba36b01de7ab93d98` | 8,925 B / 11,652 B. |
 | **RelayReceiver** | `0xa5f565650890fba1824ee0f21ebbbf660a179934` | 1,102 B. |
@@ -268,6 +281,8 @@ All verified with `eth_getCode` on 2026-09-29. Relay uses the EVM chain id (56);
 | **RelayApprovalProxy v3.0** | `0xccc88a9d1b4ed6b0eaba998850414b24f1c315be` | 7,746 B. Same `owner()` as on Ethereum. |
 | RelayRouter v3.1 | `0xe6b730e58088884704cdf11cbe95c224d4d34154` | 5,373 B. |
 | RelayApprovalProxy v3.1 | `0x5a0fa369d634f49c76b08dc6c299800c1a2af977` | 10,923 B. |
+| **RelayRouter v3.2** | `0x0729e2a4716d9f7dd17858d5d504426d228697f7` | 7,185 B. Chains API default `erc20Router` (2026-10-30). |
+| **RelayApprovalProxy v3.2** | `0x5567954cd026cebfe486062cb75848e0f1c12e58` | 13,884 B (hash differs per chain). Chains API default `approvalProxy`. |
 | RelayRouter v2.1 / RelayApprovalProxy v2.1 | `0x3ec130b627944cad9b2750300ecb0a695da522b6` / `0x58cc3e0aa6cd7bf795832a225179ec2d848ce3e7` | 4,153 B / 7,076 B. |
 | RelayRouter v2 / RelayApprovalProxy v2 | `0xf5042e6ffac5a625d4e7848e0b01373d8eb9e222` / `0xbbbfd134e9b44bfb5123898ba36b01de7ab93d98` | 8,925 B / 11,652 B. |
 | **RelayReceiver** | `0xa5f565650890fba1824ee0f21ebbbf660a179934` | 1,102 B. |
@@ -290,6 +305,8 @@ All verified with `eth_getCode` on 2026-09-29. Relay uses the EVM chain id (4311
 | **RelayApprovalProxy v3.0** | `0xccc88a9d1b4ed6b0eaba998850414b24f1c315be` | 7,746 B. Same `owner()` as on Ethereum. |
 | RelayRouter v3.1 | `0xe6b730e58088884704cdf11cbe95c224d4d34154` | 5,373 B. |
 | RelayApprovalProxy v3.1 | `0x5a0fa369d634f49c76b08dc6c299800c1a2af977` | 10,923 B. |
+| **RelayRouter v3.2** | `0x0729e2a4716d9f7dd17858d5d504426d228697f7` | 7,185 B. Chains API default `erc20Router` (2026-10-30). |
+| **RelayApprovalProxy v3.2** | `0x5567954cd026cebfe486062cb75848e0f1c12e58` | 13,884 B (hash differs per chain). Chains API default `approvalProxy`. |
 | RelayRouter v2.1 / RelayApprovalProxy v2.1 | `0x3ec130b627944cad9b2750300ecb0a695da522b6` / `0x58cc3e0aa6cd7bf795832a225179ec2d848ce3e7` | 4,153 B / 7,076 B. |
 | RelayRouter v2 / RelayApprovalProxy v2 | `0xf5042e6ffac5a625d4e7848e0b01373d8eb9e222` / `0xbbbfd134e9b44bfb5123898ba36b01de7ab93d98` | 8,925 B / 11,652 B. |
 | **RelayReceiver** | `0xa5f565650890fba1824ee0f21ebbbf660a179934` | 1,102 B. |
@@ -312,6 +329,8 @@ All verified with `eth_getCode` on 2026-09-29. Relay uses the EVM chain id (4663
 | **RelayApprovalProxy v3.0** | `0xccc88a9d1b4ed6b0eaba998850414b24f1c315be` | 7,746 B. Same `owner()` as on Ethereum. |
 | RelayRouter v3.1 | `0xe6b730e58088884704cdf11cbe95c224d4d34154` | 5,373 B. |
 | RelayApprovalProxy v3.1 | `0x5a0fa369d634f49c76b08dc6c299800c1a2af977` | 10,923 B. |
+| **RelayRouter v3.2** | `0x0729e2a4716d9f7dd17858d5d504426d228697f7` | 7,185 B. Chains API default `erc20Router` (2026-10-30). |
+| **RelayApprovalProxy v3.2** | `0x5567954cd026cebfe486062cb75848e0f1c12e58` | 13,884 B (hash differs per chain). Chains API default `approvalProxy`. |
 | **Solver** (EOA) | `0xf70da97812cb96acdf810712aa562db8dfa3dbef` | No code; nonce 2,163,640. |
 
 **Not deployed here** (`eth_getCode` = `0x`, nonce 0): RelayReceiver `0xa5f565650890fba1824ee0f21ebbbf660a179934` (the Chains API field `relayReceiver` is empty for chain 4663), the v2 and v2.1 periphery (`0xf5042e6ffac5a625d4e7848e0b01373d8eb9e222`, `0xbbbfd134e9b44bfb5123898ba36b01de7ab93d98`, `0x3ec130b627944cad9b2750300ecb0a695da522b6`, `0x58cc3e0aa6cd7bf795832a225179ec2d848ce3e7`), Multicaller and OnlyOwnerMulticaller, and the dev depository `0x5CB1De3603A71Ac2f67b12bFbF095013FE4Ac299`.
@@ -326,10 +345,12 @@ All verified with `eth_getCode` on `https://rpc.mainnet.arc.io` on 2026-10-05. T
 |------|---------|-------------|
 | **RelayDepository** (production) | `0x4cD00E387622C35bDDB9b4c962C136462338BC31` | 8,628 B; EIP-1967 slot empty. `owner()` = `0xf61a305199fa1135d76ffab3752d42f55cbd775a`, `allocator()` = `0x63c1d3e9c646184529c5694630a01c00df171b56` (same as on Ethereum). |
 | RelayDepository (staging) | `0x9ddC6a541e8F8B50B0996786A3eC275AB4d3A76C` | 8,628 B. |
-| **RelayRouter v3.0** | `0xb92fe925dc43a0ecde6c8b1a2709c170ec4fff4f` | 4,720 B. Chains API `erc20Router`. |
-| **RelayApprovalProxy v3.0** | `0xccc88a9d1b4ed6b0eaba998850414b24f1c315be` | 7,746 B. Chains API `approvalProxy`; `owner()` = `0x463cb782c8dd0a1887b77336dff74d60f006f56e`. |
+| **RelayRouter v3.0** | `0xb92fe925dc43a0ecde6c8b1a2709c170ec4fff4f` | 4,720 B. Chains API `v3.erc20Router`. |
+| **RelayApprovalProxy v3.0** | `0xccc88a9d1b4ed6b0eaba998850414b24f1c315be` | 7,746 B. Chains API `v3.approvalProxy`; `owner()` = `0x463cb782c8dd0a1887b77336dff74d60f006f56e`. |
 | RelayRouter v3.1 | `0xe6b730e58088884704cdf11cbe95c224d4d34154` | 5,373 B. |
 | RelayApprovalProxy v3.1 | `0x5a0fa369d634f49c76b08dc6c299800c1a2af977` | 10,923 B. |
+| **RelayRouter v3.2** | `0x0729e2a4716d9f7dd17858d5d504426d228697f7` | 7,185 B. Chains API default `erc20Router` (2026-10-30). |
+| **RelayApprovalProxy v3.2** | `0x5567954cd026cebfe486062cb75848e0f1c12e58` | 13,884 B (hash differs per chain). Chains API default `approvalProxy`. |
 | RelayRouter v2 | `0xf5042e6ffac5a625d4e7848e0b01373d8eb9e222` | 8,925 B. |
 | RelayApprovalProxy v2 | `0xbbbfd134e9b44bfb5123898ba36b01de7ab93d98` | 11,652 B. |
 | **Solver** (EOA) | `0xf70da97812cb96acdf810712aa562db8dfa3dbef` | No code; nonce 179,099. |
@@ -342,19 +363,19 @@ Window: Arc blocks 24,366,836–24,375,835 (about 76 minutes on 2026-10-05, `eth
 
 ## 11. Cross-chain summary
 
-✅ = code at the address (checked with `eth_getCode` on 2026-09-29; Arc on 2026-10-05); ❌ = `eth_getCode` returns `0x`. Every contract has the **same literal address** on each chain where it exists (CREATE2 through `0x4e59b44847b379578588920ca78fbf26c0b4956c`), so always key on `(chain id, address)`.
+✅ = code at the address (checked with `eth_getCode` on 2026-09-29; Arc on 2026-10-05; the v3.2 pair on all nine on 2026-10-30); ❌ = `eth_getCode` returns `0x`. Every contract has the **same literal address** on each chain where it exists (CREATE2 through `0x4e59b44847b379578588920ca78fbf26c0b4956c`), so always key on `(chain id, address)`.
 
-| Chain | ID | Depository (prod) `0x4cD00E387622C35bDDB9b4c962C136462338BC31` | Depository (staging) `0x9ddC6a541e8F8B50B0996786A3eC275AB4d3A76C` | Depository (dev) `0x5CB1De3603A71Ac2f67b12bFbF095013FE4Ac299` | Router + ApprovalProxy v3.0 | v3.1 pair | v2 / v2.1 pairs | RelayReceiver `0xa5f565650890fba1824ee0f21ebbbf660a179934` | Solver `0xf70da97812cb96acdf810712aa562db8dfa3dbef` |
-|-------|----|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|
-| Ethereum | 1 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | EOA |
-| Base | 8453 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | EOA |
-| Arbitrum One | 42161 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | EOA |
-| Optimism | 10 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | EOA |
-| Polygon PoS | 137 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | EOA |
-| BNB Smart Chain | 56 | ✅ | ✅ | ❌ | ✅ | ✅ | ✅ | ✅ | EOA |
-| Avalanche C-Chain | 43114 | ✅ | ✅ | ❌ | ✅ | ✅ | ✅ | ✅ | EOA |
-| **Robinhood Chain** | 4663 | ✅ | ✅ | ❌ | ✅ | ✅ | ❌ | ❌ | EOA |
-| **Arc** | 5042 | ✅ | ✅ | ❌ | ✅ | ✅ | v2 ✅ / v2.1 ❌ | ❌ | EOA |
+| Chain | ID | Depository (prod) `0x4cD00E387622C35bDDB9b4c962C136462338BC31` | Depository (staging) `0x9ddC6a541e8F8B50B0996786A3eC275AB4d3A76C` | Depository (dev) `0x5CB1De3603A71Ac2f67b12bFbF095013FE4Ac299` | Router + ApprovalProxy v3.0 | v3.1 pair | v3.2 pair `0x0729e2a4…` / `0x5567954c…` | v2 / v2.1 pairs | RelayReceiver `0xa5f565650890fba1824ee0f21ebbbf660a179934` | Solver `0xf70da97812cb96acdf810712aa562db8dfa3dbef` |
+|-------|----|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|
+| Ethereum | 1 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | EOA |
+| Base | 8453 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | EOA |
+| Arbitrum One | 42161 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | EOA |
+| Optimism | 10 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | EOA |
+| Polygon PoS | 137 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | EOA |
+| BNB Smart Chain | 56 | ✅ | ✅ | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ | EOA |
+| Avalanche C-Chain | 43114 | ✅ | ✅ | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ | EOA |
+| **Robinhood Chain** | 4663 | ✅ | ✅ | ❌ | ✅ | ✅ | ✅ | ❌ | ❌ | EOA |
+| **Arc** | 5042 | ✅ | ✅ | ❌ | ✅ | ✅ | ✅ | v2 ✅ / v2.1 ❌ | ❌ | EOA |
 
 **Chains outside the target set.** The Chains API lists 60 chains (EVM and others). Relay uses EVM chain ids for EVM chains and its own ids for the others, for example Solana `792703809` (seen as `destinationChainId` in the status API) and Bitcoin `8253038` (in the Chains API list). Some EVM chains use another Depository address (for example `0x59916da825d2d2ec1bf878d71c88826f6633ecca` on Cronos, Metis, Linea, Mantle and Taiko per the docs address table); none of those is one of the nine target chains.
 
@@ -434,7 +455,7 @@ There is no `Upgraded(address)` event to watch. The privileged changes are `setA
 8. **`setAllocator` emits nothing.** A change of the allocator (the only key that can release escrowed funds) is visible only as a transaction with selector `0xbf83f2a2` to the Depository, or by polling `allocator()` (`0x63c1d3e9c646184529c5694630a01c00df171b56` on all eight chains on 2026-09-29 and on Arc on 2026-10-05).
 9. **Robinhood Chain is the busiest chain in the pinned window** (44,012 ERC-20 and 12,476 native deposits; 230,287 `FundsMovement`). The Robinhood Chain and Arbitrum deposit samples read here came through ERC-4337 bundles (`handleOps` on `0x4337084d9e255ff0702461cf8895ce9e3b5ff108` and on `0x0000000071727de22e5e9d8baf0edac6f37da032`), so `tx.from` was a bundler, not the user.
 10. **The RelayReceiver is a deposit path, not a payout path.** `forward` / `fallback` send the native value straight to the solver and log the calldata (the request id). It is not an escrow and has no Robinhood Chain or Arc deployment. `FundsForwardedWithData` had 0 logs in the pinned window.
-11. **Two periphery generations are live at the same time.** The Chains API returns v3.0 (`0xb92fe925dc43a0ecde6c8b1a2709c170ec4fff4f`, `0xccc88a9d1b4ed6b0eaba998850414b24f1c315be`); `relay-periphery` already records v3.1 (`0xe6b730e58088884704cdf11cbe95c224d4d34154`, `0x5a0fa369d634f49c76b08dc6c299800c1a2af977`), which had 0 `FundsMovement` logs on all eight chains in the pinned window. The v3.0 and v3.1 ApprovalProxy selectors differ for `permitTransferAndMulticall`, `permit3009TransferAndMulticall` and `withdraw` (§2.3).
+11. **Several periphery generations are live at the same time.** On 2026-10-30 the Chains API default is v3.2 (`0x0729e2a4716d9f7dd17858d5d504426d228697f7`, `0x5567954cd026cebfe486062cb75848e0f1c12e58`), and it still lists v3.0 (`0xb92fe925dc43a0ecde6c8b1a2709c170ec4fff4f`, `0xccc88a9d1b4ed6b0eaba998850414b24f1c315be`) under `v3`. On Base, 1,000 blocks to 2026-10-30 gave 1,549 logs at the v3.2 router and 22 at the v3.0 router; on Arc, 1,000 blocks gave 53 and 0. Watch both pairs and both `SolverCallExecuted` topic0s. `relay-periphery` also records v3.1 (`0xe6b730e58088884704cdf11cbe95c224d4d34154`, `0x5a0fa369d634f49c76b08dc6c299800c1a2af977`), which had 0 `FundsMovement` logs on all eight chains in the pinned window and is not in the Chains API. The v3.0 and v3.1 ApprovalProxy selectors differ for `permitTransferAndMulticall`, `permit3009TransferAndMulticall` and `withdraw` (§2.3).
 12. **The Depository code hash differs per chain** (same 8,628-byte size) because the EIP-712 domain is cached in immutables. A code-hash match across chains fails; match on the address, the size and the selectors instead. The v3.1 ApprovalProxy has the same property; the routers, the v3.0 ApprovalProxy and the RelayReceiver have one hash on every chain.
 13. **Admin actions to alert on:** `OwnershipTransferred` / `OwnershipHandoverRequested` on the Depository or the ApprovalProxy; a transaction to the Depository with selector `0xbf83f2a2` (`setAllocator`); `withdraw` on an ApprovalProxy; a `RelayCallExecuted` whose `call.to` is not a token or a known solver (a release to an unexpected address).
 
@@ -448,7 +469,8 @@ TOPIC_RELAY_NATIVE_DEPOSIT        = '\x8032066556caf3967d8fec4ad22a2d9e1e9576556
 TOPIC_RELAY_ERC20_DEPOSIT         = '\x49fed1d0b752ce30eee63c7a81133f3363b532fec5d4d7dd1ccfd005de4555e1'
 TOPIC_RELAY_CALL_EXECUTED         = '\x4be109453ef7e895dc7215c929fff9b76b51483d56a4d04548b4866e9aa7c5ea'
 TOPIC_FUNDS_MOVEMENT              = '\xafbab204e8271965231d37baed9b1abca8725b7409c70314455f68bc89142b91'
-TOPIC_SOLVER_CALL_EXECUTED        = '\x93485dcd31a905e3ffd7b012abe3438fa8fa77f98ddc9f50e879d3fa7ccdc324'
+TOPIC_SOLVER_CALL_EXECUTED        = '\x93485dcd31a905e3ffd7b012abe3438fa8fa77f98ddc9f50e879d3fa7ccdc324'   -- v2, v2.1, v3.0, v3.1
+TOPIC_SOLVER_CALL_EXECUTED_V32    = '\x41b532d633b984408c6cb99e0de889a69f64dac4d263e6771fb826cacfa84b6d'   -- v3.2: (address,bytes32,uint256)
 TOPIC_SOLVER_NATIVE_TRANSFER      = '\xd35467972d1fda5b63c735f59d3974fa51785a41a92aa3ed1b70832836f8dba6'
 TOPIC_FUNDS_FORWARDED_WITH_DATA   = '\x936c2ca3b35d2d0b24057b0675c459e4515f48fe132d138e213ae59ffab7f53e'
 TOPIC_OWNERSHIP_TRANSFERRED       = '\x8be0079c531659141344cd1fd0a4f28419497f9722a3daafe3b4186f6b6457e0'
@@ -496,6 +518,8 @@ ETH_RELAY_ROUTER_V30            = '\xb92fe925dc43a0ecde6c8b1a2709c170ec4fff4f'
 ETH_RELAY_APPROVAL_PROXY_V30    = '\xccc88a9d1b4ed6b0eaba998850414b24f1c315be'
 ETH_RELAY_ROUTER_V31            = '\xe6b730e58088884704cdf11cbe95c224d4d34154'
 ETH_RELAY_APPROVAL_PROXY_V31    = '\x5a0fa369d634f49c76b08dc6c299800c1a2af977'
+ETH_RELAY_ROUTER_V32            = '\x0729e2a4716d9f7dd17858d5d504426d228697f7'
+ETH_RELAY_APPROVAL_PROXY_V32    = '\x5567954cd026cebfe486062cb75848e0f1c12e58'
 ETH_RELAY_ROUTER_V21            = '\x3ec130b627944cad9b2750300ecb0a695da522b6'
 ETH_RELAY_APPROVAL_PROXY_V21    = '\x58cc3e0aa6cd7bf795832a225179ec2d848ce3e7'
 ETH_RELAY_ROUTER_V2             = '\xf5042e6ffac5a625d4e7848e0b01373d8eb9e222'
@@ -512,6 +536,8 @@ BASE_RELAY_ROUTER_V30           = '\xb92fe925dc43a0ecde6c8b1a2709c170ec4fff4f'
 BASE_RELAY_APPROVAL_PROXY_V30   = '\xccc88a9d1b4ed6b0eaba998850414b24f1c315be'
 BASE_RELAY_ROUTER_V31           = '\xe6b730e58088884704cdf11cbe95c224d4d34154'
 BASE_RELAY_APPROVAL_PROXY_V31   = '\x5a0fa369d634f49c76b08dc6c299800c1a2af977'
+BASE_RELAY_ROUTER_V32           = '\x0729e2a4716d9f7dd17858d5d504426d228697f7'
+BASE_RELAY_APPROVAL_PROXY_V32   = '\x5567954cd026cebfe486062cb75848e0f1c12e58'
 BASE_RELAY_ROUTER_V21           = '\x3ec130b627944cad9b2750300ecb0a695da522b6'
 BASE_RELAY_APPROVAL_PROXY_V21   = '\x58cc3e0aa6cd7bf795832a225179ec2d848ce3e7'
 BASE_RELAY_ROUTER_V2            = '\xf5042e6ffac5a625d4e7848e0b01373d8eb9e222'
@@ -528,6 +554,8 @@ ARB_RELAY_ROUTER_V30            = '\xb92fe925dc43a0ecde6c8b1a2709c170ec4fff4f'
 ARB_RELAY_APPROVAL_PROXY_V30    = '\xccc88a9d1b4ed6b0eaba998850414b24f1c315be'
 ARB_RELAY_ROUTER_V31            = '\xe6b730e58088884704cdf11cbe95c224d4d34154'
 ARB_RELAY_APPROVAL_PROXY_V31    = '\x5a0fa369d634f49c76b08dc6c299800c1a2af977'
+ARB_RELAY_ROUTER_V32            = '\x0729e2a4716d9f7dd17858d5d504426d228697f7'
+ARB_RELAY_APPROVAL_PROXY_V32    = '\x5567954cd026cebfe486062cb75848e0f1c12e58'
 ARB_RELAY_ROUTER_V21            = '\x3ec130b627944cad9b2750300ecb0a695da522b6'
 ARB_RELAY_APPROVAL_PROXY_V21    = '\x58cc3e0aa6cd7bf795832a225179ec2d848ce3e7'
 ARB_RELAY_ROUTER_V2             = '\xf5042e6ffac5a625d4e7848e0b01373d8eb9e222'
@@ -544,6 +572,8 @@ OP_RELAY_ROUTER_V30             = '\xb92fe925dc43a0ecde6c8b1a2709c170ec4fff4f'
 OP_RELAY_APPROVAL_PROXY_V30     = '\xccc88a9d1b4ed6b0eaba998850414b24f1c315be'
 OP_RELAY_ROUTER_V31             = '\xe6b730e58088884704cdf11cbe95c224d4d34154'
 OP_RELAY_APPROVAL_PROXY_V31     = '\x5a0fa369d634f49c76b08dc6c299800c1a2af977'
+OP_RELAY_ROUTER_V32             = '\x0729e2a4716d9f7dd17858d5d504426d228697f7'
+OP_RELAY_APPROVAL_PROXY_V32     = '\x5567954cd026cebfe486062cb75848e0f1c12e58'
 OP_RELAY_ROUTER_V21             = '\x3ec130b627944cad9b2750300ecb0a695da522b6'
 OP_RELAY_APPROVAL_PROXY_V21     = '\x58cc3e0aa6cd7bf795832a225179ec2d848ce3e7'
 OP_RELAY_ROUTER_V2              = '\xf5042e6ffac5a625d4e7848e0b01373d8eb9e222'
@@ -560,6 +590,8 @@ POLY_RELAY_ROUTER_V30           = '\xb92fe925dc43a0ecde6c8b1a2709c170ec4fff4f'
 POLY_RELAY_APPROVAL_PROXY_V30   = '\xccc88a9d1b4ed6b0eaba998850414b24f1c315be'
 POLY_RELAY_ROUTER_V31           = '\xe6b730e58088884704cdf11cbe95c224d4d34154'
 POLY_RELAY_APPROVAL_PROXY_V31   = '\x5a0fa369d634f49c76b08dc6c299800c1a2af977'
+POLY_RELAY_ROUTER_V32           = '\x0729e2a4716d9f7dd17858d5d504426d228697f7'
+POLY_RELAY_APPROVAL_PROXY_V32   = '\x5567954cd026cebfe486062cb75848e0f1c12e58'
 POLY_RELAY_ROUTER_V21           = '\x3ec130b627944cad9b2750300ecb0a695da522b6'
 POLY_RELAY_APPROVAL_PROXY_V21   = '\x58cc3e0aa6cd7bf795832a225179ec2d848ce3e7'
 POLY_RELAY_ROUTER_V2            = '\xf5042e6ffac5a625d4e7848e0b01373d8eb9e222'
@@ -575,6 +607,8 @@ BNB_RELAY_ROUTER_V30            = '\xb92fe925dc43a0ecde6c8b1a2709c170ec4fff4f'
 BNB_RELAY_APPROVAL_PROXY_V30    = '\xccc88a9d1b4ed6b0eaba998850414b24f1c315be'
 BNB_RELAY_ROUTER_V31            = '\xe6b730e58088884704cdf11cbe95c224d4d34154'
 BNB_RELAY_APPROVAL_PROXY_V31    = '\x5a0fa369d634f49c76b08dc6c299800c1a2af977'
+BNB_RELAY_ROUTER_V32            = '\x0729e2a4716d9f7dd17858d5d504426d228697f7'
+BNB_RELAY_APPROVAL_PROXY_V32    = '\x5567954cd026cebfe486062cb75848e0f1c12e58'
 BNB_RELAY_ROUTER_V21            = '\x3ec130b627944cad9b2750300ecb0a695da522b6'
 BNB_RELAY_APPROVAL_PROXY_V21    = '\x58cc3e0aa6cd7bf795832a225179ec2d848ce3e7'
 BNB_RELAY_ROUTER_V2             = '\xf5042e6ffac5a625d4e7848e0b01373d8eb9e222'
@@ -590,6 +624,8 @@ AVAX_RELAY_ROUTER_V30           = '\xb92fe925dc43a0ecde6c8b1a2709c170ec4fff4f'
 AVAX_RELAY_APPROVAL_PROXY_V30   = '\xccc88a9d1b4ed6b0eaba998850414b24f1c315be'
 AVAX_RELAY_ROUTER_V31           = '\xe6b730e58088884704cdf11cbe95c224d4d34154'
 AVAX_RELAY_APPROVAL_PROXY_V31   = '\x5a0fa369d634f49c76b08dc6c299800c1a2af977'
+AVAX_RELAY_ROUTER_V32           = '\x0729e2a4716d9f7dd17858d5d504426d228697f7'
+AVAX_RELAY_APPROVAL_PROXY_V32   = '\x5567954cd026cebfe486062cb75848e0f1c12e58'
 AVAX_RELAY_ROUTER_V21           = '\x3ec130b627944cad9b2750300ecb0a695da522b6'
 AVAX_RELAY_APPROVAL_PROXY_V21   = '\x58cc3e0aa6cd7bf795832a225179ec2d848ce3e7'
 AVAX_RELAY_ROUTER_V2            = '\xf5042e6ffac5a625d4e7848e0b01373d8eb9e222'
@@ -605,6 +641,8 @@ RH_RELAY_ROUTER_V30             = '\xb92fe925dc43a0ecde6c8b1a2709c170ec4fff4f'
 RH_RELAY_APPROVAL_PROXY_V30     = '\xccc88a9d1b4ed6b0eaba998850414b24f1c315be'
 RH_RELAY_ROUTER_V31             = '\xe6b730e58088884704cdf11cbe95c224d4d34154'
 RH_RELAY_APPROVAL_PROXY_V31     = '\x5a0fa369d634f49c76b08dc6c299800c1a2af977'
+RH_RELAY_ROUTER_V32             = '\x0729e2a4716d9f7dd17858d5d504426d228697f7'
+RH_RELAY_APPROVAL_PROXY_V32     = '\x5567954cd026cebfe486062cb75848e0f1c12e58'
 RH_RELAY_SOLVER_EOA             = '\xf70da97812cb96acdf810712aa562db8dfa3dbef'
 RH_RELAY_DEPOSITORY_OWNER_EOA   = '\xf61a305199fa1135d76ffab3752d42f55cbd775a'
 RH_RELAY_ALLOCATOR_EOA          = '\x63c1d3e9c646184529c5694630a01c00df171b56'
@@ -615,6 +653,8 @@ ARC_RELAY_ROUTER_V30            = '\xb92fe925dc43a0ecde6c8b1a2709c170ec4fff4f'
 ARC_RELAY_APPROVAL_PROXY_V30    = '\xccc88a9d1b4ed6b0eaba998850414b24f1c315be'
 ARC_RELAY_ROUTER_V31            = '\xe6b730e58088884704cdf11cbe95c224d4d34154'
 ARC_RELAY_APPROVAL_PROXY_V31    = '\x5a0fa369d634f49c76b08dc6c299800c1a2af977'
+ARC_RELAY_ROUTER_V32            = '\x0729e2a4716d9f7dd17858d5d504426d228697f7'
+ARC_RELAY_APPROVAL_PROXY_V32    = '\x5567954cd026cebfe486062cb75848e0f1c12e58'
 ARC_RELAY_ROUTER_V2             = '\xf5042e6ffac5a625d4e7848e0b01373d8eb9e222'
 ARC_RELAY_APPROVAL_PROXY_V2     = '\xbbbfd134e9b44bfb5123898ba36b01de7ab93d98'
 ARC_RELAY_SOLVER_EOA            = '\xf70da97812cb96acdf810712aa562db8dfa3dbef'

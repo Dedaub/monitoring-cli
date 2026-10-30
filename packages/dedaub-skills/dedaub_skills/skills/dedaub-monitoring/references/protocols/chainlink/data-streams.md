@@ -1,6 +1,6 @@
 # Chainlink Data Streams — Topics, Selectors, Addresses
 
-**Status:** addresses verified via `eth_getCode` (non-empty) on Ethereum, Base, BNB, Avalanche, Arbitrum, Optimism, Polygon mainnet on 2026-05-29. Topic0/selectors computed locally (keccak) and cross-checked against deployed `VerifierProxy 2.0.0` bytecode (Arbitrum) and live logs. Topics/selectors are chain-agnostic; addresses are network-specific.
+**Status:** addresses verified via `eth_getCode` (non-empty) on Ethereum, Base, BNB, Avalanche, Arbitrum, Optimism, Polygon mainnet on 2026-05-29. Topic0/selectors computed locally (keccak) and cross-checked against deployed `VerifierProxy 2.0.0` bytecode (Arbitrum) and live logs. Topics/selectors are chain-agnostic; addresses are network-specific. Re-checked on 2026-10-30: the Robinhood Chain VerifierProxy (from the Robinhood Chain docs, "Data Streams") added; the same literal is a VerifierProxy on Arc too (both checked live).
 
 Data Streams is a **pull-based** (consumer-initiated) low-latency oracle. Off-chain OCR3 reports are fetched via the Streams API/SDK, then verified on-chain by calling `VerifierProxy.verify()`. The proxy routes the report to the correct `Verifier` (by config digest), and — on fee-enabled chains — bills LINK/native via the `FeeManager`. There is **no continuous on-chain price feed**; events fire only when a consumer verifies a report.
 
@@ -77,6 +77,8 @@ All verified non-empty bytecode, 2026-05-29 — every listed VerifierProxy retur
 | Avalanche C-Chain | 43114 | `0x79BAa65505C6682F16F9b2C7F8afEBb1821BE3f6` | yes |
 | BNB Smart Chain | 56 | `0xF276a4BC8Da323EA3E8c3c195a4E2E7615a898d1` | yes |
 | Polygon PoS | 137 | `0xF276a4BC8Da323EA3E8c3c195a4E2E7615a898d1` | yes |
+| Robinhood Chain | 4663 | `0xcE73c8ad08CBDEaCa6078BF0627C8fe0a9a536E7` | yes (2026-10-30; `typeAndVersion()` = "VerifierProxy 2.0.0", 7,009 B; listed on docs.robinhood.com/chain/data-streams) |
+| Arc | 5042 | `0xcE73c8ad08CBDEaCa6078BF0627C8fe0a9a536E7` | yes (2026-10-30; the same literal and the same code as on Robinhood Chain; not checked against a Chainlink list) |
 
 > **BNB and Polygon share the same VerifierProxy address** (`0xF276…98d1`) — this is the value in Chainlink's canonical `StreamsNetworksData.ts` for both chains (deterministic deployment). Both verified independently on their respective RPCs.
 > Fee-enabled chains (FeeManager deployed, payment required): Arbitrum, Avalanche, Base, Optimism, and most L2s. On those, `verify()` must be funded (LINK approval or `msg.value` native).

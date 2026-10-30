@@ -1,6 +1,6 @@
 # Taiko native bridge (Bridge + vaults + SignalService) — Topics, Selectors, Addresses (Ethereum L1 ↔ Taiko Alethia; none of the seven other chains)
 
-**Status:** verified on 2026-09-29 and 2026-10-01 against live Ethereum RPC (code, EIP-1967 slots, owner/quota/resolver views, pinned-window and historical log counts, sample receipts), the canonical `taikoxyz/taiko-mono` protocol sources, the Taiko docs contract-address page, L2BEAT's verified-ABI discovery data, and `eth_getCode` on all eight target chains.
+**Status:** verified on 2026-09-29 and 2026-10-01 against live Ethereum RPC (code, EIP-1967 slots, owner/quota/resolver views, pinned-window and historical log counts, sample receipts), the canonical `taikoxyz/taiko-mono` protocol sources, the Taiko docs contract-address page, L2BEAT's verified-ABI discovery data, and `eth_getCode` on all eight target chains. Re-checked on 2026-10-30: the Inbox implementation rotated on 2026-10-19 (§3); the other proxy implementations are unchanged.
 **Scope:** the Taiko Alethia canonical bridge on Ethereum: the **Bridge** (messages and ETH escrow), the **ERC20Vault**, **ERC721Vault** and **ERC1155Vault** (token escrows), the **SignalService** (cross-chain signals and checkpoints), the **QuotaManager**, the address resolvers, and the rollup **Inbox** with its predecessor. Topics and selectors are chain-agnostic; addresses are network-specific. Taiko (chain id 167000) is not one of the eight targets. **Of the eight target chains, only Ethereum carries Taiko contracts** (§4).
 
 Every Taiko transfer is a bridge message. `Bridge.sendMessage` stores a signal in the SignalService and emits `MessageSent` with the full message struct; the vaults call it for tokens. On the destination chain, a relayer or the owner calls `processMessage` with a proof of the source signal; the bridge pays the ETH value and, for a vault message, calls the vault, which releases or mints the tokens. A message that fails becomes retriable; the source owner can **recall** it (refund) once it is proven failed.
@@ -184,7 +184,7 @@ All existence-checked with `eth_getCode`; implementations read from the EIP-1967
 
 | Role | Address | Notes |
 |---|---|---|
-| **Inbox** (current rollup) | `0x6f21C543a4aF5189eBdb0723827577e1EF57ef1f` | impl `0x5253D4C91e80b880DdB54B78E74082Abe066F6b9`; owner TaikoDAOController. |
+| **Inbox** (current rollup) | `0x6f21C543a4aF5189eBdb0723827577e1EF57ef1f` | impl `0xA18431d42C8dF9778905fBEa912aCF1881b49D2e` (23,058 B; since 2026-10-19, block 26,223,334; was `0x5253D4C91e80b880DdB54B78E74082Abe066F6b9`). The new impl still carries the `Proposed`/`Proved` topic0s of §1.5. Owner TaikoDAOController. |
 | Previous rollup contract | `0x06a9Ab27c7e2255df1815E6CC0168d7755Feb19a` | impl `0x38Dd73fed93F8051E7A0dDd6FB3b9E7C25668187`; owner TaikoDAOController (read live). Its role as the pre-Inbox rollup is unverified here. |
 | DefaultResolver (SharedResolver) | `0x8Efa01564425692d0a0838DC10E300BD310Cb43e` | impl `0xFca4F0Ab7B95EEf2e3A60EF2Bc0c42DdAA62E66D`. |
 | RollupAddressResolver | `0x5A982Fb1818c22744f5d7D36D0C4c9f61937b33a` | impl `0xE78659fbF234c84C909Cf317D84edc2f6C0D8413`. |

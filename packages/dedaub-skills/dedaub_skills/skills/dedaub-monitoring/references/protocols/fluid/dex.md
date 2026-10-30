@@ -1,6 +1,6 @@
 # Fluid — DEX (smart collateral / smart debt AMM) — Topics, Selectors, Addresses
 
-**Status:** topic0/selectors computed locally via keccak from `Instadapp/fluid-contracts-public` (`main`); factory + DEX Lite + counts re-verified on-chain **2026-06-05** (publicnode). Covers **DEX V1 (poolT1)** + **DEX Lite** (the next-gen singleton). There is **no separate "DEX V2"** product (see §3).
+**Status:** topic0/selectors computed locally via keccak from `Instadapp/fluid-contracts-public` (`main`); factory + DEX Lite + counts re-verified on-chain **2026-06-05** (publicnode). Covers **DEX V1 (poolT1)** + **DEX Lite** (the next-gen singleton). There is **no separate "DEX V2"** product (see §3). Re-checked on 2026-10-30: `deployments.md` marks `FluidDexLiteResolver` deprecated. Core factories unchanged. No Robinhood or Arc deployment (the repo adds only Plasma, not a target chain).
 **Scope:** Fluid **DEX** — an AMM whose liquidity IS the [`liquidity-layer.md`](liquidity-layer.md) (so the same capital can be lending collateral AND DEX liquidity — "smart collateral / smart debt"). Other modules: [`vaults.md`](vaults.md), [`lending.md`](lending.md), [`periphery.md`](periphery.md). Index: [`README.md`](README.md). FLUID/token: [`liquidity-layer.md`](liquidity-layer.md).
 **Key fact:** **DEX V1 (poolT1)** pools are deployed by the **DexFactory** `0x91716C4EDA1Fb55e84Bf8b4c7085f84285c19085` (same address on all 5 chains). **DEX Lite** is a separate, gas-optimized **singleton** (all pools in one contract) that is **Ethereum-mainnet-only** today. Both share liquidity with the Liquidity Layer, so DEX liquidity changes also surface as a Liquidity-Layer `LogOperate` in the same tx.
 
@@ -119,7 +119,7 @@ swapOut(bool swap0to1, uint256 amountOut, uint256 amountInMax, address to) -> ui
 |------|---------|-----------|
 | **FluidDexLite** (singleton core) | `0xBbcb91440523216e2b87052A99F69c604A7b6e00` | All Lite pools in one contract, keyed by `dexId`. `code=16412 B`. **ETH only** (empty on Base/Arb/Polygon/BNB). |
 | FluidDexLiteAdminModule | `0x305be0eAC8e3B118c358747de863A5779B26Dc5a` | delegatecall target for Lite admin/pool-init. ETH only. |
-| FluidDexLiteResolver | `0x12a47cEB96A952E8D4A6eA9FE3b40b79bbaeb4e9` | reads Lite state. ETH only. |
+| FluidDexLiteResolver | `0x12a47cEB96A952E8D4A6eA9FE3b40b79bbaeb4e9` | reads Lite state. ETH only. Marked **deprecated** in `deployments.md` (2026-10). |
 
 > DEX Lite has **no factory and no `totalDexes`** — pools are created by `initialize(...)` directly on the singleton; enumerate off-chain via `LogInitialize` or the resolver.
 
@@ -170,7 +170,7 @@ SEL_DEXLITE_SWAP_HOP             = '\x5bb49959'
 FLUID_DEX_FACTORY                = '\x91716c4eda1fb55e84bf8b4c7085f84285c19085'  -- all 5 chains
 FLUID_DEX_LITE                   = '\xbbcb91440523216e2b87052a99f69c604a7b6e00'  -- ETH only
 FLUID_DEX_LITE_ADMIN            = '\x305be0eac8e3b118c358747de863a5779b26dc5a'  -- ETH only
-FLUID_DEX_LITE_RESOLVER          = '\x12a47ceb96a952e8d4a6ea9fe3b40b79bbaeb4e9'  -- ETH only
+FLUID_DEX_LITE_RESOLVER          = '\x12a47ceb96a952e8d4a6ea9fe3b40b79bbaeb4e9'  -- ETH only; deprecated resolver
 ```
 
 ---

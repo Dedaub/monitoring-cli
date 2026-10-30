@@ -2,7 +2,7 @@
 
 **LI.FI** is a bridge and DEX aggregator. One contract, the **LiFiDiamond** (EIP-2535), takes the user's funds, runs optional swaps, takes fees and calls an underlying bridge (Across, Relay, Mayan, NEAR Intents, Stargate, deBridge DLN, Glacis, Gas.zip, CCTP through Polymer, and others) in the same transaction. LI.FI runs no bridge of its own: the value crosses chains through the underlying bridge, whose own reference doc covers the second leg.
 
-**Status:** verified on 2026-09-29 against live RPC on all eight chains (Arc added 2026-10-05), the canonical `lifinance/contracts` repository (`deployments/*.json`, `src/`) and the explorer-verified sources. Topics and selectors recomputed as `keccak256(signature)`; every address existence-checked with `eth_getCode`; the live facet table of every diamond read with `facets()`.
+**Status:** verified on 2026-09-29 against live RPC on all eight chains (Arc added 2026-10-05), the canonical `lifinance/contracts` repository (`deployments/*.json`, `src/`) and the explorer-verified sources. Topics and selectors recomputed as `keccak256(signature)`; every address existence-checked with `eth_getCode`; the live facet table of every diamond read with `facets()`. Re-checked on 2026-10-30: new M0Facet and five replaced facets (facets.md §3), new Permit2Proxy addresses (periphery.md), and a non-diamond `LegacyDiamondAddressVault` at `0x1231DEB6…` on Robinhood Chain (diamond.md §10).
 
 | File | Covers | Pattern | Chains (of the 9) |
 |------|--------|---------|-------------------|

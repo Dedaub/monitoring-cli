@@ -1,6 +1,6 @@
-# Multichain (Anyswap) Routers — Topics, Selectors, Addresses (Ethereum, Arbitrum, Optimism, Polygon, BNB, Avalanche; not Base or Robinhood)
+# Multichain (Anyswap) Routers — Topics, Selectors, Addresses (Ethereum, Arbitrum, Optimism, Polygon, BNB, Avalanche; not Base, Robinhood or Arc)
 
-**Status:** verified on 2026-09-29 against live RPC on all eight target chains, the canonical sources (`anyswap/anyswap-v1-core`: `AnyswapV3Router.sol`, `AnyswapV5Router.sol`, `AnyswapV6Router.sol`, `AnyswapV4ERC20.sol` to `AnyswapV6ERC20.sol`; `anyswap/multichain-smart-contracts`: `MultichainV7Router.sol` and its access-control and `SwapInfo` files), the verified explorer source of `AnyswapV4Router`, and the official Router V7 address page.
+**Status:** verified on 2026-09-29 against live RPC on all eight target chains, the canonical sources (`anyswap/anyswap-v1-core`: `AnyswapV3Router.sol`, `AnyswapV5Router.sol`, `AnyswapV6Router.sol`, `AnyswapV4ERC20.sol` to `AnyswapV6ERC20.sol`; `anyswap/multichain-smart-contracts`: `MultichainV7Router.sol` and its access-control and `SwapInfo` files), the verified explorer source of `AnyswapV4Router`, and the official Router V7 address page. Re-checked on 2026-10-30: no Multichain router on Arc (5042) (§9).
 **Scope:** every Multichain (formerly Anyswap) cross-chain router generation on the target chains: **AnyswapV3Router, AnyswapV4Router, AnyswapV6Router and MultichainV7Router**, plus the anyToken (`AnyswapV4ERC20` to `AnyswapV6ERC20`) events that the old Swapin/Swapout bridge mode emits. Six of the eight target chains have routers: Ethereum (1), Arbitrum One (42161), Optimism (10), Polygon PoS (137), BNB Smart Chain (56) and Avalanche C-Chain (43114). **Base (8453) and Robinhood Chain (4663) have none.** Topics and selectors are chain-agnostic; addresses are network-specific.
 
 **Multichain stopped in July 2023.** On 2023-07-06 about $126M to $130M left the MPC addresses that held the locked assets of its Fantom, Moonriver and Dogechain bridges (CoinDesk, 2023-07-06). Multichain wrote that "the lockup assets on the Multichain MPC address have been moved to an unknown address abnormally" and told users to stop using its services and revoke approvals. The routers were never paused on chain and have no pause function (V3 to V6). Use this file for two jobs: attribution of old flows (2021 to 2023), and monitoring of residual activity, which still happens in 2026 (§12, items 9 to 11).
@@ -242,9 +242,9 @@ At `0x6b7a87899490EcE95443e979cA9485CBE7E71522` Polygon has an anyToken (verifie
 | **AnyswapV6Router** (second instance) | `0x05f024C6F5a94990d32191D6f36211E3Ee33504e` | 17,681 B; V6 selectors in the bytecode; emitted the string `LogAnySwapOut` (§14). `mpc()` = `0x98c89980d1eae247ada3636ae27648f78e66e121`. |
 | **MultichainV7Router** | `0x1633D66Ca91cE4D81F63Ea047B7B19Beb92dF7f3` | 22,042 B. |
 
-## 9. Base (chain ID 8453) and Robinhood Chain (chain ID 4663) — no deployment
+## 9. Base (chain ID 8453), Robinhood Chain (chain ID 4663) and Arc (chain ID 5042) — no deployment
 
-`eth_getCode` returns `0x` on both chains at all 21 router literals of §3 to §8. Base launched in August 2023 and Robinhood Chain in 2026, after Multichain stopped. The official V7 page lists neither chain.
+`eth_getCode` returns `0x` on the three chains at all 21 router literals of §3 to §8 (Arc checked 2026-10-30). Base launched in August 2023, and Robinhood Chain and Arc in 2026, after Multichain stopped. The official V7 page lists none of these chains. The only literal of this file with code on Arc is the unrelated `BridgeV2` proxy `0x5523985926aa12ba58dc5ad00ddca99678d7227e` of gotcha 7 (2,227 B there).
 
 ---
 
@@ -260,6 +260,7 @@ At `0x6b7a87899490EcE95443e979cA9485CBE7E71522` Polygon has an anyToken (verifie
 | BNB Smart Chain | 56 | `0xf9736ec3926703e85C843FC972BD89A7f8E827C0` | `0xABd380327Fe66724FFDa91A87c772FB8D00bE488` | `0xe1d592c3322f1F714Ca11f05B6bC0eFEf1907859` | `0x400b971099e0ebFDa2C03a3063739cb5398734A6` |
 | Avalanche C-Chain | 43114 | `0x9b17bAADf0f21F03e35249e0e59723F34994F806` | `0xB0731d50C681C45856BFc3f7539D5f61d4bE81D8` | `0x833F307aC507D47309fD8CDD1F835BeF8D702a93`, `0x05f024C6F5a94990d32191D6f36211E3Ee33504e` | `0x1633D66Ca91cE4D81F63Ea047B7B19Beb92dF7f3` |
 | Robinhood Chain | 4663 | — | — | — | — |
+| Arc | 5042 | — | — | — | — |
 
 Chains outside the eight with Multichain routers include Fantom, Moonriver, Moonbeam, Gnosis, Celo, Cronos, Harmony, Dogechain and many more; the official V7 page lists Fantom at the shared V7 literal. **The list above is the floor of the known routers:** the router list of Multichain's own `bridges-server` adapter, the official V7 page, and the second Optimism V6 router (found as the `mpc()` of an anyToken). Multichain deployed other routers for single projects that may be missing.
 
@@ -378,7 +379,7 @@ ETH_JUL2023_WBTC_RECEIVER_EOA       = '\x622e5f32e9ed5318d3a05ee2932fd3e118347ba
 ETH_JUL2023_WETH_RECEIVER_EOA       = '\x418ed2554c010a0c63024d1da3a93b4dc26e5bb7'
 ETH_JUL2023_USDC_RECEIVER_A_EOA     = '\x027f1571aca57354223276722dc7b572a5b05cd8'
 ETH_JUL2023_USDC_RECEIVER_B_EOA     = '\xefeef8e968a0db92781ac7b3b7c821909ef10c88'
--- Base (8453) and Robinhood Chain (4663): no Multichain router (eth_getCode = 0x at all 21 router literals)
+-- Base (8453), Robinhood Chain (4663) and Arc (5042): no Multichain router (eth_getCode = 0x at all 21 router literals)
 ```
 
 ---

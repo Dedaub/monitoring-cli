@@ -1,6 +1,6 @@
 # Snowbridge (Polkadot ↔ Ethereum) — Topics, Selectors, Addresses (Ethereum + adaptors on Base, Arbitrum, Optimism)
 
-**Status:** verified on 2026-09-29 against Ethereum, Base, Arbitrum and Optimism RPC (`eth_getCode`, `eth_call`, EIP-1967 slot, `eth_getLogs`), `eth_getCode` on the other target chains, the `Snowfork/snowbridge` repository (contracts, `web/packages/registry/src/polkadot_mainnet_bridge_info.g.ts`, `contracts/scripts/l2-integration/across/constants/Mainnet.sol`), the Snowbridge docs, and Sourcify.
+**Status:** verified on 2026-09-29 against Ethereum, Base, Arbitrum and Optimism RPC (`eth_getCode`, `eth_call`, EIP-1967 slot, `eth_getLogs`), `eth_getCode` on the other target chains, the `Snowfork/snowbridge` repository (contracts, `web/packages/registry/src/polkadot_mainnet_bridge_info.g.ts`, `contracts/scripts/l2-integration/across/constants/Mainnet.sol`), the Snowbridge docs, and Sourcify. Re-checked on 2026-10-30: the Gateway implementation is unchanged, and Arc (5042) has no Snowbridge contract.
 **Scope:** the EVM side of Snowbridge, the trustless bridge between Polkadot (Asset Hub, Bridge Hub and other parachains) and Ethereum: the `Gateway` proxy, the `BeefyClient` light client, the `Agent` contracts that hold the escrowed funds, the `AgentExecutor`, and the Across-based L2 route (`SnowbridgeL1Adaptor` on Ethereum, `SnowbridgeL2Adaptor` on Base, Arbitrum and Optimism). Polkadot is not an EVM chain, so its side is not EVM-queryable. Topics and selectors are chain-agnostic; addresses are network-specific.
 
 **One Gateway, two protocol versions.** V1 uses channels and carries token transfers as `sendToken` → `TokenSent` + `OutboundMessageAccepted(channelID, nonce, messageID, payload)`; V2 uses one global nonce and XCM payloads: `v2_sendMessage` → `OutboundMessageAccepted(nonce, payload)`. Inbound (Polkadot → Ethereum) messages arrive through `submitV1` or `v2_submit`, which verify a Polkadot proof against the `BeefyClient` and dispatch commands (unlock or mint); each emits `InboundMessageDispatched` in its own version's format. Both versions live in the same Gateway and both are active (§9).
@@ -150,7 +150,8 @@ Only the `SnowbridgeL2Adaptor` exists on these chains (9,104 bytes each, verifie
 | Polygon PoS | 137 | — | — | — | no deployment: `eth_getCode` = `0x` at the Gateway, the Asset Hub agent and all four adaptor addresses; not in the registry |
 | BNB Smart Chain | 56 | — | — | — | same |
 | Avalanche C-Chain | 43114 | — | — | — | same |
-| Robinhood Chain | 4663 | — | — | — | same |
+| Robinhood Chain | 4663 | — | — | — | same; the Ethereum SpokePool literal `0x5c7BCd6E7De5423a257D81B442095A1a6ced35C5` holds an unrelated 522-byte contract here |
+| Arc | 5042 | — | — | — | same (2026-10-30) |
 
 The counterparty is **Polkadot** (Bridge Hub 1002, Asset Hub 1000, and parachains), outside the eight chains. The registry lists Ethereum chains 1, 10, 8453 and 42161 only.
 
@@ -231,7 +232,7 @@ ETH_SNOW_BEEFY_RELAY_EOA         = '\xb8124b07467e46de73eb5c73a7b1e03863f18062'
 BASE_SNOW_L2_ADAPTOR             = '\x9e41656f3457f21fd566da6e8e9d9158f1390122'
 ARB_SNOW_L2_ADAPTOR              = '\x16543a52030b9525a95bc41ab5594e8514694203'
 OP_SNOW_L2_ADAPTOR               = '\x523309b0fdf6990383bce3fbe1283940b3b6cbc3'
--- Polygon, BNB, Avalanche, Robinhood: no deployment
+-- Polygon, BNB, Avalanche, Robinhood, Arc: no deployment
 ```
 
 ---

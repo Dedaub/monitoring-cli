@@ -1,7 +1,7 @@
 # Chainlink LINK Token (ERC-677) — Topics, Selectors, Addresses
 
-**Status:** verified 2026-05-29. Addresses verified via `eth_getCode` (non-empty) + `symbol()` on each chain's publicnode RPC; topic0/selectors computed locally (keccak).
-**Scope:** LINK on Ethereum (1), Base (8453), BNB Smart Chain (56), Avalanche C-Chain (43114), Arbitrum One (42161), Optimism (10), Polygon PoS (137).
+**Status:** verified 2026-05-29. Addresses verified via `eth_getCode` (non-empty) + `symbol()` on each chain's publicnode RPC; topic0/selectors computed locally (keccak). Re-checked on 2026-10-30: LINK on Robinhood Chain and Arc added from the CCIP Directory `tokens.json` (both checked live).
+**Scope:** LINK on Ethereum (1), Base (8453), BNB Smart Chain (56), Avalanche C-Chain (43114), Arbitrum One (42161), Optimism (10), Polygon PoS (137), Robinhood Chain (4663), Arc (5042).
 
 LINK is an **ERC-677** token — ERC-20 plus `transferAndCall(address, uint256, bytes)`, which transfers and then calls `onTokenTransfer` on the recipient in one tx. Every Chainlink service that bills in LINK (VRF subscriptions, Automation funding, CCIP fees, Functions, Data Streams) is funded via `transferAndCall`, not `approve`+`transferFrom`. So to attribute LINK funding flows you must watch the **4-arg `Transfer(address,address,uint256,bytes)`** event, not just the standard 3-arg ERC-20 `Transfer`.
 
@@ -46,6 +46,8 @@ All verified via `eth_getCode` + `symbol()`.
 | Arbitrum One (42161) | `0xf97f4df75117a78c1A5a0DBb814Af92458539FB4` | LINK | native (Arbitrum gateway) |
 | Optimism (10) | `0x350a791Bfc2C21F9Ed5d10980Dad2e2638ffa7f6` | LINK | native |
 | Polygon PoS (137) | `0xb0897686c545045aFc77CF20eC7A532E3120E0F1` | LINK | ERC-677 (canonical for Chainlink) |
+| Robinhood Chain (4663) | `0x492641F648a4986844848E0beFE66D14817bCE34` | LINK | CCIP burn-and-mint token (7,756 B, 18 decimals, not a proxy; `transferAndCall` `0x4000aea0` and `mint`/`burn` present); CCIP pool `0x3201a20D2a33820C0DaC8Bc93C4819755C2a8c7F` ([ccip.md](ccip.md) §4.7) |
+| Arc (5042) | `0x76a443768A5e3B8d1AED0105FC250877841Deb40` | LINK | the same build (7,756 B, 18 decimals); CCIP pool `0x172C2043B66D0A498FB7d6F56d04f52bEa4cAc68` ([ccip.md](ccip.md) §4.7b). The same literal is CCIPHome on Ethereum and a CCIP OnRamp on Arbitrum and Optimism. |
 
 ---
 
@@ -90,6 +92,8 @@ AVAX_LINK  = '\x5947bb275c521040051d82396192181b413227a3'
 ARB_LINK   = '\xf97f4df75117a78c1a5a0dbb814af92458539fb4'
 OP_LINK    = '\x350a791bfc2c21f9ed5d10980dad2e2638ffa7f6'
 POL_LINK   = '\xb0897686c545045afc77cf20ec7a532e3120e0f1'
+RH_LINK    = '\x492641f648a4986844848e0befe66d14817bce34'
+ARC_LINK   = '\x76a443768a5e3b8d1aed0105fc250877841deb40'
 -- pegswap
 BNB_PEGSWAP = '\x1fcc3b22955e76ca48bf025f1a6993685975bb9e'
 POL_PEGSWAP = '\xaa1dc356dc4b18f30c347798fd5379f3d77abc5b'

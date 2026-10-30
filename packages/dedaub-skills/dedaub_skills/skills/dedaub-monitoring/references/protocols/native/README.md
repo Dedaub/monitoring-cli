@@ -1,6 +1,6 @@
 # Native (native.org) — Protocol Reference Index
 
-**Status:** verified against live RPC and the `Native-org/native-v2-core` repo + Native docs on 2026-06-02. **Re-checked 2026-10-05:** NativeRouter V6 / NativeRFQPool V6 added (V3 and V4 phase out by end of October 2026), Robinhood Chain added, V3/V4/V6 pools now live on every deployed chain, CreditVault owners rotated.
+**Status:** verified against live RPC and the `Native-org/native-v2-core` repo + Native docs on 2026-06-02. **Re-checked 2026-10-05:** NativeRouter V6 / NativeRFQPool V6 added (V3 and V4 phase out by end of October 2026), Robinhood Chain added, V3/V4/V6 pools now live on every deployed chain, CreditVault owners rotated. **Re-checked 2026-10-30:** Arc has an unlisted, idle V4-build router + RFQ pool + CreditVault (no markets, no recent logs).
 
 Native is an on-chain liquidity platform built from **two interlocking product lines** rather than
 linear versions. It is an **RFQ / PMM DEX backed by an on-chain credit pool**, not an AMM: off-chain
@@ -34,7 +34,7 @@ from a shared credit vault on demand. The two halves are split into one file eac
   no factory, no separate liquidation engine.** `SignerSet` rotation is a security-critical event to watch.
 - **Chain coverage (5 of the 9 targets).** Both halves are deployed on **Ethereum (1), BNB (56),
   Arbitrum (42161), Base (8453), Robinhood Chain (4663)** and **absent on Avalanche (43114), Optimism (10),
-  Polygon PoS (137), Arc (5042)** (`eth_getCode = 0x`, re-confirmed 2026-10-05). The official page also lists Monad, X Layer and Morph.
+  Polygon PoS (137)** (`eth_getCode = 0x`, re-confirmed 2026-10-05). **Arc (5042)** has an unlisted, idle V4-build set with an empty CreditVault (2026-10-30; dex.md §6b). The official page also lists Monad, X Layer and Morph.
 - **Address reuse is a trap.** Routers are *not* CREATE2-identical across chains (same byte-length per role,
   different bytecode + address). Several **NativeLPToken addresses collide across ETH/BNB** (same address,
   different underlying). Always key on **`(chainId, address)`** and confirm identity via `eip712Domain()` /
@@ -52,7 +52,7 @@ from a shared credit vault on demand. The two halves are split into one file eac
 | Avalanche C-Chain | 43114 | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | — |
 | Optimism | 10 | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | — |
 | Polygon PoS | 137 | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | — |
-| Arc | 5042 | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | — |
+| Arc | 5042 | ✗ | `0x5d4c35e9…` (unlisted, idle) | ✗ | ✓ V4 build `0xeea56d9b…` | ✗ | `0xab6c4485…` | 0 |
 
 > Every deployed chain now has a V6, a V4 and a V3 `NativeRFQPool`, all with live `RFQTrade` (2026-10-05).
 > **Index the V6 pools:** V3 and V4 are phased out by end of October 2026. Keep indexing `NativePoolUpdated`

@@ -1,6 +1,6 @@
-# UniversalX (Particle Network) — Topics, Selectors, Addresses (Universal Accounts v1 liquidity pools on Ethereum, Base, Arbitrum, Optimism, Polygon, BNB, Avalanche; current v2 contracts not published; NOT Robinhood for v1)
+# UniversalX (Particle Network) — Topics, Selectors, Addresses (Universal Accounts v1 liquidity pools on Ethereum, Base, Arbitrum, Optimism, Polygon, BNB, Avalanche; current v2 contracts not published; NOT Robinhood or Arc for v1)
 
-**Status:** verified on 2026-09-29 against live RPC on all eight target chains, the DefiLlama UniversalX bridge adapter (the only public list of UniversalX pool addresses), the UniversalX and Particle Network docs, the `@particle-network/universal-account-sdk` 3.0.1 package, the Blockscout explorers and sample receipts. Every topic0 and selector was recomputed as `keccak256(signature)`. Every address was existence-checked with `eth_getCode`; proxy slots, `owner()` and `paused()` were read live.
+**Status:** verified on 2026-09-29 against live RPC on all eight target chains, the DefiLlama UniversalX bridge adapter (the only public list of UniversalX pool addresses), the UniversalX and Particle Network docs, the `@particle-network/universal-account-sdk` 3.0.1 package, the Blockscout explorers and sample receipts. Every topic0 and selector was recomputed as `keccak256(signature)`. Every address was existence-checked with `eth_getCode`; proxy slots, `owner()` and `paused()` were read live. Re-checked on 2026-10-30: SDK 3.0.1 is still the latest release, and it has no Arc (5042) entry; no v1 pool has code on Arc.
 **Scope:** the on-chain liquidity pools of **Universal Accounts v1**, through which UniversalX (Particle Network's chain-abstracted trading app) moved user value between chains, and what is known about the **v2** system that replaced it. Topics and selectors are chain-agnostic. Addresses are network-specific.
 
 **How it works.** A UniversalX user holds a **Universal Account** (UA): an ERC-4337 smart-contract account (v1) or an EIP-7702-delegated EOA (v2, the SDK default since 3.0.0). Deposits are plain transfers to the user's UA address. A cross-chain action is a set of user operations, executed through the ERC-4337 EntryPoint by Particle's bundlers: on the source chain the UA pays into Particle's **liquidity pool** (`Deposited`), and on the destination chain the pool pays the UA (`Released`). Particle's L1 (the Particle Chain) orders and settles these; solvers are operated by Particle.
@@ -88,10 +88,11 @@ All are EIP-1967 transparent proxies (1,159 B) deployed by `0xac6a87c681a5ed4cb5
 | Polygon PoS (137) | `0xde5af64abc426d63c3bcf13d8f672948227a745a` | `0xd75c7d6534f6054a5573297b2f57c07bcbe6ed58` | `0xe3c609aedfe582ab3a96806f959a7372c3c17589` | `0xdf51b03712c9b398de18dfb4c60c9e1bbcaa2e0e` | false | 2026-05-26 14:41 UTC |
 | Avalanche C-Chain (43114) | `0xde5af64abc426d63c3bcf13d8f672948227a745a` | `0xb29aa971984f8b1a124e2a76334b9f519bd6ab35` | `0xe3c609aedfe582ab3a96806f959a7372c3c17589` | `0xdf51b03712c9b398de18dfb4c60c9e1bbcaa2e0e` | false | not read |
 | Robinhood Chain (4663) | — | — | — | — | — | `eth_getCode` = `0x` at every pool address |
+| Arc (5042) | — | — | — | — | — | `eth_getCode` = `0x` at every pool address (2026-10-30) |
 
 **Same address, other contracts.** `0x3762a79b34dfb6774cfd45dbf5fd9a2780873783` and `0x73791161b3d3a6fedf2b17fb79810b277c5ce517` also have code on Polygon (same deployer); they logged only their own deployment (initialization, upgrade, ownership) and no pool event. `0x3762a79b34dfb6774cfd45dbf5fd9a2780873783` on Arbitrum is a 15,293 B non-proxy contract. `0x9cea88ee39b6cc09c478942bbf83bfa77d87b5f3` on Ethereum is the second pool's implementation, not a pool.
 
-**Rejected leads** (contracts that emit the same `Deposited(address,uint256,address)` topic): BNB `0xde7080148044e659fefba3c650c9b16090cb5ecd` (94 `Deposited` in the window; a proxy whose implementation has `Deposited` but no `Released`, `Refunded` or `Paused` topic, with another admin `0x40497b0b682118c82737fd75a23720405c9d0c11` and owner `0x477f05d5382d722d6f23167dd3d3bbe296d4aa47`); BNB `0xa53b869c883b5036ddf8d7a12b7618e4612c503e` (4 in the window, not in any UniversalX list); Polygon `0xea459c173753da4126e665530e6c82ccb7bf370a` (verified `Pyromancy`, an unrelated game). None is a UniversalX contract by any source.
+**Rejected leads** (contracts that emit the same `Deposited(address,uint256,address)` topic): BNB `0xde7080148044e659fefba3c650c9b16090cb5ecd` (94 `Deposited` in the window; a proxy whose implementation has `Deposited` but no `Released`, `Refunded` or `Paused` topic, with another admin `0x40497b0b682118c82737fd75a23720405c9d0c11` and owner `0x477f05d5382d722d6f23167dd3d3bbe296d4aa47`); BNB `0xa53b869c883b5036ddf8d7a12b7618e4612c503e` (4 in the window, not in any UniversalX list; a 76-byte contract sits at the same literal on Robinhood Chain and Arc); Polygon `0xea459c173753da4126e665530e6c82ccb7bf370a` (verified `Pyromancy`, an unrelated game). None is a UniversalX contract by any source.
 
 **Particle operators seen in the samples** (EOAs; not in an official list): bundlers `0x7f0fa0bab21c6749f12116aa8cbab7bbae8f50f2` and `0x596680f2ea1bdb041570c74fb5fc8c0c0a9fad80` (funded by the pool deployer `0xac6a87c681a5ed4cb58bc4fa7bf81a83b928c83c`), the `withdraw` caller `0xdf51b03712c9b398de18dfb4c60c9e1bbcaa2e0e`.
 
@@ -109,6 +110,7 @@ All are EIP-1967 transparent proxies (1,159 B) deployed by `0xac6a87c681a5ed4cb5
 | BNB Smart Chain | 56 | `0x9cea88ee39b6cc09c478942bbf83bfa77d87b5f3` | 0 pool events | supported; unpublished |
 | Avalanche C-Chain | 43114 | `0xde5af64abc426d63c3bcf13d8f672948227a745a` | 0 pool events | not in the v2 chain list |
 | Robinhood Chain | 4663 | — (`0x`) | — | **supported by the SDK 3.0.1** (EIP-7702 mode only; USDG `0x5fc5360d0400a0fd4f2af552add042d716f1d168`); contracts unpublished |
+| Arc | 5042 | — (`0x`) | — | not in the SDK 3.0.1 chain list |
 
 Universal Accounts v2 chains (Particle docs and SDK 3.0.1): Ethereum, BNB, Base, Arbitrum, X Layer, Robinhood Chain, Solana. Primary assets: ETH, USDT, USDC, SOL, BNB, and USDG on Robinhood. UniversalX uses EVM chain ids (Solana = 101 in the SDK).
 
@@ -168,6 +170,7 @@ ETH_UNIVERSALX_OPERATOR_EOA       = '\xdf51b03712c9b398de18dfb4c60c9e1bbcaa2e0e'
 ETH_UNIVERSALX_PAYMASTER          = '\xf7bb387ecdea4b8ffff53e6b1a8cd9f93bfbdcc4'
 ETH_ERC4337_ENTRYPOINT_V06        = '\x5ff137d4b0fdcd49dca30c7cf57e578a026d2789'
 -- Robinhood (4663): no v1 pool; v2 contracts unpublished
+-- Arc (5042): no v1 pool; not a v2 chain
 ```
 
 ---

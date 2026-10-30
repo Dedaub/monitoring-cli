@@ -1,6 +1,6 @@
 # UwU Lend — Topics, Selectors, Addresses (Ethereum mainnet only)
 
-**Status:** verified against live Ethereum mainnet RPC (`eth_getCode` / `eth_call` / `eth_getStorageAt` / `eth_getLogs`) and the canonical `aave/protocol-v2` event/function ABIs on 2026-06-08. Every topic0/selector recomputed locally as `keccak256(signature)`; the LendingPool registry was walked on-chain from the live `LendingPoolAddressesProvider`.
+**Status:** verified against live Ethereum mainnet RPC (`eth_getCode` / `eth_call` / `eth_getStorageAt` / `eth_getLogs`) and the canonical `aave/protocol-v2` event/function ABIs on 2026-06-08. Every topic0/selector recomputed locally as `keccak256(signature)`; the LendingPool registry was walked on-chain from the live `LendingPoolAddressesProvider`. Re-checked on 2026-10-30: `liquidationCall` present as `PUSH3 0xa718a9` in the live LendingPool impl `0x05bfa915…` and in the CollateralManager `0x2E9F846c…`.
 **Scope:** the ENTIRE UwU Lend protocol — an **Aave V2 soft-fork**. Core lending (LendingPool behind `InitializableImmutableAdminUpgradeabilityProxy`, LendingPoolAddressesProvider, LendingPoolConfigurator, uTokens=aTokens, variable + stable debt tokens, the AaveOracle-style price oracle, LendingPoolCollateralManager, DefaultReserveInterestRateStrategy) plus the UWU reward periphery (UWU token, ChefIncentivesController, MultiFeeDistribution, WETHGateway). The user requested Ethereum, Base, BNB, Avalanche, Arbitrum, Optimism, Polygon — **UwU Lend exists on Ethereum (chain 1) ONLY.** All six other chains return `0x` (no bytecode) for every UwU contract — recorded as a verified absence in §5, not an omission. **Topics + selectors are chain-agnostic but UwU is single-chain; all addresses are Ethereum-mainnet.**
 
 UwU Lend is a fork of **Aave V2** (`LendingPool`, not V3's `Pool`; supply event is **`Deposit`**, not `Supply`). Each reserve has a **uToken** (rebasing aToken, named e.g. "uWETH" / "UwU interest bearing WETH"), a `variableDebtToken`, and a `stableDebtToken`. Core contracts are **upgradeable proxies** (EIP-1967 impl slot; the proxy admin is an *immutable* constructor arg, not the EIP-1967 admin slot — so admin-slot reads return empty even though the contract is a proxy). The reward periphery (ChefIncentivesController, MultiFeeDistribution, UWU token) is **immutable** (plain, non-proxy). The registry root is the **`LendingPoolAddressesProvider` `0x011c0d38…f7f1fb`**, owned by the team multisig `0xb8416eac…3bc20d`; resolve everything from it (`getLendingPool()`, `getPriceOracle()`, etc.).
@@ -127,7 +127,7 @@ CIC `0xf8390b84…d6c568`, MFD `0x630de118…2bdd44`. Topics confirmed from live
 
 ## 2. Function signatures (chain-agnostic — `keccak256(sig)[0:4]`)
 
-All LendingPool selectors below recomputed locally and verified **present in the live LendingPool impl `0x05bfa915…25ea4d` bytecode (21,953 bytes)** on 2026-06-08 — **except `liquidationCall`** (see §8.2). `borrow`/`repay`/`withdraw`/`flashLoan`/`liquidationCall` selectors are **identical to Aave V2 and V3** (same signatures); only `deposit` (V2) vs `supply` (V3) differ. Disambiguate by Pool address.
+All LendingPool selectors below recomputed locally and verified **present in the live LendingPool impl `0x05bfa915…25ea4d` bytecode (21,953 bytes)** on 2026-06-08. `liquidationCall` is present as `PUSH3 0xa718a9` (see §5.2). `borrow`/`repay`/`withdraw`/`flashLoan`/`liquidationCall` selectors are **identical to Aave V2 and V3** (same signatures); only `deposit` (V2) vs `supply` (V3) differ. Disambiguate by Pool address.
 
 ### 2.1 LendingPool — state-changing
 
@@ -140,7 +140,7 @@ All LendingPool selectors below recomputed locally and verified **present in the
 | `0x94ba89a2` | `swapBorrowRateMode(address asset, uint256 rateMode)` | Stable↔variable (functional in V2). PRESENT. |
 | `0xcd112382` | `rebalanceStableBorrowRate(address asset, address user)` | PRESENT. |
 | `0x5a3b74b9` | `setUserUseReserveAsCollateral(address asset, bool useAsCollateral)` | PRESENT. |
-| `0x00a718a9` | `liquidationCall(address collateralAsset, address debtAsset, address user, uint256 debtToCover, bool receiveAToken)` | Emits `LiquidationCall`. **ABSENT from impl dispatcher** — delegatecalls LendingPoolCollateralManager (§8.2). **Detect via the event.** |
+| `0x00a718a9` | `liquidationCall(address collateralAsset, address debtAsset, address user, uint256 debtToCover, bool receiveAToken)` | Emits `LiquidationCall`. In impl dispatcher as `PUSH3 0xa718a9`; delegatecalls LendingPoolCollateralManager (§5.2). **Detect via the event.** |
 | `0xab9c4b5d` | `flashLoan(address receiverAddress, address[] assets, uint256[] amounts, uint256[] modes, address onBehalfOf, bytes params, uint16 referralCode)` | PRESENT. |
 | `0xd5ed3933` | `finalizeTransfer(address asset, address from, address to, uint256 amount, uint256 balanceFromBefore, uint256 balanceToBefore)` | uToken-only callback. PRESENT. |
 | `0x7a708e92` | `initReserve(address,address,address,address,address)` | Configurator-only. |
@@ -304,9 +304,9 @@ EIP-1967 implementation slot: `0x360894a13ba1a3210667c828492db98dca3e2076cc3735a
 
 **Not proxies (impl slot empty):** LendingPoolAddressesProvider, price oracle `0xaC4A2aC7…`, LendingRateOracle, FallbackOracle, LendingPoolCollateralManager, the rate strategies, WETHGateway, ChefIncentivesController, MultiFeeDistribution, UWU token. The CIC and MFD are confirmed **immutable** (impl slot `0x0`, plain bytecode 18,694 / 11,026 bytes).
 
-### 5.2 The `liquidationCall` dispatcher gotcha
+### 5.2 The `liquidationCall` PUSH3 detection trap
 
-The live LendingPool impl `0x05bfa915…25ea4d` (21,953 bytes) does **not** contain selector `0x00a718a9` (`liquidationCall`) — raw + `63`-prefixed PUSH4 scan = 0 occurrences — while `deposit` (`e8eda9df`), `withdraw`, `borrow`, `repay`, `flashLoan`, `finalizeTransfer` are all present. The LendingPoolCollateralManager `0x2E9F846c…` (10,735 bytes) also lacks the selector in its bytecode (it's reached by `delegatecall` and runs the liquidation logic). Nonetheless `LiquidationCall` events fire normally (30 in a 40k-block window) and liquidations execute. **Detect UwU liquidations by the `LiquidationCall` event topic0 `0xe413a321…`, never by the function selector.** Liquidations are also usually routed through bots, so `tx.to` ≠ LendingPool.
+The live LendingPool impl `0x05bfa915…25ea4d` (21,953 bytes) **does** contain selector `0x00a718a9` (`liquidationCall`), as `PUSH3 0xa718a9` (bytes `62a718a9`), the same as `deposit` (`e8eda9df`), `withdraw`, `borrow`, `repay`, `flashLoan`, `finalizeTransfer`. The selector starts with a zero byte, so a raw scan for `00a718a9` or a `63`-prefixed `PUSH4` scan returns 0 and gives a false "absent" result (re-checked 2026-10-30). The LendingPoolCollateralManager `0x2E9F846c…` (10,735 bytes) also contains it as `PUSH3`; the Pool reaches it by `delegatecall`, and it runs the liquidation logic. An `eth_call` of `liquidationCall` on the Pool with zero arguments reverts with the Aave V2 error string `"23"`. **Rule:** a selector that starts with `0x00` appears as `PUSH3`, so scan for both forms. `LiquidationCall` events fire normally (30 in a 40k-block window). **Detect UwU liquidations by the `LiquidationCall` event topic0 `0xe413a321…`.** Liquidations are also usually routed through bots, so `tx.to` ≠ LendingPool.
 
 ---
 
@@ -327,7 +327,7 @@ The live LendingPool impl `0x05bfa915…25ea4d` (21,953 bytes) does **not** cont
 3. **The price oracle is the #1 risk surface.** UwU was exploited TWICE in June 2024 (~$24M total) via manipulation of the **sUSDe/USDe** feed into the `AaveOracle`-style aggregator `0xaC4A2aC7…772598`. **Monitor `AssetSourceUpdated` (topic `0x22c5b7b2…`) on the oracle, `FallbackOracleUpdated` (`0xce7a780d…`), and large/abrupt `getAssetPrice` deltas for sUSDe / sDAI / wMEMO / sSPELL / SifuM and the other thin LST/staked-token collaterals.** Several feeds (incl. sUSDe-class) resolve through the fallback oracle `0x9bC63330…698B9` rather than a per-asset Chainlink source — read `getSourceOfAsset` per asset.
 4. **uToken vs variableDebtToken `Mint`/`Burn` have DIFFERENT topic0s** (V2 behavior). uToken `Mint`=`0x4c209b5f`, varDebt `Mint`=`0x2f00e3cd`. Match on `(topic0, emitting address)`.
 5. **`Withdraw` / `LiquidationCall` / `ReserveDataUpdated` / collateral-enabled/disabled topics are shared with Aave V2 & V3** — disambiguate by the LendingPool address `0x2409aF02…` (single chain, so unambiguous here).
-6. **Detect liquidations by the `LiquidationCall` event, not the selector** (§5.2). `liquidationCall` (`0x00a718a9`) is absent from the Pool impl bytecode (delegatecalls the CollateralManager `0x2E9F846c…`), and bots route them so `tx.to` ≠ Pool.
+6. **Detect liquidations by the `LiquidationCall` event, not the selector** (§5.2). Bots route liquidations so `tx.to` ≠ Pool. `liquidationCall` (`0x00a718a9`) is in the Pool impl as `PUSH3 0xa718a9` and delegatecalls the CollateralManager `0x2E9F846c…`.
 7. **uTokens rebase.** Store `scaledBalanceOf`, reconstruct with `liquidityIndex` (ray). Same for debt with `variableBorrowIndex`.
 8. **`onBehalfOf` ≠ `tx.from`.** Attribute positions to `onBehalfOf`/`user` from the event (WETHGateway `0xe08D97e1…`, credit delegation, liquidation bots).
 9. **Stable rate is real in V2.** `borrowRateMode`/`rateMode` 1=stable, 2=variable; `Swap`, `RebalanceStableBorrowRate`, and per-reserve `stableDebtToken`s are active.
@@ -385,7 +385,7 @@ SEL_WITHDRAW                 = '\x69328dec'
 SEL_BORROW                   = '\xa415bcad'
 SEL_REPAY                    = '\x573ade81'
 SEL_SWAP_BORROW_RATE_MODE    = '\x94ba89a2'
-SEL_LIQUIDATION_CALL         = '\x00a718a9'   -- ABSENT from impl bytecode; detect via event
+SEL_LIQUIDATION_CALL         = '\x00a718a9'   -- in impl as PUSH3 0xa718a9; detect via event
 SEL_FLASHLOAN                = '\xab9c4b5d'
 SEL_SET_USE_RESERVE_AS_COLL  = '\x5a3b74b9'
 SEL_FINALIZE_TRANSFER        = '\xd5ed3933'
@@ -428,7 +428,7 @@ EIP1967_IMPL_SLOT            = '\x360894a13ba1a3210667c828492db98dca3e2076cc3735
 ## 9. Verification & sources
 
 - **Event topic0 / function selectors:** every value recomputed locally as `keccak256(signature)` (no param names, `uint`→`uint256`, indexed irrelevant). Cross-checked against live `eth_getLogs` on the UwU LendingPool `0x2409aF02…` (Deposit/Withdraw/FlashLoan/LiquidationCall=30/ReserveDataUpdated all present in a 40k-block window), the uWETH token (uToken `Mint`/`Burn`), the Configurator (`CollateralConfigurationChanged`), the oracle (`AssetSourceUpdated`), the CIC (`BalanceUpdated`=120 logs), and the MFD (`Minted`/`Withdrawn`). The MFD `Minted(address,uint256)` topic0 was resolved against the openchain signature DB and re-confirmed by local keccak.
-- **Function presence:** selectors scanned in the live LendingPool impl `0x05bfa915…25ea4d` bytecode (deposit/withdraw/borrow/repay/flashLoan/finalizeTransfer/swapBorrowRateMode/setUserUseReserveAsCollateral/getReserveData/getUserAccountData PRESENT; `liquidationCall` `0x00a718a9` ABSENT — §5.2).
+- **Function presence:** selectors scanned in the live LendingPool impl `0x05bfa915…25ea4d` bytecode (deposit/withdraw/borrow/repay/flashLoan/finalizeTransfer/swapBorrowRateMode/setUserUseReserveAsCollateral/getReserveData/getUserAccountData PRESENT; `liquidationCall` `0x00a718a9` PRESENT as `PUSH3 0xa718a9` — §5.2).
 - **Addresses:** walked on-chain from the live `LendingPoolAddressesProvider` `0x011c0d38…f7f1fb` (`getLendingPool`/`getLendingPoolConfigurator`/`getPriceOracle`/`getLendingRateOracle`/`getAddress("COLLATERAL_MANAGER")`); reserves enumerated via `LendingPool.getReservesList()` (19) and `getReserveData(asset)` for each uToken/stableDebt/variableDebt/strategy; symbols/decimals via `symbol()`/`decimals()`. CIC↔MFD wiring via uToken `getIncentivesController()` → CIC `0xf8390b84…`, CIC `.rewardMinter()` → MFD `0x630De118…`. Every address existence-checked via `eth_getCode`.
 - **Proxies:** EIP-1967 impl slot `0x360894…382bbc` read live per contract; admin slot reads empty (immutable-admin proxy). CIC/MFD/UWU confirmed non-proxy (impl slot `0x0`).
 - **Oracle units:** `getAssetPrice` returns 8-dec USD (WETH=$1689.18, DAI=$0.9995, etc.) — verified live; fallback oracle `0x9bC63330…698B9` from `getFallbackOracle()`.

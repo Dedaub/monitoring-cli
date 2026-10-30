@@ -1,6 +1,6 @@
 # Polygon PoS Bridge — Topics, Selectors, Addresses (Ethereum L1 ⇄ Polygon PoS 137)
 
-**Status:** verified against live RPC on every listed chain and the canonical `0xPolygon/pos-portal`, `0xPolygon/fx-portal`, and `maticnetwork/contracts` (Plasma/RootChain) repos on 2026-06-09. Extended on 2026-09-29 with the Plasma withdrawal leg (`WithdrawManagerProxy`, `ExitNFT`, the Plasma predicates) and the Robinhood Chain (4663) check.
+**Status:** verified against live RPC on every listed chain and the canonical `0xPolygon/pos-portal`, `0xPolygon/fx-portal`, and `maticnetwork/contracts` (Plasma/RootChain) repos on 2026-06-09. Extended on 2026-09-29 with the Plasma withdrawal leg (`WithdrawManagerProxy`, `ExitNFT`, the Plasma predicates) and the Robinhood Chain (4663) check. Re-checked on 2026-10-30: the StakeManager impl rotated on 2026-10-13 (§7.1); all bridge proxy impls are unchanged.
 **Scope:** the canonical **Polygon PoS Bridge** — the official trustless bridge between **Ethereum mainnet (chain 1)** and **Polygon PoS (chain 137)**. It is made of three on-chain subsystems that all share the same L1↔137 axis: (a) the **PoS portal** (RootChainManager + token predicates ⇄ ChildChainManager + child tokens), (b) the **FX portal** (FxRoot/FxChild arbitrary-message tunnel), and (c) the legacy **Plasma bridge + checkpoint layer** (DepositManager / WithdrawManager / RootChain). Topics and selectors are **chain-agnostic**; addresses are **network-specific**. **The bridge contracts exist on exactly two chains: Ethereum (L1) and Polygon PoS (137). They are NOT deployed on Base, BNB, Avalanche, Arbitrum, or Optimism** (`eth_getCode = 0x` for every bridge address on those five — verified §6).
 
 The Polygon PoS Bridge is a **lock-and-mint / burn-and-unlock** bridge, not a messaging mesh: the only counterparty chain is Polygon PoS (137). There is **no single cross-chain canonical address** — L1 and 137 use entirely different addresses, and you must key every record on `(chainId, address)`. The PoS-portal and Plasma core contracts are **upgradeable proxies using Polygon's own `matic.network.proxy.*` storage convention (NOT EIP-1967)** — reading the standard EIP-1967 slot returns `0x` and will make you wrongly conclude "immutable" (§7). The FX-portal contracts (FxRoot/FxChild/StateSender) are **immutable** (no proxy). Deposits L1→137 are asynchronous (state-sync, ~22 min); withdrawals 137→L1 require a **checkpoint** (every ~30–60 min) plus a user-submitted Merkle proof `exit(bytes)`.
@@ -223,7 +223,7 @@ All verified via `eth_getCode` returning non-empty bytecode on `https://ethereum
 | **ERC20Predicate (Plasma)** | `0x4EeA1780c06709D7FA0BCaA6D0f1aB29673586c0` | Plasma exit starter for ERC-20/MATIC (`startExitWithBurntTokens`). 3,979 B. Not the PoS ERC20Predicate of §3.1. |
 | ERC721Predicate (Plasma) | `0x36C2503d53C6948331144b85D1e74a3B96731d1b` | Plasma exit starter for ERC-721. 4,194 B. |
 | **RootChain** (Plasma proxy) | `0x86E4Dc95c7FBdBf52e33D563BbDB00823894C287` | **Checkpoint contract** — validators post 137 state roots; emits `NewHeaderBlock`. impl `0x536c55cf…bd03`. |
-| **StakeManager** (proxy) | `0x5e3Ef299fDDf15eAa0432E6e66473ace8c13D908` | Validator staking that authorises checkpoints. impl `0x3ad88467…076c`. |
+| **StakeManager** (proxy) | `0x5e3Ef299fDDf15eAa0432E6e66473ace8c13D908` | Validator staking that authorises checkpoints. impl `0x428d1067…506e` (since 2026-10-13). |
 | Registry | `0x33a02E6cC863D393d6Bf231B697b82F6e499cA71` | Plasma contract registry (DepositManager slot3 points here). |
 | Proxy owner / governance | `0xcaf0aa768a3ae1297df20072419db8bb8b5c8cef` | Owns the matic & Plasma proxies (Polygon governance Timelock-style contract, 11,395 B). |
 
@@ -291,7 +291,7 @@ Child tokens are **UChildERC20/UChildERC721/UChildERC1155 proxies** (matic-proxy
 | RootChainManager, all 7 predicates, ChildChainManager, child UChild* tokens | **matic-proxy** (OpenZeppelin-fork `Proxy.sol`) | impl at slot `keccak256("matic.network.proxy.implementation")` = `0xbaab7dbf64751104133af04abc7d9979f0fda3b059a322a8333f533d3f32bf7f`; owner at `keccak256("matic.network.proxy.owner")` = `0x44f6e2e8884cba1236b7f22f351fa5d88b17292b7e0225ca47e5ecdf6055cdd6` | proxy owner (`0xcaf0aa76…` on L1, `0x3a635c48…` on 137) via `updateImplementation` |
 | DepositManager, RootChain, WithdrawManagerProxy (Plasma) | **Plasma-proxy** (`UpgradableProxy`) | **slot 0 = owner, slot 1 = implementation** (plain sequential storage, NOT a hashed slot) | proxy owner `0xcaf0aa768a3ae1297df20072419db8bb8b5c8cef` (the registry's `Timelock`) |
 | ExitNFT, Plasma ERC20Predicate / ERC721Predicate | **plain contracts** (no proxy) | full runtime bytecode (3,212 B / 3,979 B / 4,194 B); registered in the Plasma Registry | none on the contract itself (not a proxy); which predicates the WithdrawManager accepts is read from the Plasma Registry `0x33a02E6cC863D393d6Bf231B697b82F6e499cA71` |
-| StakeManager | **matic-proxy** | matic impl slot (impl `0x3ad88467…076c`) | proxy owner `0xcaf0aa76…` |
+| StakeManager | **matic-proxy** | matic impl slot (impl `0x428d1067…506e`) | proxy owner `0xcaf0aa76…` |
 | **FxRoot, FxChild, StateSender** | **immutable** (no proxy) | EIP-1967 *and* matic impl slots both `0x0`; full runtime bytecode | n/a |
 
 ### 7.1 Live implementations (read 2026-06-09)
@@ -309,11 +309,11 @@ Child tokens are **UChildERC20/UChildERC721/UChildERC1155 proxies** (matic-proxy
 | DepositManager `0x401F…188b` (slot1) | 1 | `0xb00aa68b87256e2f22058fb2ba3246eec54a44fc` | `0xcaf0aa76…` (slot0) |
 | RootChain `0x86E4…C287` (slot1) | 1 | `0x536c55cfe4892e581806e10b38dfe8083551bd03` | `0xcaf0aa76…` (slot0) |
 | WithdrawManagerProxy `0x2A88696e0fFA76bAA1338F2C74497cC013495922` (slot1, read 2026-09-29) | 1 | `0x6f8a42cf6f3ce657b66a9d5849f1251de7a35168` | `0xcaf0aa768a3ae1297df20072419db8bb8b5c8cef` (slot0) |
-| StakeManager `0x5e3E…D908` | 1 | `0x3ad88467e40399dc6ae10427f8b0842348d9076c` | `0xcaf0aa76…` |
+| StakeManager `0x5e3E…D908` (read 2026-10-30) | 1 | `0x428d1067b33b2bca826cf66344dbecbd5aa6506e` (21,527 B; replaced `0x3ad88467e40399dc6ae10427f8b0842348d9076c` on 2026-10-13, Ethereum block 26,182,820, tx `0x53ddccd09c36bde3691fc33282b54679019dad1f4f8aa9fdee0d44cd45b1ab65`) | `0xcaf0aa76…` |
 | ChildChainManager `0xA6FA…C0aa` | 137 | `0xa40fc0782bee28dd2cf8cb4ac2ecdb05c537f1b5` | `0x3a635c48836e7c0b9aeb378640b0bfd516985cf5` |
 | USDC.e `0x2791…4174` | 137 | `0xdd9185db084f5c4fff3b4f70e7ba62123b812226` | (matic owner slot) |
 
-**Upgrade-watch topics:** `ProxyUpdated(address indexed previousImplementation, address indexed newImplementation)` = `0xd32d24edea94f55e932d9a008afc425a8561462d1b1f57bc6e508e9a6b9509e1` (matic-proxy); `OwnerUpdate(address,address)` = `0x343765429aea5a34b3ff6a3785a98a5abb2597aca87bfbb58632c173d585373a`. **Always read the live impl slot — never hard-code an impl.**
+**Upgrade-watch topics:** `ProxyUpdated(address indexed _new, address indexed _old)` = `0xd32d24edea94f55e932d9a008afc425a8561462d1b1f57bc6e508e9a6b9509e1` (matic-proxy; topic1 is the **new** impl, topic2 the old one — confirmed on the StakeManager upgrade of 2026-10-13); `OwnerUpdate(address,address)` = `0x343765429aea5a34b3ff6a3785a98a5abb2597aca87bfbb58632c173d585373a`. **Always read the live impl slot — never hard-code an impl.**
 
 ---
 

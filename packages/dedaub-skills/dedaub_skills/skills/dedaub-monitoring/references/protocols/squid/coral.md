@@ -1,6 +1,6 @@
-# Squid Intents (Coral) — Topics, Selectors, Addresses (Ethereum, Base, Arbitrum, Optimism, Polygon, BNB, Avalanche; NOT Robinhood Chain)
+# Squid Intents (Coral) — Topics, Selectors, Addresses (Ethereum, Base, Arbitrum, Optimism, Polygon, BNB, Avalanche; NOT Robinhood Chain, NOT Arc)
 
-**Status:** verified on 2026-09-29 to 2026-10-01 against live RPC on all eight target chains, the verified `contracts/Spoke.sol` source of each listed Spoke (Blockscout), and the Squid docs. Topic0 and selectors recomputed as `keccak256(signature)`. Addresses existence-checked with `eth_getCode`.
+**Status:** verified on 2026-09-29 to 2026-10-01 against live RPC on all eight target chains, the verified `contracts/Spoke.sol` source of each listed Spoke (Blockscout), and the Squid docs. Topic0 and selectors recomputed as `keccak256(signature)`. Addresses existence-checked with `eth_getCode`. Re-checked on 2026-10-30: no Coral contract on Arc (5042).
 **Scope:** Squid's intent product, named CORAL ("Cross-chain Order Routing and Auction Layer") and now "Squid Intents". Two generations: **Coral V1**, a Spoke contract per chain plus a Hub on Fantom, with on-chain order events; and **Coral V2**, the current product, which settles through TEE-governed wallets and has no contract events. The SquidRouter is in [`router.md`](router.md). Topics and selectors are chain-agnostic. Addresses are network-specific.
 
 **Coral V1 had no activity in the pinned window.** `OrderCreated` and `OrderFilled` returned 0 logs from any emitter on all eight chains in 2026-09-28 00:00–12:00 UTC. On Base, the newest Spoke's last `OrderCreated` is at block 46,215,933 (May 2026) and its last transaction (`forwardSettlements`) is from 2026-06-18. Keep the V1 constants for history and back-fill.
@@ -105,6 +105,7 @@ Earlier prototype Spokes with unverified source, created by the same deployer an
 | BNB Smart Chain | 56 | all six | yes | yes | `0xD9777d8460E861906B1613D49287988C0de52E7F` | listed |
 | Avalanche C-Chain | 43114 | all six | yes | yes | `0xD9777d8460E861906B1613D49287988C0de52E7F`, `0xa8594af6B4733cDdBeE4b46206bb73d5b6DE2D92` | listed |
 | Robinhood Chain | 4663 | none (`eth_getCode` = `0x`, nonce 0 at all twelve addresses) | no | no | none | not listed |
+| Arc | 5042 | none (`eth_getCode` = `0x` at every address in this file, 2026-10-30) | no | no | none | not listed |
 
 "Listed" = in the Squid Intents column of the Squid "Supported Chains by Bridge Type" page.
 

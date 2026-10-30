@@ -1,6 +1,6 @@
 # BENQI — Topics, Selectors, Addresses (Avalanche C-Chain only)
 
-**Status:** verified against live Avalanche C-Chain (43114) RPC and the canonical `Benqi-fi/BENQI-Smart-Contracts` repo (+ `Cyfrin/2025-01-benqi` for Ignite) on 2026-06-08. Every topic0/selector recomputed locally as `keccak256(canonical sig)`; every address `eth_getCode`-checked; proxy wiring read live from storage slots + getters.
+**Status:** verified against live Avalanche C-Chain (43114) RPC and the canonical `Benqi-fi/BENQI-Smart-Contracts` repo (+ `Cyfrin/2025-01-benqi` for Ignite) on 2026-06-08. Every topic0/selector recomputed locally as `keccak256(canonical sig)`; every address `eth_getCode`-checked; proxy wiring read live from storage slots + getters. Re-checked on 2026-10-30: the Ignite impl rotated to `0x97d146e5…` (EIP-1967 slot read live). sAVAX and Comptroller impls are unchanged.
 **Scope:** BENQI's two on-chain product lines, both deployed **only on Avalanche C-Chain (43114)**: (1) **BENQI Lending Market** — a Compound V2 fork (`qiToken` markets behind a `Unitroller`/`Comptroller`), and (2) **BENQI Liquid Staking** — `sAVAX` (StakedAvax, an EIP-1967 upgradeable ERC-20) + the **Ignite** validator-staking contract. Topics and selectors are chain-agnostic (keccak of the signature); addresses are network-specific. **BENQI lending + staking are NOT deployed on Ethereum, Base, BNB, Arbitrum, Optimism, or Polygon** — see §6. (The QI *token* alone exists as a bridged representation on BNB — a decoy; §6.)
 
 BENQI is one continuously-upgraded Avalanche deployment (not version-bumped), so this is a single `core.md`. Three architecture facts a monitoring engineer must internalize before indexing:
@@ -307,7 +307,7 @@ Per-market `JumpRateModel` contracts; read each market's live model via `qiToken
 | Role | Address | One-liner |
 |------|---------|-----------|
 | **sAVAX** (`StakedAvax`) | `0x2b2C81e08f1Af8835a78Bb2A90AE924ACE0eA4bE` | Liquid-staked AVAX ERC-20. `name()="Staked AVAX"`, `symbol()="sAVAX"`. **EIP-1967 transparent proxy** → impl `0xb791…fa53`, admin `0x2295…5a66`. |
-| **IGNITE** | `0xB71a820d80189073F69498010cb67bDDAe050633` | Validator-staking (PAYG + stake). **EIP-1967 transparent proxy** → impl `0xa61f…1554`, admin `0x3ebb…21ca`. |
+| **IGNITE** | `0xB71a820d80189073F69498010cb67bDDAe050633` | Validator-staking (PAYG + stake). **EIP-1967 transparent proxy** → impl `0x97d1…9b34` (read 2026-10-30; was `0xa61f…1554`), admin `0x3ebb…21ca`. |
 | veQI (`VeQi`) | `0x7Ee65Fdc1C534A6b4f9ea2Cc3ca9aC8d6c602aBd` | Vote-escrowed QI (validator weight / governance). **EIP-1967 transparent proxy** → impl `0x11a6…9668`, admin `0x73ad…9930`. |
 
 ---
@@ -357,7 +357,7 @@ BENQI mixes **three** patterns. Getting them wrong is the #1 integration error.
 | **qiErc20** (qiErc20Delegator) | **Compound delegator** — NOT EIP-1967. `implementation` is a plain storage var; upgraded via `_setImplementation(address,bool,bytes)`. | `implementation()` (`0x5c60da1b`). | qiUSDCn `implementation()`=`0xf280…1E76`; `comptroller()`=`0x486A…D9b4`; `underlying()`=native USDC; EIP-1967 slot = `0x0` ✓ |
 | **qiAVAX** (QiAvax / CEther) | **Immutable** — no delegator, no proxy. | `implementation()` **reverts**; `underlying()` **reverts**. | codelen ≈ 21 KB (21,080 bytes); both getters revert ✓ |
 | **sAVAX** (StakedAvax) | **EIP-1967 transparent proxy** | EIP-1967 impl slot `0x360894…bbc`; admin slot `0xb53127…6103`. | impl=`0xb791c7a42fd0d10f90deaa906a8735f79719fa53`; admin=`0x2295e1cad2ea081a4a2ed85f59006e6fd42b5a66` ✓ |
-| **Ignite** | **EIP-1967 transparent proxy** | EIP-1967 impl/admin slots. | impl=`0xa61f2411351649cc0ce4443517f16b0f522e1554`; admin=`0x3ebbfc5f7aeb55f294f71846f2c3af4df79421ca` ✓ |
+| **Ignite** | **EIP-1967 transparent proxy** | EIP-1967 impl/admin slots. | impl=`0x97d146e55140a96e3b653326a76aed445ef29b34` (21,681 B; read 2026-10-30; was `0xa61f2411351649cc0ce4443517f16b0f522e1554`); admin=`0x3ebbfc5f7aeb55f294f71846f2c3af4df79421ca` ✓ |
 | **veQI** (VeQi) | **EIP-1967 transparent proxy** | EIP-1967 impl/admin slots. | impl=`0x11a6f0abe9f8cac70d4f81d872498e7a630c9668`; admin=`0x73ad25e61d707c900393eca73a6909a59d6a9930` ✓ |
 | **BenqiChainlinkOracle** | **Non-upgradeable** | EIP-1967 impl slot = `0x0`. | confirmed empty ✓ |
 | **QI token** (`Qi`) | **Non-upgradeable** ERC-20 | EIP-1967 impl slot = `0x0`. | confirmed empty ✓ |

@@ -2,7 +2,7 @@
 
 The Arbitrum canonical bridge is the Nitro contract set (Bridge, Inbox, SequencerInbox, Outbox, Rollup, and the gateway token bridge). Offchain Labs runs it for Arbitrum One and Nova. Every Arbitrum Orbit chain, Robinhood Chain included, runs its own copy of the same contracts under its own addresses and chain id.
 
-**Status:** `core.md` verified on 2026-06-09 and extended on 2026-09-29; `orbit.md` verified on 2026-09-29. Activity counts use the pinned 12-hour window 2026-09-28 00:00–12:00 UTC.
+**Status:** `core.md` verified on 2026-06-09 and extended on 2026-09-29; `orbit.md` verified on 2026-09-29. Both re-checked on 2026-10-30 for Arc (5042): no deployment. Activity counts use the pinned 12-hour window 2026-09-28 00:00–12:00 UTC.
 
 | File | Covers | Contracts | Proxy pattern | Chains (of the 8) | Status |
 |------|--------|-----------|---------------|-------------------|--------|
@@ -10,6 +10,8 @@ The Arbitrum canonical bridge is the Nitro contract set (Bridge, Inbox, Sequence
 | [orbit.md](orbit.md) | **Orbit chains**: Robinhood Chain (Ethereum side and L2 side), 12 more Orbit L2s on Ethereum, Orbit L3s on Base, 34 Orbit L3s on Arbitrum One, one Orbit L3 on Robinhood Chain, and 18 further Orbit chains found on chain | the same Nitro contracts; `ERC20Bridge` / `ERC20Inbox` on fee-token chains; UpgradeExecutor; factories | the same patterns; Rollups classic or BoLD | Ethereum, Base, Arbitrum One, Robinhood Chain | Live |
 
 Not deployed on Optimism, Polygon PoS, BNB or Avalanche: `eth_getCode` returns `0x` at every address of both files there, the Orbit factory maps list no deployment for those chain ids, and the pinned window has no Nitro log there.
+
+Not deployed on Arc (5042) either: no One / Nova contract, no RollupCreator or TokenBridgeCreator, and no Orbit chain. Five Nitro v3 implementation templates (for example the Outbox logic `0x396765AEbE540575ef927F769b0d7b89594f931c`) have byte-identical code at the same address on Arc. They are shared logic contracts, not a chain (`orbit.md` §7).
 
 ## Shared topics (the same topic0 on every Nitro chain)
 

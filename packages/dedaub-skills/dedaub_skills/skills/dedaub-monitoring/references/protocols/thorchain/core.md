@@ -1,6 +1,6 @@
-# THORChain — Topics, Selectors, Addresses (Ethereum + Base + BNB + Avalanche; NOT Arbitrum, Optimism, Polygon, Robinhood)
+# THORChain — Topics, Selectors, Addresses (Ethereum + Base + BNB + Avalanche; NOT Arbitrum, Optimism, Polygon, Robinhood, Arc)
 
-**Status:** verified on 2026-09-29 against live RPC on all eight target chains, the THORNode API (`/thorchain/inbound_addresses`, `/thorchain/vaults/asgard`, `/thorchain/mimir`, `/thorchain/lastblock`, read at THORChain height 28,029,280), and the router sources and deployment records in `gitlab.com/thorchain/thornode` (`chain/evm/contracts/`, `chain/evm/deployment/`, `x/thorchain/router_upgrade_info.go`). Topics and selectors recomputed as `keccak256(sig)`; every address existence-checked with `eth_getCode`; sample receipts decoded on each live chain.
+**Status:** verified on 2026-09-29 against live RPC on all eight target chains, the THORNode API (`/thorchain/inbound_addresses`, `/thorchain/vaults/asgard`, `/thorchain/mimir`, `/thorchain/lastblock`, read at THORChain height 28,029,280), and the router sources and deployment records in `gitlab.com/thorchain/thornode` (`chain/evm/contracts/`, `chain/evm/deployment/`, `x/thorchain/router_upgrade_info.go`). Topics and selectors recomputed as `keccak256(sig)`; every address existence-checked with `eth_getCode`; sample receipts decoded on each live chain. Re-checked on 2026-10-30: no THORChain contract on Arc (5042); `eth_getCode` returns `0x` at every router address of this file there.
 **Scope:** the THORChain Router contracts and the Asgard vault accounts on the four EVM chains that THORChain serves: Ethereum (1), Base (8453), BNB Smart Chain (56) and Avalanche C-Chain (43114). Arbitrum One (42161), OP Mainnet (10), Polygon PoS (137) and Robinhood Chain (4663) have no THORChain deployment. The other leg of most swaps is a non-EVM chain (Bitcoin, Dogecoin, Litecoin, XRP, Tron and others); this file covers only its link key. Topics and selectors are chain-agnostic; addresses are network-specific.
 
 THORChain is a Cosmos-SDK chain that swaps native assets across chains. It has no bridge pool contract on an EVM chain. A small immutable **Router** takes the deposit, moves the funds on, and emits the memo. The funds sit in **Asgard vaults**: EOAs whose key the THORChain nodes hold as a threshold signature. One vault key gives the same EVM address on every EVM chain, so the five live vault EOAs are the same on Ethereum, Base, BNB and Avalanche.
@@ -36,7 +36,7 @@ Three facts a monitor must know before indexing:
 | BNB Smart Chain (56) | `BSC` | `s` = `BSC.BNB` | live |
 | Avalanche C-Chain (43114) | `AVAX` | `a` = `AVAX.AVAX` | live |
 | Polygon PoS (137) | `POL` in the THORNode EVM client docs; `p` = `POL.POL` in the memo docs | — | **Not live:** absent from `inbound_addresses` and `lastblock`; no router code on Polygon |
-| Arbitrum One (42161), OP Mainnet (10), Robinhood Chain (4663) | — | — | not supported |
+| Arbitrum One (42161), OP Mainnet (10), Robinhood Chain (4663), Arc (5042) | — | — | not supported |
 
 Other short codes: `b` BTC.BTC, `c` BCH.BCH, `d` DOGE.DOGE, `l` LTC.LTC, `g` GAIA.ATOM, `x` XRP.XRP, `tr` TRON.TRX, `r` THOR.RUNE. Solana (`SOL`) is listed but `halted: true`.
 
@@ -197,6 +197,7 @@ Not on Base: the V1–V4.1 Ethereum router addresses (`eth_getCode` = `0x`).
 | OP Mainnet | 10 | — | `0x` | none | nonce 0 | 0 / 0 |
 | Polygon PoS | 137 | — | `0x` | none | nonce 0 | 0 / 0 |
 | Robinhood Chain | 4663 | — | `0x` | none | nonce 0 | 0 / 0 |
+| Arc | 5042 | — | `0x` | none (2026-10-30) | not read | not measured |
 
 The V6.1 router, the RouterV4 CREATE2 copy and the three V6 builds share one address on all four chains (CREATE2 through `0x4e59b44847b379578588920cA78FbF26c0B4956C`). The V4.1 routers do not: key them on `(chain, address)`.
 
@@ -299,7 +300,7 @@ AVAX_STAGENET_ROUTER_V6_1        = '\x0dc6108c9225ce93da589b4ce83c104b34693117'
 
 -- Same-topic router of another protocol (exclude): Harbor_RouterV5 on Ethereum
 ETH_HARBOR_ROUTER_V5             = '\x1f21d09c65bc8af92634dcd5a100b6d04f0c81c3'
--- Arbitrum (42161), OP Mainnet (10), Polygon (137), Robinhood Chain (4663): no THORChain contract
+-- Arbitrum (42161), OP Mainnet (10), Polygon (137), Robinhood Chain (4663), Arc (5042): no THORChain contract
 ```
 
 ---

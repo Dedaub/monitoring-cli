@@ -1,6 +1,6 @@
 # Moola Market — Topics, Selectors, Addresses (Celo only — absent on all 7 monitored chains)
 
-**Status:** verified against Celo mainnet (chain ID 42220) RPC (live + historic `eth_getLogs`, `eth_getCode`, `eth_getStorageAt`, `eth_call`) and the canonical `moolamarket/moola` (V1) + `moolamarket/moola-v2` (V2) repos, on 2026-06-08. Non-obvious claims additionally fact-checked against primary sources (Moola docs, migration blog, CeloScan) — see the final section.
+**Status:** verified against Celo mainnet (chain ID 42220) RPC (live + historic `eth_getLogs`, `eth_getCode`, `eth_getStorageAt`, `eth_call`) and the canonical `moolamarket/moola` (V1) + `moolamarket/moola-v2` (V2) repos, on 2026-06-08. Non-obvious claims additionally fact-checked against primary sources (Moola docs, migration blog, CeloScan) — see §11. Re-checked on 2026-10-30: `liquidationCall` present as `PUSH3 0xa718a9` in the live V2 LendingPool impl `0xbecd…711F`.
 **Scope:** the monitoring pipeline targets **Ethereum (1), Base (8453), BNB (56), Avalanche (43114), Arbitrum (42161), Optimism (10), Polygon (137)**. **Moola Market is deployed on Celo (42220) ONLY and exists on NONE of those seven chains** — every Moola address returns `0x` from `eth_getCode` on all seven (verified per address per chain; see §5). This file documents the real Celo deployment so the reference has value for cross-chain attribution, look-alike disambiguation, and Celo-aware tooling. Topics + selectors are chain-agnostic; addresses are Celo-network-specific.
 
 Moola is an **Aave fork** with two distinct on-chain generations on Celo:
@@ -81,7 +81,7 @@ All values recomputed locally with keccak on 2026-06-08. V2 lending topics addit
 
 ### 2.1 V2 LendingPool — state-changing (Aave-V2 identical)
 
-All verified **present** in the live V2 LendingPool implementation bytecode (`0xbecd348aa5cc976be8e82ca6f13bc3b53197711f`) on 2026-06-08 **except `liquidationCall`** (see §8 / §9).
+All verified **present** in the live V2 LendingPool implementation bytecode (`0xbecd348aa5cc976be8e82ca6f13bc3b53197711f`) on 2026-06-08. `liquidationCall` is present as `PUSH3 0xa718a9` (see §9).
 
 | Selector | Signature | Notes |
 |----------|-----------|-------|
@@ -92,7 +92,7 @@ All verified **present** in the live V2 LendingPool implementation bytecode (`0x
 | `0x94ba89a2` | `swapBorrowRateMode(address asset, uint256 rateMode)` | Stable↔variable. |
 | `0xcd112382` | `rebalanceStableBorrowRate(address asset, address user)` | |
 | `0x5a3b74b9` | `setUserUseReserveAsCollateral(address asset, bool useAsCollateral)` | |
-| `0x00a718a9` | `liquidationCall(address collateralAsset, address debtAsset, address user, uint256 debtToCover, bool receiveAToken)` | Emits `LiquidationCall`. **NOT in the LendingPool impl dispatcher — detect via the event (§9).** |
+| `0x00a718a9` | `liquidationCall(address collateralAsset, address debtAsset, address user, uint256 debtToCover, bool receiveAToken)` | Emits `LiquidationCall`. In the LendingPool impl dispatcher as `PUSH3 0xa718a9` — detect via the event (§9). |
 | `0xab9c4b5d` | `flashLoan(address receiverAddress, address[] assets, uint256[] amounts, uint256[] modes, address onBehalfOf, bytes params, uint16 referralCode)` | Multi-asset. |
 
 ### 2.2 V2 LendingPool — views
@@ -284,7 +284,7 @@ The `Upgraded(address)` topic0 to watch on any proxy: `0xbc7cd75a20ee27fd9adebab
 2. **It's an Aave fork, two generations.** V2 (live) = Aave V2 topics/selectors; V1 (legacy) = Aave V1 topics/selectors. Reuse [aave/v2.md](../aave/v2.md) and [aave/v1.md](../aave/v1.md) decoders respectively, keyed on the Moola Pool addresses.
 3. **Live market = V2 `0x970b…f670`.** `Deposit`/`Withdraw`/`Borrow`/`Repay`/`LiquidationCall`/`FlashLoan`/`ReserveDataUpdated` all confirmed firing in 2026 windows.
 4. **Two distinct `Deposit` topic0s.** V1 `0xc12c57b1…` (Aave-V1, `_timestamp`) vs V2 `0xde685721…` (Aave-V2). V1 also has **no `Withdraw`** — it emits `RedeemUnderlying` (`0x9c4ed599…`).
-5. **Detect liquidations by the `LiquidationCall` event, not the selector.** On the V2 LendingPool impl, selector `0x00a718a9` (`liquidationCall`) is **absent from the dispatcher bytecode** (verified by PUSH4 scan) — liquidations route through the `LendingPoolCollateralManager` (`0xa2db…3b32`) via `delegatecall`, so the Pool emits `LiquidationCall` (`0xe413a321…`, verified live) but does not expose the selector at top level. Same dispatcher anomaly as upstream Aave V2.
+5. **Detect liquidations by the `LiquidationCall` event, not the selector.** On the V2 LendingPool impl, selector `0x00a718a9` (`liquidationCall`) **is in the dispatcher** as `PUSH3 0xa718a9` (bytes `62a718a9`). The selector starts with a zero byte, so a `PUSH4` scan misses it; scan for both forms (re-checked 2026-10-30). An `eth_call` of `liquidationCall` with zero arguments reverts with the Aave V2 error string `"23"`. The Pool runs the logic in the `LendingPoolCollateralManager` (`0xa2db…3b32`) by `delegatecall`, so the Pool emits `LiquidationCall` (`0xe413a321…`, verified live). Bots make `tx.to` differ from the Pool, so detect by the event. Same as upstream Aave V2.
 6. **mToken vs debt-token `Mint`/`Burn` have DIFFERENT topic0s** (Aave-V2 behaviour). mToken `Mint`=`0x4c209b5f`, varDebt `Mint`=`0x2f00e3cd`. Match on `(topic0, emitting address)`.
 7. **mTokens rebase every block.** Store `scaledBalanceOf` + reconstruct with the reserve `liquidityIndex` (ray). Same for debt with `variableBorrowIndex`.
 8. **`onBehalfOf`/`user` ≠ `tx.from`.** Attribute positions to the event's `onBehalfOf`/`user`, not the sender (gateways, credit delegation, relayers, liquidation bots).
@@ -336,7 +336,7 @@ SEL_V2_WITHDRAW            = '\x69328dec'
 SEL_V2_BORROW             = '\xa415bcad'
 SEL_V2_REPAY              = '\x573ade81'
 SEL_V2_SWAP_BORROW_RATE   = '\x94ba89a2'
-SEL_LIQUIDATION_CALL      = '\x00a718a9'   -- ABSENT from V2 LendingPool dispatcher; detect via event
+SEL_LIQUIDATION_CALL      = '\x00a718a9'   -- in V2 LendingPool impl as PUSH3 0xa718a9; detect via event
 SEL_V2_FLASHLOAN          = '\xab9c4b5d'
 SEL_SET_USE_AS_COLLATERAL = '\x5a3b74b9'
 SEL_GET_USER_ACCT_DATA    = '\xbf92857c'   -- returns CELO/wei, not USD
@@ -388,7 +388,7 @@ EIP1967_ADMIN_SLOT        = '\xb53127684a568b3173ae13b9f8a6016e243e63b6e8ee1178d
 ## 11. Verification & sources
 
 - **Event topic0:** recomputed locally as `keccak256(signature)` for every event. **V2** topics verified against live `eth_getLogs` on the Moola V2 LendingPool `0x970b…f670` (Celo): `Deposit` (74 in a recent 50k-block window), `Withdraw` (100), `Borrow` (2–3 per window), `Repay`, `LiquidationCall` (2 in one window), `FlashLoan` (1), `ReserveDataUpdated` (175), `ReserveUsedAsCollateralEnabled` (203). mToken `Mint`/`Burn`/`Transfer` verified on mcUSD `0x9181…DBc3`. **V1** `Deposit` (`0xc12c57b1…`) verified on the V1 LendingPool `0xc154…e535` (979 / 3 159 / 2 548 logs across 2020–2021 windows). The V1 `Deposit` topic returns **0** logs on the V2 Pool — confirming the two generations are distinct.
-- **Function selectors:** `keccak256(sig)[0:4]`. The V2 set was scanned against the live LendingPool implementation bytecode `0xbecd…711F` — `deposit`/`withdraw`/`borrow`/`repay`/`flashLoan`/`swapBorrowRateMode`/`setUserUseReserveAsCollateral`/views all **present**; `liquidationCall` (`0x00a718a9`) **absent** (routed via the CollateralManager — §9.5).
+- **Function selectors:** `keccak256(sig)[0:4]`. The V2 set was scanned against the live LendingPool implementation bytecode `0xbecd…711F` — `deposit`/`withdraw`/`borrow`/`repay`/`flashLoan`/`swapBorrowRateMode`/`setUserUseReserveAsCollateral`/views all **present**; `liquidationCall` (`0x00a718a9`) **present** as `PUSH3 0xa718a9` (logic in the CollateralManager — §9 item 5).
 - **Addresses:** parsed from `moolamarket/moola` (V1) and `moolamarket/moola-v2` (V2) deploy artifacts, then **re-resolved on-chain from each generation's AddressesProvider** (`getLendingPool`/`getLendingPoolConfigurator`/`getPriceOracle`/`getLendingPoolCore`/`getMarketId`) and per-reserve via `LendingPool.getReserveData`. Every address existence-checked via `eth_getCode` on Celo. mToken/underlying `symbol()` read via `eth_call`. The V2 PriceOracle resolved from the provider (`0xba22…4d29`) differs from the V1 oracle (`0x5685…98D0`) — confirmed both have code and belong to their respective generations.
 - **Proxy classification:** EIP-1967 impl + admin slots read live via `eth_getStorageAt` for LendingPool (V1 & V2), Configurator, mCELO, CollateralManager, AddressesProvider, PriceOracle. Proxies show a non-zero impl slot and a **`0x0` admin slot** (immutable-admin Aave proxy); the AddressesProvider, CollateralManager, and PriceOracle show a `0x0` impl slot (not proxies).
 - **Chain absence:** `eth_getCode` run for every Moola V1+V2 contract on Ethereum (1), Base (8453), BNB (56), Avalanche (43114), Arbitrum (42161), Optimism (10), Polygon (137) — **all returned `0x`** (§5). Celo chainId confirmed `0xa4ec` (42220) via `eth_chainId`.
@@ -400,15 +400,3 @@ Authoritative sources:
 - [`aave/protocol-v2`](https://github.com/aave/protocol-v2) / [`aave/aave-protocol`](https://github.com/aave/aave-protocol) — upstream V2 / V1 contracts (the topic/selector source).
 - [Moola docs](https://docs.moola.market) and the [v1→v2 migration write-up](https://moolamarket.medium.com/moola-migration-from-v1-to-v2-96268238399e).
 - Explorer: [CeloScan — V2 LendingPool](https://celoscan.io/address/0x970b12522CA9b4054807a2c5B736149a5BE6f670) · [mcUSD](https://celoscan.io/address/0x918146359264c492bd6934071c6bd31c854edbc3).
-
-### Independent fact-check (2026-06-08)
-
-Non-obvious claims cross-checked against multiple primary sources (canonical repos + live RPC + docs/blog + CeloScan):
-
-- **"Moola is an Aave fork, not original code."** — **Confirmed.** V2 topics/selectors are byte-for-byte Aave V2 (keccak + live logs); V1 topics are byte-for-byte Aave V1; the migration blog and repos describe it as an Aave fork.
-- **"V1 = Aave V1 lineage (LendingPoolCore), V2 = Aave V2 lineage (single Pool)."** — **Confirmed.** V1 provider exposes `getLendingPoolCore()` → `0xaf10…8F73` (a funded core contract); V2 provider has no core and emits `Withdraw`. Both verified on-chain.
-- **"V2 is the live market; V1 is wound down."** — **Confirmed.** V2 Pool shows ongoing 2026 lending logs; V1 Pool's heavy activity is concentrated in 2020–2021 windows (migration was Oct 2021).
-- **"Oracle quotes in CELO, not USD; account data is CELO-denominated."** — **Confirmed.** `getAssetPrice(CELO) = 1e18` (CELO is the base unit); the oracle reverts on `ADDRESSES_PROVIDER()`, indicating a custom Celo-native price source rather than a stock Aave Chainlink AaveOracle.
-- **"`liquidationCall` selector absent from the V2 Pool impl; detect liquidations via event."** — **Confirmed.** PUSH4/raw scan of impl `0xbecd…711F` finds `deposit`/`borrow`/`flashLoan` but not `0x00a718a9`; the `LiquidationCall` event nonetheless fires (verified). Liquidations route through CollateralManager `0xa2db…3b32` (provider-resolved delegatecall target).
-- **"Moola is Celo-only; absent on the seven monitored chains."** — **Confirmed.** Every Moola address returns `0x` from `eth_getCode` on all seven (§5).
-- **mToken vs underlying symbol mismatch (cUSD reports `USDm`).** — **Confirmed** via live `symbol()` calls; the mToken wrappers report `mcUSD`/`mCEUR`/`mCREAL`. Recorded as a gotcha (§9.10) to avoid mislabeling reserves.

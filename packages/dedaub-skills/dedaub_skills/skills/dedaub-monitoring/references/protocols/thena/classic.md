@@ -1,6 +1,6 @@
 # THENA Finance — Classic AMM + Governance (Solidly/ve(3,3)) — Topics, Selectors, Addresses (BNB Smart Chain)
 
-**Status:** Verified — all addresses confirmed via `eth_getCode` on BNB Smart Chain (chainId 56); absent (`0x`) on all other target chains (Ethereum 1, Base 8453, Arbitrum 42161, Optimism 10, Polygon 137). topic0s cross-checked against live `eth_getLogs` on BNB Smart Chain. Pair events confirmed at block 103552897; VoterV3 Vote/Reset events confirmed at block 103596311; VotingEscrow Deposit/Supply events confirmed at block 103585823; Bribe Staked event confirmed at block 103545653.
+**Status:** Verified — all addresses confirmed via `eth_getCode` on BNB Smart Chain (chainId 56); absent (`0x`) on all other target chains (Ethereum 1, Base 8453, Arbitrum 42161, Optimism 10, Polygon 137). topic0s cross-checked against live `eth_getLogs` on BNB Smart Chain. Pair events confirmed at block 103552897; VoterV3 Vote/Reset events confirmed at block 103596311; VotingEscrow Deposit/Supply events confirmed at block 103585823; Bribe Staked event confirmed at block 103545653. Re-checked on 2026-10-30: VeArtProxy `0xb2b37c42…` is an EIP-1967 transparent proxy (impl and admin slots read live), not a plain contract. Other addresses unchanged.
 **Sources:** [ThenafiBNB/THENA-Contracts](https://github.com/ThenafiBNB/THENA-Contracts) · live `eth_getLogs` and `eth_getStorageAt` cross-checks on BNB Smart Chain · keccak256 computed locally · [THENA docs](https://docs.thena.fi) · THENA contract spreadsheet.
 **Last verified:** 2026-06-11
 
@@ -21,7 +21,7 @@
 
 **Architecture note:** THENA Classic is a Solidly/ve(3,3) fork on BNB Smart Chain — the original that Blackhole (Avalanche) and Ramses (Arbitrum) later forked from. Classic pairs have two types (stable=true / volatile=false) distinguished by the `stable()` flag on each Pair. The deployed VoterV3 (0x8FBB1EC...) uses **modified event signatures** compared to the GitHub VoterV3.sol: the deployed voter emits `Vote` and `Reset` (not `Voted`/`Abstained`), with `(address voter, uint256 indexed tokenId, uint256 epoch)` parameter layout. Gauge creation goes through `GaugeFactory` (0x479cE658), and bribes/voting incentives are managed by `VotingIncentivesFactory` (0x82f144ac). The `EpochDistributorBSC` (0x3005b0d3) is a separate proxy contract that handles weekly gauge reward distribution; it is NOT the Voter.
 
-**Proxy pattern:** MinterUpgradeable and PairFactory are `TransparentUpgradeableProxy` sharing ProxyAdmin `0x8b9ca04656a74e218ecbd444c493872d19533e06` (owner: `0x5d7deb17be6c6243d6d65205b5293edceb676561`). EpochDistributorBSC is a `TransparentUpgradeableProxy` with ProxyAdmin `0xc06cb27ebb868fa197a24f399680ab674de04575` (owner: `0x993ae2b514677c7ac52baecd8871d2b362a9d693`). VoterV3, VotingEscrow, RouterV2, GaugeFactory, VotingIncentivesFactory, and RewardsDistributor are **non-upgradeable**.
+**Proxy pattern:** MinterUpgradeable, PairFactory and VeArtProxy are `TransparentUpgradeableProxy` sharing ProxyAdmin `0x8b9ca04656a74e218ecbd444c493872d19533e06` (owner: `0x5d7deb17be6c6243d6d65205b5293edceb676561`). EpochDistributorBSC is a `TransparentUpgradeableProxy` with ProxyAdmin `0xc06cb27ebb868fa197a24f399680ab674de04575` (owner: `0x993ae2b514677c7ac52baecd8871d2b362a9d693`). VoterV3, VotingEscrow, RouterV2, GaugeFactory, VotingIncentivesFactory, and RewardsDistributor are **non-upgradeable**.
 
 ---
 
@@ -217,7 +217,7 @@ Native token on BNB = BNB (not AVAX/ETH). Selectors confirmed in RouterV2 byteco
 | **GaugeFactory** | `0x479cE658DD4195556C60Ea9fdE92cF0F42EA8692` | **Non-upgradeable.** Creates GaugeV2 contracts via `createGaugeV2(...)`. Role-based access control (CREATE_ROLE, CLAIMER_ROLE). |
 | **VotingIncentivesFactory** | `0x82f144accf4779ca8c49928be28fac5fa157d218` | **Non-upgradeable.** Creates Bribe/VotingIncentives contracts via `createBribe(...)`. Functions as BribeFactory. `createVotingIncentives` deploys per-pool bribe contracts. |
 | **RewardsDistributor** | `0xa6e0e731cb1e99aede0f9c9128d04f948e18727d` | **Non-upgradeable.** Distributes protocol yield to veTHE holders. `token()` = THE. `voting_escrow()` = VotingEscrow. `depositor()` = MinterUpgradeable. `start_time()` = `0x6542e680`. |
-| **VeArtProxy** | `0xb2b37c4221dabfff5b34883e95d88d498f03e516` | **Non-upgradeable.** Returns veTHE SVG art. `artProxy()` on VotingEscrow. |
+| **VeArtProxy** | `0xb2b37c4221dabfff5b34883e95d88d498f03e516` | **Proxy** (EIP-1967 transparent, 2,112 B). Impl `0xd6f6e27e96535749587ac77bfc83607a743e765f`; admin = the shared ProxyAdmin `0x8b9ca046…`. Returns veTHE SVG art. `artProxy()` on VotingEscrow. |
 | **VotingEscrowAttach** | `0x8aEBEd1f28a8ae1Eb6479DDd8b1148da0E05B58D` | **Non-upgradeable.** Manages veTHE attachment states. `ve()` = VotingEscrow. Called `attach()` on VoterV3. |
 | **ProxyAdmin (Minter/PairFactory)** | `0x8b9ca04656a74e218ecbd444c493872d19533e06` | Admin for MinterUpgradeable and PairFactory. `owner()=0x5d7deb17be6c6243d6d65205b5293edceb676561`. |
 | **ProxyAdmin (EpochDist)** | `0xc06cb27ebb868fa197a24f399680ab674de04575` | Admin for EpochDistributorBSC. `owner()=0x993ae2b514677c7ac52baecd8871d2b362a9d693` (THENA multisig). |

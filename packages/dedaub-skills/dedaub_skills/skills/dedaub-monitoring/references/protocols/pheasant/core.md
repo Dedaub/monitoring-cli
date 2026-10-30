@@ -1,6 +1,6 @@
-# Pheasant Network — Topics, Selectors, Addresses (bridge: Ethereum + Base + Arbitrum + Optimism; swap wrapper also Polygon + BNB + Avalanche; NOT Robinhood)
+# Pheasant Network — Topics, Selectors, Addresses (bridge: Ethereum + Base + Arbitrum + Optimism; swap wrapper also Polygon + BNB + Avalanche + Robinhood Chain + Arc)
 
-**Status:** verified on 2026-09-29 against live RPC on all eight chains, the Sourcify-verified implementations (`PheasantNetworkBridgeChild`, `PayoutExecutor`, `PheasantNetworkCctpBurn`, `PheasantNetworkSwap`, solc 0.8.18), the on-chain `PheasantNetworkParameters` contracts, and the official docs pages "Network Code and Address", "Technical Details", "Mechanism", "CCTP" and "Swap / Supported Networks".
+**Status:** verified on 2026-09-29 against live RPC on all eight chains, the Sourcify-verified implementations (`PheasantNetworkBridgeChild`, `PayoutExecutor`, `PheasantNetworkCctpBurn`, `PheasantNetworkSwap`, solc 0.8.18), the on-chain `PheasantNetworkParameters` contracts, and the official docs pages "Network Code and Address", "Technical Details", "Mechanism", "CCTP" and "Swap / Supported Networks". Re-checked on 2026-10-30: the swap wrapper is now live on Robinhood Chain (4663, listed in "Swap / Supported Networks") and on Arc (5042, not listed), and every swap implementation rotated to a new 8,985-byte build (§5). The bridge contracts are still on four chains only.
 **Scope:** the Pheasant bridge (ERC-7683 origin settler `PheasantNetworkBridgeChild` + destination settler `PayoutExecutor`), the USDC CCTP wrapper `PheasantNetworkCctpBurn`, and the swap wrapper `PheasantNetworkSwap`. Topics and selectors are chain-agnostic. Addresses are network-specific: each chain has its own proxy addresses, except the swap wrapper.
 
 Pheasant is an optimistic, relayer-filled bridge for ETH and USDC between Ethereum and L2s. Since v5.0.0 (June 2026) every bridge order is an **ERC-7683** on-chain order. The user calls `open()` on the BridgeChild of the source chain and escrows the funds. The relayer (filler) calls `fill()` on the `PayoutExecutor` of the destination chain and pays the recipient from its own funds. The relayer then calls `withdraw()` (or `bulkWithdraw()`) on the source BridgeChild to take the escrow, and records the destination transaction hash. A disputer can challenge a withdrawal and slash the relayer's bond.
@@ -19,7 +19,7 @@ All contracts are OpenZeppelin TransparentUpgradeableProxy instances (1896-byte 
 | **PayoutExecutor** | ETH, Base, ARB, OP | ERC-7683 destination settler. `fill()` pays the recipient: native ETH forwarded from `msg.value`, or USDC pulled from the filler with `transferFrom(filler, recipient)`. It never holds funds. | Destination (payout) |
 | **PheasantNetworkParameters** | ETH, Base, ARB, OP | Per-chain config: network codes, token addresses, limits, fees, the `PayoutExecutor` of each destination code. Read by the BridgeChild and the PayoutExecutor. | Config |
 | **PheasantNetworkCctpBurn** | ETH, Base, ARB, OP | USDC above the optimistic threshold goes over Circle CCTP: `callDepositForBurn()` burns through the CCTP `TokenMessenger`. Destination mint is Circle's own contract (see the `cctp` doc). | Source (burn) |
-| **PheasantNetworkSwap** | ETH, Base, ARB, OP, POLY, BNB, AVAX | Swap wrapper: `execute()` pulls the user's token and calls a whitelisted DEX or aggregator ("tool contract"), which may itself bridge. Emits `SwapNewTrade`. | Source (third-party route) |
+| **PheasantNetworkSwap** | ETH, Base, ARB, OP, POLY, BNB, AVAX, Robinhood, Arc | Swap wrapper: `execute()` pulls the user's token and calls a whitelisted DEX or aggregator ("tool contract"), which may itself bridge. Emits `SwapNewTrade`. | Source (third-party route) |
 | BondManager / BridgeDisputeManager / CheckpointManager | per chain | Relayer bond, evidence checks, L1 block hashes for disputes. Addresses not listed by the docs; not documented here. | Dispute |
 
 Flow of one ETH order Base → Arbitrum (sample, §11):
@@ -167,7 +167,7 @@ Read live with `networkCode()` on each BridgeChild, and with `payoutExecutor(uin
 | Base | 8453 | 1007 | `0x25cf6B24eC351d1695490B2046310cA3e8AdBE7B` |
 | (off-target) Scroll 1005, ZKsync 1006, Linea 1009, Taiko 1010, Morph 1014, Unichain 1017, MegaETH 1020 | — | — | registered in the parameters contract |
 
-Code 1002 has no PayoutExecutor (zero address). Polygon, BNB, Avalanche and Robinhood Chain have no bridge code and no bridge contracts. Token type indexes: 0 = ETH (native), 1 = USDC, 2 = USDC.e.
+Code 1002 has no PayoutExecutor (zero address). Polygon, BNB, Avalanche, Robinhood Chain and Arc have no bridge code and no bridge contracts. Token type indexes: 0 = ETH (native), 1 = USDC, 2 = USDC.e.
 
 ---
 
@@ -198,23 +198,29 @@ The four BridgeChild implementations have identical code (one code hash), and so
 
 **Roles (same on the four chains):** owner and sole relayer of every BridgeChild, PayoutExecutor and CctpBurn = EOA `0x1650683e50e075efc778be4d1a6be929f3831719` (nonce 16639 on Ethereum). It also owns every BridgeChild / PayoutExecutor ProxyAdmin and all Base / Arbitrum / Optimism CctpBurn ProxyAdmins. The Ethereum CctpBurn ProxyAdmin is owned by EOA `0xfc976d96ccc57bc9d04aea92a4a66abd71926298`.
 
-## 5. Addresses — PheasantNetworkSwap (seven chains)
+## 5. Addresses — PheasantNetworkSwap (nine chains)
 
 | Chain | Swap proxy | Implementation |
 |-------|-----------|----------------|
-| Ethereum | `0xfC9C6B6e0D02EaDE37aC8b6c59e7181726075696` | `0xccc1c1d7b2e5fa02c2e8d65e182b719cba01b511` |
-| Base | `0xfC9C6B6e0D02EaDE37aC8b6c59e7181726075696` | `0x02ece12ddfc58eedbcb5477f81e19cb8ef3142c6` |
-| Arbitrum One | `0xfC9C6B6e0D02EaDE37aC8b6c59e7181726075696` | `0xccc1c1d7b2e5fa02c2e8d65e182b719cba01b511` |
-| Polygon PoS | `0xfC9C6B6e0D02EaDE37aC8b6c59e7181726075696` | `0xb4cbf45e69a26337de57f1c4326eb35bca4ac11d` |
-| BNB Smart Chain | `0xfC9C6B6e0D02EaDE37aC8b6c59e7181726075696` | `0xb4cbf45e69a26337de57f1c4326eb35bca4ac11d` |
-| Avalanche C-Chain | `0xfC9C6B6e0D02EaDE37aC8b6c59e7181726075696` | `0xb4cbf45e69a26337de57f1c4326eb35bca4ac11d` |
-| **Optimism** | **`0x7956c6EaEA7cAb8cd6C3221aBE3425c7e07133d9`** | `0x41826e06390d06568de8672a3b7fa878c0eca7e9` |
+| Ethereum | `0xfC9C6B6e0D02EaDE37aC8b6c59e7181726075696` | `0xcaa9b00e6278fda6fa9e0c92de5354719f4e613a` |
+| Base | `0xfC9C6B6e0D02EaDE37aC8b6c59e7181726075696` | `0xee58d4fecf1536963a136cd6fcaf5bd23ca8a92f` |
+| Arbitrum One | `0xfC9C6B6e0D02EaDE37aC8b6c59e7181726075696` | `0xcaa9b00e6278fda6fa9e0c92de5354719f4e613a` |
+| Polygon PoS | `0xfC9C6B6e0D02EaDE37aC8b6c59e7181726075696` | `0x58c381a909e00a3ef8b9f927b00c323e9b31a0cf` |
+| BNB Smart Chain | `0xfC9C6B6e0D02EaDE37aC8b6c59e7181726075696` | `0x3f8ef34d9d979f52803c420430b6dbdbfa8b773a` |
+| Avalanche C-Chain | `0xfC9C6B6e0D02EaDE37aC8b6c59e7181726075696` | `0xee58d4fecf1536963a136cd6fcaf5bd23ca8a92f` |
+| **Optimism** | **`0x7956c6EaEA7cAb8cd6C3221aBE3425c7e07133d9`** | `0xdd3ba12962d4ed2d5cfb0eda798b13cf4b204948` |
+| Robinhood Chain | `0xfC9C6B6e0D02EaDE37aC8b6c59e7181726075696` | `0x7956c6eaea7cab8cd6c3221abe3425c7e07133d9` (**the Optimism swap-proxy literal is the implementation here**) |
+| Arc | `0xfC9C6B6e0D02EaDE37aC8b6c59e7181726075696` | `0x0e9be0cfd78920c0603f4d618dbd015e343c7d16` (8,862 B) |
+
+Implementations read from the EIP-1967 slot on 2026-10-30. The eight implementations on Ethereum to Robinhood Chain have one code (8,985 B); the Arc build is 8,862 B. Every build contains `execute` `0x6a372984` and `SwapNewTrade`. The 2026-09-29 implementations (`0xccc1c1d7b2e5fa02c2e8d65e182b719cba01b511` on Ethereum and Arbitrum, `0x02ece12ddfc58eedbcb5477f81e19cb8ef3142c6` on Base, `0xb4cbf45e69a26337de57f1c4326eb35bca4ac11d` on Polygon, BNB and Avalanche, `0x41826e06390d06568de8672a3b7fa878c0eca7e9` on Optimism; 8,049 B) are retired.
 
 ProxyAdmin `0x61d28feab0f2802289ded2bcbc17459b8462051e` (owned by EOA `0x04ce14025ece612650e43c2de44477a441ba95f3`) on all chains except Optimism. On Optimism the ProxyAdmin of the swap proxy **is** `0xfC9C6B6e0D02EaDE37aC8b6c59e7181726075696` (1531-byte ProxyAdmin code). `owner()` of every swap proxy (fee withdrawals) = EOA `0xb62831174af2086bfadf234d5005745444c83f36`.
 
-## 6. Robinhood Chain (4663) — NOT DEPLOYED
+## 6. Robinhood Chain (4663) and Arc (5042) — swap wrapper only, no bridge
 
-`eth_getCode` returns `0x` on Robinhood Chain for every address of §4 and §5 (all BridgeChild, PayoutExecutor, CctpBurn and swap addresses, and the relayer address has nonce 0). Robinhood Chain is not in the official network-code table and has no network code in the parameters contract.
+**Swap wrapper: deployed on both.** The proxy `0xfC9C6B6e0D02EaDE37aC8b6c59e7181726075696` has the same 1,896-byte proxy code as on Ethereum. EIP-1967 admin = ProxyAdmin `0x61d28feab0f2802289ded2bcbc17459b8462051e` (1,531 B, `owner()` = EOA `0x04ce14025ece612650e43c2de44477a441ba95f3`), and `owner()` of the proxy = EOA `0xb62831174af2086bfadf234d5005745444c83f36`, as on the other chains (read 2026-10-30). The official "Swap / Supported Networks" page lists Robinhood Chain at this address; it does not list Arc. On Robinhood Chain the proxy emitted 3 `SwapNewTrade` logs in the 2,000,000 blocks to block 101,791,347 (the last at block 101,683,865).
+
+**Bridge: not deployed.** `eth_getCode` returns `0x` on both chains for every BridgeChild, PayoutExecutor and CctpBurn address of §4, and the relayer has nonce 0. Neither chain is in the official network-code table or has a network code in the parameters contract.
 
 ---
 
@@ -229,7 +235,8 @@ ProxyAdmin `0x61d28feab0f2802289ded2bcbc17459b8462051e` (owned by EOA `0x04ce140
 | Polygon PoS | 137 | — (`0x`) | — | — (decoy, §9 item 9) | `0xfC9C6B6e0D02EaDE37aC8b6c59e7181726075696` |
 | BNB Smart Chain | 56 | — | — | — | `0xfC9C6B6e0D02EaDE37aC8b6c59e7181726075696` |
 | Avalanche C-Chain | 43114 | — | — | — | `0xfC9C6B6e0D02EaDE37aC8b6c59e7181726075696` |
-| Robinhood Chain | 4663 | — | — | — | — |
+| Robinhood Chain | 4663 | — | — | — | `0xfC9C6B6e0D02EaDE37aC8b6c59e7181726075696` |
+| Arc | 5042 | — | — | — | `0xfC9C6B6e0D02EaDE37aC8b6c59e7181726075696` |
 
 Off-target bridge chains (official table): Scroll, ZKsync, Linea, Taiko, Morph, Unichain, MegaETH. The swap wrapper is also on about 25 more chains.
 
@@ -240,7 +247,7 @@ Off-target bridge chains (official table): Scroll, ZKsync, Linea, Taiko, Morph, 
 | Contract | Pattern | Detection | Upgrade auth |
 |----------|---------|-----------|--------------|
 | BridgeChild, PayoutExecutor, CctpBurn (4 chains each) | OZ TransparentUpgradeableProxy | 1896-byte proxy code. Implementation and admin slots populated (§4). | Per-proxy ProxyAdmin (1531 B), owned by the relayer EOA (Ethereum CctpBurn: EOA `0xfc976d96ccc57bc9d04aea92a4a66abd71926298`). |
-| PheasantNetworkSwap (7 chains) | OZ TransparentUpgradeableProxy | same 1896-byte proxy code | ProxyAdmin `0x61d28feab0f2802289ded2bcbc17459b8462051e` (Optimism: `0xfC9C6B6e0D02EaDE37aC8b6c59e7181726075696`), owner EOA `0x04ce14025ece612650e43c2de44477a441ba95f3`. |
+| PheasantNetworkSwap (9 chains) | OZ TransparentUpgradeableProxy | same 1896-byte proxy code | ProxyAdmin `0x61d28feab0f2802289ded2bcbc17459b8462051e` (Optimism: `0xfC9C6B6e0D02EaDE37aC8b6c59e7181726075696`), owner EOA `0x04ce14025ece612650e43c2de44477a441ba95f3`. |
 | PheasantNetworkParameters | not checked for a proxy | read through views only | relayer (3 h update delay) |
 
 Watch `Upgraded` on every proxy. All upgrade, pause and parameter authority is held by EOAs.
@@ -257,7 +264,7 @@ Watch `Upgraded` on every proxy. All upgrade, pause and parameter authority is h
 6. **Native ETH has no ERC-20 row on either side.** The deposit is `msg.value` of `open()`. The payout is the native value forwarded by `fill()`. Use native-transfer data or the event amounts.
 7. **USDC payouts are filler → recipient, not contract → recipient.** `fill()` calls `transferFrom(filler, recipient)`. The PayoutExecutor never holds funds, so a filter on `Transfer.from = PayoutExecutor` finds nothing.
 8. **Amounts.** `Filled.amount` and `BridgeOrderOpened.outputAmount` = deposit − fee. The relayer's `Withdraw.amount` is the full deposit.
-9. **Same-address decoys.** On Polygon, `0xE33Bf689B53ae461bd253617B60408227182362b` (the Base CctpBurn address) holds an 8049-byte contract with the same code hash as the swap implementation `0xb4cbf45e69a26337de57f1c4326eb35bca4ac11d`: a swap logic contract, not a CCTP contract. On Optimism, `0xfC9C6B6e0D02EaDE37aC8b6c59e7181726075696` is a ProxyAdmin, not the swap wrapper.
+9. **Same-address decoys.** On Polygon, `0xE33Bf689B53ae461bd253617B60408227182362b` (the Base CctpBurn address) holds an 8049-byte contract with the same code hash as the retired swap implementation `0xb4cbf45e69a26337de57f1c4326eb35bca4ac11d`: a swap logic contract, not a CCTP contract. On Optimism, `0xfC9C6B6e0D02EaDE37aC8b6c59e7181726075696` is a ProxyAdmin, not the swap wrapper. On Robinhood Chain, `0x7956c6EaEA7cAb8cd6C3221aBE3425c7e07133d9` (the Optimism swap proxy) is the swap implementation, which emits nothing.
 10. **The CCTP leg ends at Circle.** `DepositForBurnCalled` is followed by Circle's `DepositForBurn` in the same transaction. The mint on the destination is Circle's `MessageTransmitter`. Link by the CCTP (source domain, nonce), as in the `cctp` doc.
 11. **The swap wrapper hands value to a third-party tool contract.** `SwapNewTrade.trade.toChainId` (a string) is the destination. The destination leg belongs to the tool's own protocol. In the window, Base `SwapNewTrade` logs were same-chain swaps.
 12. **Large-transfer and admin triggers.** Large transfers: `BridgeOrderOpened.outputAmount` and `Filled.amount`. Admin: `Upgraded`, `ManagerUpdate`, `PayoutExecutorContractActiveToggled`, `PayoutExecutorParamsUpdate`, calls to `toggleContractActive`, and `OwnershipTransferred`. Dispute: `Dispute`, `Slash`.
@@ -315,11 +322,13 @@ OP_SWAP                          = '\x7956c6eaea7cab8cd6c3221abe3425c7e07133d9'
 POLY_SWAP                        = '\xfc9c6b6e0d02eade37ac8b6c59e7181726075696'
 BNB_SWAP                         = '\xfc9c6b6e0d02eade37ac8b6c59e7181726075696'
 AVAX_SWAP                        = '\xfc9c6b6e0d02eade37ac8b6c59e7181726075696'
+ROBIN_SWAP                       = '\xfc9c6b6e0d02eade37ac8b6c59e7181726075696'   -- impl 0x7956c6ea… (= OP_SWAP literal)
+ARC_SWAP                         = '\xfc9c6b6e0d02eade37ac8b6c59e7181726075696'   -- impl 0x0e9be0cf…
 -- owner / sole relayer, same on ETH, Base, Arbitrum, Optimism
 ETH_PHEASANT_RELAYER_EOA         = '\x1650683e50e075efc778be4d1a6be929f3831719'
 -- unrelated ERC-7683 settler that also emits Open on Ethereum (exclude)
 ETH_OTHER_ERC7683_SETTLER        = '\x2831ea5524f171735af8feb2e331821bef176c8a'
--- Robinhood Chain (4663): no Pheasant contract
+-- Robinhood Chain (4663) and Arc (5042): swap wrapper only; no bridge contract
 ```
 
 ---

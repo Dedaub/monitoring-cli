@@ -1,6 +1,6 @@
 # Fluid — Periphery: FLUID token, Staking, Merkle Distributors, Resolvers — Topics, Selectors, Addresses
 
-**Status:** addresses from `Instadapp/fluid-contracts-public` `deployments/deployments.md` (`main`, fetched 2026-06-05) + on-chain `eth_getCode`/`symbol()` confirmation; event topic0/selectors computed locally via keccak.
+**Status:** addresses from `Instadapp/fluid-contracts-public` `deployments/deployments.md` (`main`, fetched 2026-06-05) + on-chain `eth_getCode`/`symbol()` confirmation; event topic0/selectors computed locally via keccak. Re-checked on 2026-10-30: `deployments.md` marks `FluidDexLiteResolver` deprecated. No Robinhood or Arc deployment.
 **Scope:** everything around the four core Fluid modules — the **FLUID** governance token (per chain), the **reward mechanisms** (3 distinct families — do not conflate), and the **resolver** read-helpers. Core modules: [`liquidity-layer.md`](liquidity-layer.md), [`lending.md`](lending.md), [`vaults.md`](vaults.md), [`dex.md`](dex.md). Index: [`README.md`](README.md).
 **Key fact:** Fluid has **three** separate reward systems: (1) `LendingRewardsRateModel` — feeds an fToken's supply APY, **no claim event** (yield accrues into exchange price); (2) `StakingRewards` — Synthetix-style, users *stake fTokens* to earn FLUID, emits `Staked`/`Withdrawn`/`RewardPaid`; (3) `MerkleDistributor` — off-chain-computed campaign claims, emits `LogClaimed`. Best monitoring targets: **`LogClaimed`, `RewardPaid`, `Staked`/`Withdrawn`**, and `LogRootProposed`/`LogRootUpdated` for distributor-root governance.
 
@@ -102,7 +102,7 @@ Notable per-campaign instances (reward token in parens; `deployments.md` §Merkl
 | VaultTicksBranchesResolver | per-chain (ETH `0x8F31451Afa539cAfB92CBd5cdA41DC026f9CDc62`) | all 5 | vault ticks/branches |
 | DexResolver | `0x11D80CfF056Cef4F9E6d23da8672fE9873e5cC07` (BNB `0xAf572EfC84d905926F7b05C1B7bE04e4E89542B0`) | all 5 | DEX V1 state |
 | DexReservesResolver | `0x05Bd8269A20C472b148246De20E6852091BF16Ff` | all 5 | DEX reserves |
-| FluidDexLiteResolver | `0x12a47cEB96A952E8D4A6eA9FE3b40b79bbaeb4e9` | ETH only | DEX Lite state |
+| FluidDexLiteResolver | `0x12a47cEB96A952E8D4A6eA9FE3b40b79bbaeb4e9` | ETH only | DEX Lite state; marked **deprecated** in `deployments.md` (2026-10) |
 | SmartLendingResolver | `0x3E69A3Af4305b65598b228d3da70786Bd9cfeB0e` (BNB `0x1446dEc487B4411DE222547ADbC3b3e01933787f`) | all 5 | smart lending (`fSL*` tokens) |
 | StakingRewardsResolver | ETH `0x122E12eB5F235adAC8DC78292CB1838f065D9b9f`, ARB `0x53EB5A17D93b536d82521414EA00047De8DB7438`, Base `0x5d30B123aa5DD834bCB50490E150dE065E4Ee7f7`, POL `0x83fB87c8E85AD854f1B2D030f925211C6ae71D6d`, BNB `0x9c88eaF9f83fF3c796E71dd6888410645cEbf049` | all 5 | reads StakingRewards instances |
 | StakingMerkleResolver | ETH `0xE3DcB2183fe0aBBa897F7880C6E8c58d9c5A3Ce9`, ARB `0x9A69715215eB352cf23e5407E5e6769648638512` | **ETH, ARB only** | reads MerkleDistributor state |

@@ -448,15 +448,4 @@ BASE_SOBAERO                  = '\xfa78196ace4048c4ccce6d3d97890d7b6c8f59da'
   - Unitroller (both): EIP-1967 impl slot = `0x0`; `comptrollerImplementation()` returns the live Comptroller logic ⇒ **Compound delegator**.
   - Comptroller admins are **OZ TimelockController** — `getMinDelay()` returns 172800 (OP, 2 days) / 86400 (Base, 1 day); `VERSION()`/`getOwners()` (Safe) revert.
 - **Absence on the other five chains:** `eth_getCode` for the OP Unitroller, Base Unitroller, and OP soUSDC is empty (`0x`) on Ethereum, BNB, Avalanche, Arbitrum, Polygon — **except** the Base-Unitroller literal on BNB, which carries unrelated bytecode (4,102 chars; all Comptroller selectors revert; EIP-1967 empty) ⇒ an **address collision, not Sonne** (§5/§9).
-
-### Independent fact-check (2026-06-08)
-
-Non-obvious claims cross-checked against primary on-chain evidence (RPC reads above) and the public exploit record:
-
-- **"Sonne is a Compound V2 fork on OP + Base only"** — **confirmed.** Compound-V2 selector/event surface present and live on both; absent (eth_getCode 0x) on the other 5 (BNB hit is a decoy, refuted as Sonne).
-- **"Sonne uses 4-arg `AccrueInterest` (Moonwell-style), not 3-arg legacy Compound"** — **confirmed** by bytecode topic-constant scan (4-arg present, 3-arg absent) **and** live logs (4-arg ×84/×893, 3-arg ×0) **and** the 128-byte/4-word log data width.
-- **"~$20M Base exploit on 2024-05-14 via empty-market `exchangeRate` donation/inflation, then wind-down"** — **confirmed** against the public incident record; the Compound-V2 empty-market donation/rounding mechanism is consistent with Sonne's `CErc20`-style `exchangeRateStored` math and the fresh-`_supportMarket` precondition observable in the Comptroller's `MarketListed`/`NewCollateralFactor` admin path. Status recorded as deprecated/dead.
-- **"OP soTokens immutable, Base soTokens EIP-1967 proxies"** — **confirmed** by live EIP-1967 slot reads (OP slot `0x0` + `implementation()` revert; Base slot non-empty + shared ProxyAdmin). This is a genuine per-chain divergence within one protocol and the highest-value monitoring distinction.
-- **"BNB `0x1DB2466d…45F0` is the Base Unitroller redeployed there"** — **refuted.** It is an unrelated contract sharing the address by deployer-nonce collision (selectors revert, length differs, EIP-1967 empty). Recorded as a decoy, not a Sonne deployment.
-
-**Authoritative sources:** the Compound V2 reference design (`compound-finance/compound-protocol`: `CToken.sol`, `CErc20Immutable.sol`, `Comptroller.sol`, `Unitroller.sol`); Optimistic Etherscan (`optimistic.etherscan.io`) and BaseScan (`basescan.org`) for the deployed, verified Sonne contracts; the public Sonne Finance exploit post-mortems (2024-05). All constants in this doc were recomputed and re-verified on-chain rather than copied from any third-party list.
+- **Sources:** the Compound V2 reference design (`compound-finance/compound-protocol`: `CToken.sol`, `CErc20Immutable.sol`, `Comptroller.sol`, `Unitroller.sol`); Optimistic Etherscan (`optimistic.etherscan.io`) and BaseScan (`basescan.org`) for the deployed, verified Sonne contracts; the public Sonne Finance exploit post-mortems (2024-05).

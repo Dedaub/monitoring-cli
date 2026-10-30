@@ -1,7 +1,7 @@
 # OP Stack native bridges — reference index
 
 **Status:** all constants verified against live RPC on the eight target chains, the Superchain Registry (commit `2507d80d5eee7b1e0c8aa1485489936be62b7fd1`, 2026-09-28), the `ethereum-optimism/optimism` contracts and the L2BEAT discovery files on 2026-09-29.
-**Scope:** the canonical bridges of 57 OP Stack deployments: 49 chains that settle on Ethereum (the Superchain Registry, the chains that left it, the chains outside it, Mantle, two unidentified deployments), Metis, an unofficial deployment that uses GIWA's chain id, opBNB and one more chain on BNB Smart Chain, four L3s on Base, and the L2 predeploys of Optimism and Base. Blast is in [`../blast_native/`](../blast_native/core.md) and is not repeated here.
+**Scope:** the canonical bridges of 57 OP Stack deployments: 49 chains that settle on Ethereum (the Superchain Registry, the chains that left it, the chains outside it, Mantle, two unidentified deployments), Metis, an unofficial deployment that uses GIWA's chain id, opBNB and one more chain on BNB Smart Chain, four L3s on Base, and the L2 predeploys of Optimism and Base. Blast is not covered.
 
 ## The OP Stack bridge model
 
@@ -17,7 +17,6 @@ An OP Stack chain has one bridge, on its settlement layer, and one set of predep
 |---|---|---|
 | [l1.md](l1.md) | The settlement side: topics, selectors and one address row per chain (portal, bridge, messenger, NFT bridge, lockbox, SystemConfig, proof contract, batch inbox, ProxyAdmin and owner, SuperchainConfig); Mantle and Metis variants; token-specific bridges; opBNB | Ethereum, BNB Smart Chain |
 | [l2.md](l2.md) | The L2 predeploys on Optimism and Base, the deposit transaction and link keys, the interop predeploys (inactive), and the L3 settlement contracts on Base | Optimism, Base (Robinhood Chain checked: no predeploys) |
-| [`../blast_native/`](../blast_native/core.md) | Blast (OP Stack fork with a yield escrow) | Ethereum |
 
 ## Chains covered
 
@@ -80,7 +79,6 @@ An OP Stack chain has one bridge, on its settlement layer, and one set of predep
 | Unidentified L3 | 845300012 | Unidentified; EOA owner | Base | [l2.md §5](l2.md) |
 | B3 (L3) | 8333 | Outside the registry | Base | [l2.md §5](l2.md) |
 | Ham (L3) | 5112 | Outside the registry; last batch 2025-11-24 | Base | [l2.md §5](l2.md) |
-| Blast | 81457 | Fork with a yield escrow | Ethereum | [`../blast_native/`](../blast_native/core.md) |
 
 ## Topic collisions (read before indexing)
 
@@ -102,7 +100,7 @@ An OP Stack chain has one bridge, on its settlement layer, and one set of predep
 
 | Chain | ID | OP Stack contracts | Where |
 |---|---|---|---|
-| Ethereum | 1 | ✅ settlement contracts of 49 chains + Metis + Blast | l1.md |
+| Ethereum | 1 | ✅ settlement contracts of 49 chains + Metis | l1.md |
 | Base | 8453 | ✅ L2 predeploys + L3 settlement contracts (4 L3s) | l2.md |
 | Optimism | 10 | ✅ L2 predeploys | l2.md |
 | BNB Smart Chain | 56 | ✅ settlement contracts of opBNB + 1 unidentified chain | l1.md §4 |

@@ -1,6 +1,6 @@
-# Mayan MCTP and Fast MCTP — Topics, Selectors, Addresses (Ethereum + Base + Arbitrum + Optimism + Polygon + Avalanche; NOT BNB, NOT Robinhood Chain)
+# Mayan MCTP and Fast MCTP — Topics, Selectors, Addresses (Ethereum + Base + Arbitrum + Optimism + Polygon + Avalanche; NOT BNB, Robinhood Chain or Arc)
 
-**Status:** verified on 2026-09-29 against live RPC on all eight chains, the verified sources on Blockscout (`MayanCircle`, `FastMCTP`), the `mayan-finance/swap-sdk` ABIs and docs.mayan.finance (`architecture/mctp`). Topic0 and selector values were recomputed as `keccak256(signature)` from the verified ABIs and matched against live logs and transaction selectors. Addresses were existence-checked with `eth_getCode`.
+**Status:** verified on 2026-09-29 against live RPC on all eight chains, the verified sources on Blockscout (`MayanCircle`, `FastMCTP`), the `mayan-finance/swap-sdk` ABIs and docs.mayan.finance (`architecture/mctp`). Topic0 and selector values were recomputed as `keccak256(signature)` from the verified ABIs and matched against live logs and transaction selectors. Addresses were existence-checked with `eth_getCode`. Re-checked on 2026-10-30: no Mayan contract on Arc (5042) either; `eth_getCode` returns `0x` at every address of this file there, and Arc is not in the Mayan chain config. Circle CCTP v2 itself is live on both new chains (TokenMessengerV2 `0x28b5a0e9C621a5BadaA536219b3a228C8168cf5d`; `localDomain()` of MessageTransmitterV2 `0x81D40F21F12A8F0E3252Bccb954D722d4c464B64` = 26 on Arc and 35 on Robinhood Chain), but no Mayan contract uses it there.
 **Scope:** the two Mayan routes that move USDC over Circle CCTP. **MCTP** (contract `MayanCircle`) uses CCTP v1 plus a Wormhole message for the order data. **Fast MCTP** (contract `FastMCTP`) uses CCTP v2 and puts the order data in the CCTP hook data (no Wormhole message). Both have the same address on each of their six chains. BNB Chain and Robinhood Chain have neither contract (`eth_getCode` = `0x`). Topics and selectors are chain-agnostic; addresses are network-specific.
 
 Both routes follow the same pattern. On the source chain the Mayan contract pulls the user's USDC and burns it through CCTP (`DepositForBurn` with `depositor` = the Mayan contract). There is **no Mayan event on the source chain**. On the destination chain the Circle attestation mints USDC to the Mayan contract. A plain bridge (`redeemWithFee`, `redeem`) forwards the USDC to the recipient and emits **no Mayan event**. A swap order is filled by a driver (`fulfillOrder`: `OrderFulfilled`) or, after the deadline, delivered as USDC (`refund`: `OrderRefunded`). Both Mayan events sit on the destination chain.
@@ -209,6 +209,7 @@ Pinned window 2026-09-28 00:00–12:00 UTC: MCTP — 11 CCTP v1 `DepositForBurn`
 | **BNB Smart Chain** | 56 | 4 | — | ❌ `0x` (docs list BSC) | ❌ `0x` |
 | Avalanche C-Chain | 43114 | 6 | 1 | ✅ | ✅ |
 | **Robinhood Chain** | 4663 | — | — | ❌ `0x` | ❌ `0x` |
+| **Arc** | 5042 | — | — | ❌ `0x` | ❌ `0x` |
 
 Counterparties outside the eight chains: Solana (CCTP domain 5; MCTP program `dkpZqrxHFrhziEMQ931GLtfy11nFkCsfMftH9u6QwBU`, Fast MCTP program `Gx9rivpS3YR8pBFwMuP6omYqVxunpLvLkNn7ubNyuZZ5`), Sui (domain 8; MCTP only), Unichain, and for Fast MCTP also Linea, HyperEVM and Monad (docs). The sample Fast MCTP burn on Ethereum went to CCTP domain 15.
 
@@ -237,7 +238,7 @@ Counterparties outside the eight chains: Solana (CCTP domain 5; MCTP program `dk
 8. **Fills are permissioned.** MCTP `fulfillOrder` requires `msg.sender` = the driver named in the auction VAA (from Solana). FastMCTP `fulfillOrder` requires a whitelisted `msg.sender` and swap protocol. The driver and relayer addresses are ordinary accounts; in the Ethereum samples `0x04d9634df20aa66b23f114d37c45fa6c6ab76d56` submitted the fills.
 9. **Locked relayer fees (MCTP).** `bridgeWithLockedFee` keeps the fee inside MayanCircle on the source chain until `unlockFee` / `unlockFeeRefined` pays it to the relayer, after a Wormhole message from the destination. These are `Transfer` rows out of MayanCircle on the **source** chain with no Mayan event.
 10. **Admin changes emit no event.** Watch `rescueToken` `0xf8a67a62`, `rescueEth` `0xb25ea8fb`, `rescueRedeem` `0x75f50997`, `setPause` `0xbedb86fb`, `setMintRecipient` `0xe21e2d88`, `setDomainCallers` `0x375ef75e`, `setDomains` `0x93166d0c`, `setEmitter` `0x3441b139`, `setWhitelistedMsgSenders` `0x4fd416d1`, `setWhitelistedSwapProtocols` `0xcfa1167d`, `setFeeManager` `0x472d35b9`, `changeGuardian` `0x2fcb4f04`. A changed `mintRecipient` redirects future mints.
-11. **BNB and Robinhood Chain have neither route.** The docs MCTP table lists BSC, but the address has no code there and `getDomain(4)` reverts on the Ethereum MayanCircle.
+11. **BNB, Robinhood Chain and Arc have neither route.** The docs MCTP table lists BSC, but the address has no code there and `getDomain(4)` reverts on the Ethereum MayanCircle.
 
 ---
 
@@ -338,7 +339,7 @@ AVAX_CCTP_V2_TOKEN_MESSENGER = '\x28b5a0e9c621a5badaa536219b3a228c8168cf5d'
 AVAX_MCTP_FEE_MANAGER        = '\x6b4d38ed0a555d4516ae81c6c8d9b19f4365b523'
 AVAX_FAST_MCTP_FEE_MANAGER   = '\x54914a963c4197172130c26d496a367bd6609d88'
 AVAX_MAYAN_GUARDIAN_EOA      = '\x933e3922e04d47a466e60a20e486b372b64f1ea8'
--- BNB Smart Chain (56) and Robinhood Chain (4663): no MayanCircle, no FastMCTP (eth_getCode = 0x)
+-- BNB Smart Chain (56), Robinhood Chain (4663) and Arc (5042): no MayanCircle, no FastMCTP (eth_getCode = 0x)
 ```
 
 ---

@@ -1,6 +1,6 @@
 # Pharaoh Legacy AMM — Topics, Selectors, Addresses (Avalanche C-Chain)
 
-**Status:** topic0/selectors computed with `cast keccak`; 1–2 cross-checked against live `eth_getLogs` on Avalanche (publicnode, 2026-06). Addresses on-chain verified via `eth_getCode` + view reads (`PairFactory.allPairsLength()` → 182 ✓, `PHAR.symbol()` → "PHAR" ✓, `xPHAR.symbol()` → "xPHAR" ✓). All six other chains confirmed absent (`0x`).
+**Status:** topic0/selectors computed with `cast keccak`; 1–2 cross-checked against live `eth_getLogs` on Avalanche (publicnode, 2026-06). Addresses on-chain verified via `eth_getCode` + view reads (`PairFactory.allPairsLength()` → 182 ✓, `PHAR.symbol()` → "PHAR" ✓, `xPHAR.symbol()` → "xPHAR" ✓). All six other chains confirmed absent (`0x`). Re-checked on 2026-10-30: the AccessHub impl rotated to `0x0339fc80…` and the Voter impl rotated to `0xda9fb6a5…` (EIP-1967 slots read live).
 **Scope:** Pharaoh Exchange **Legacy AMM** — the Solidly/ve(3,3) classic AMM layer. Pharaoh is a fork of **RAMSES Exchange** (which itself forked Velodrome V1). Contracts covered: PairFactory, Pair (LP token), Router, Voter (EIP-1967 upgradeable proxy), VoteModule, VotingEscrow/veNFT (EIP-1967 proxy), Minter, GaugeFactory (legacy), FeeDistributorFactory, FeeRecipientFactory, AccessHub (EIP-1967 proxy), TreasuryHelper (EIP-1967 proxy), PHAR token, xPHAR token, p33 token, Team Multisig, Timelock, ProxyAdmin. The concentrated-liquidity (CL/RAMSES V3) product lives in [`cl.md`](cl.md).
 **Key facts:** Pharaoh is **Avalanche C-Chain only** — confirmed `0x` on Ethereum, Base, BNB, Arbitrum, Optimism, and Polygon. Epoch-based emissions (weekly PHAR mint → xPHAR → VoteModule). AMM `Swap` topic0 **matches Uniswap V2 layout** (unlike Aerodrome/Velodrome V2). The PairCreated signature **omits the `bool stable` field** (3-arg form), unlike Solidly-canonical 5-arg. The ve(3,3) token is **xPHAR** (liquid wrapper of PHAR) deposited into the VotingEscrow (ERC-721 veNFT). The Voter and VotingEscrow are behind EIP-1967 transparent proxies.
 
@@ -227,7 +227,7 @@
 
 ### Governance & Emissions
 ```
-0x922b9Ca8e2207bfB850B6FF647c054d4b58a2Aa7  Voter             (EIP-1967 proxy; impl 0x5363e33b…; proxy-admin 0x68ee9459…; minter()→Minter ✓)
+0x922b9Ca8e2207bfB850B6FF647c054d4b58a2Aa7  Voter             (EIP-1967 proxy; impl 0xda9fb6a5… on 2026-10-30, was 0x5363e33b…; proxy-admin 0x68ee9459…; minter()→Minter ✓)
 0xfe99e92df71f53a26005d1bfbe54c941a3131aa0  VotingEscrow      (EIP-1967 proxy; impl 0x9b8afab3…; proxy-admin 0x6a66483b…; veNFT / vePHAR)
 0x34F233F868CdB42446a18562710eE705d66f846b  VoteModule        (xPHAR staking + voting delegation hub)
 0xd23F124bBbC958bCdDC0cE624042B48154222FDE  Minter            (PHAR weekly emissions; PHAR.minter()→here ✓)
@@ -242,7 +242,7 @@
 
 ### Access Control & Admin
 ```
-0x3176f6E4Be2448C53EDD59C27651EDFaA74bf483  AccessHub         (EIP-1967 proxy; impl 0xe5be021d… since ≤2026-10, was 0x97301276…; proxy-admin 0x3B91972c… ✓)
+0x3176f6E4Be2448C53EDD59C27651EDFaA74bf483  AccessHub         (EIP-1967 proxy; impl 0x0339fc80… on 2026-10-30, was 0xe5be021d… and 0x97301276…; proxy-admin 0x3B91972c… ✓)
 0x3B91972c1Ff63296cb824a30997C7e4a982B7ee6  ProxyAdmin        (OZ ProxyAdmin; owner()→Team Multisig ✓)
 0xd1b27ccAF2A4dDcA0Ac32181374C70282492d843  Team Multisig
 0x12d54ad6daf65d55b029df1b34b260c68fc0ddcf  Timelock
@@ -283,9 +283,9 @@ Pharaoh is **Avalanche-exclusive**. Any address appearing in these contracts on 
 
 | Contract | Address | Pattern | Implementation | Proxy Admin |
 |----------|---------|---------|---------------|-------------|
-| Voter | 0x922b9Ca8… | EIP-1967 transparent | 0x5363e33b… | 0x68ee9459… |
+| Voter | 0x922b9Ca8… | EIP-1967 transparent | 0xda9fb6a5580029b7ce76a583bfcc73b1e136f980 (2026-10-30; was 0x5363e33b…) | 0x68ee9459… |
 | VotingEscrow | 0xfe99e92d… | EIP-1967 transparent | 0x9b8afab3… | 0x6a66483b… |
-| AccessHub | 0x3176f6E4… | EIP-1967 transparent | 0xe5be021d… (2026-10; was 0x97301276…) | 0x3B91972c… (ProxyAdmin) |
+| AccessHub | 0x3176f6E4… | EIP-1967 transparent | 0x0339fc80… (2026-10-30; was 0xe5be021d…, 0x97301276…) | 0x3B91972c… (ProxyAdmin) |
 | TreasuryHelper | 0x660862D4… | EIP-1967 transparent | 0xf03ce48d… | 0xba40a2e5… |
 | PairFactory | 0x85448bF2… | **immutable** — no impl slot | — | — |
 | Minter | 0xd23F124b… | **immutable** — no impl slot | — | — |

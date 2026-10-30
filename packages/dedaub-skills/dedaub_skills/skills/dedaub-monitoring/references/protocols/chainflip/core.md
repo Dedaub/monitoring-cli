@@ -1,6 +1,6 @@
-# Chainflip — Topics, Selectors, Addresses (Ethereum + Arbitrum + BNB; NOT Base, Avalanche, Optimism, Polygon, Robinhood)
+# Chainflip — Topics, Selectors, Addresses (Ethereum + Arbitrum + BNB; NOT Base, Avalanche, Optimism, Polygon, Robinhood, Arc)
 
-**Status:** verified on 2026-09-29 against live RPC on all eight target chains, the official mainnet address page (docs.chainflip.io), `chainflip-io/chainflip-eth-contracts` (master: `Vault.sol`, `KeyManager.sol`, `Deposit.sol`, `StateChainGateway.sol`, interfaces) and `chainflip-io/chainflip-backend` (`state-chain/primitives/src/chains.rs`, `chains/assets.rs`, `state-chain/chains/src/eth/deposit_address.rs`). Topics and selectors recomputed as `keccak256(sig)`; addresses existence-checked with `eth_getCode`; wiring read with `eth_call`; sample receipts decoded.
+**Status:** verified on 2026-09-29 against live RPC on all eight target chains, the official mainnet address page (docs.chainflip.io), `chainflip-io/chainflip-eth-contracts` (master: `Vault.sol`, `KeyManager.sol`, `Deposit.sol`, `StateChainGateway.sol`, interfaces) and `chainflip-io/chainflip-backend` (`state-chain/primitives/src/chains.rs`, `chains/assets.rs`, `state-chain/chains/src/eth/deposit_address.rs`). Topics and selectors recomputed as `keccak256(sig)`; addresses existence-checked with `eth_getCode`; wiring read with `eth_call`; sample receipts decoded. Re-checked on 2026-10-30: no Chainflip contract on Arc (5042); `eth_getCode` returns `0x` at all six addresses there.
 **Scope:** the Chainflip EVM contracts — Vault, KeyManager, AddressChecker, plus the Ethereum-only StateChainGateway and FLIP token — and the deposit-channel model, on Ethereum (1), Arbitrum One (42161) and BNB Smart Chain (56). Base, Avalanche, OP Mainnet, Polygon and Robinhood Chain (4663) have no Chainflip contract. Chainflip's other chains are not EVM (Bitcoin, Solana, Polkadot Assethub, Tron). Topics and selectors are chain-agnostic; addresses are network-specific.
 
 Chainflip is a cross-chain AMM run by its own State Chain (a Substrate chain). Its validators hold one aggregate FROST Schnorr key per chain. On an EVM chain, the **Vault** holds all funds and executes every egress; the **KeyManager** stores the aggregate key and checks one signature (and nonce) per Vault call. The swap itself happens on the State Chain, so **no on-chain field links an EVM deposit to its payout**: the link is in Chainflip's State Chain and its APIs only.
@@ -37,7 +37,7 @@ Two ways in, one way out:
 | 7 | Tron | | 17 TRX, 18 TrxUsdt | |
 | 8 | Bsc | | 19 BNB, 20 BscUsdt | |
 
-Base, Avalanche, OP Mainnet, Polygon and Robinhood Chain have no `ForeignChain` id.
+Base, Avalanche, OP Mainnet, Polygon, Robinhood Chain and Arc have no `ForeignChain` id.
 
 ---
 
@@ -217,6 +217,7 @@ Listed on the official mainnet page; Chainflip added BSC (`ForeignChain` 8) in r
 | OP Mainnet | 10 | — | — | — | 0 / 0 / 0 |
 | Polygon PoS | 137 | — | — | — | 0 / 0 / 0 |
 | Robinhood Chain | 4663 | — | — | — | 0 / 0 / 0 |
+| Arc | 5042 | — | — | — | not measured |
 
 The Arbitrum and BNB contracts share addresses (same deployer and nonces) but not bytecode. On Ethereum the same nonces gave other contracts: `0x79001a5e762f3bEFC8e5871b42F6734e00498920` is the AddressChecker there. Key every contract on `(chain, address)`.
 
@@ -323,7 +324,7 @@ BNB_CF_VAULT                     = '\x79001a5e762f3befc8e5871b42f6734e00498920'
 BNB_CF_KEY_MANAGER               = '\xbfe612c77c2807ac5a6a41f84436287578000275'
 BNB_CF_ADDRESS_CHECKER           = '\xc1b12993f760b654897f0257573202fba13d5481'
 BNB_CF_GOV_KEY_EOA               = '\xb9e6ef6fdb106bc8e1a001b9d7e8feaf8bebbc36'
--- Base, Avalanche, OP Mainnet, Polygon, Robinhood Chain: no Chainflip contract
+-- Base, Avalanche, OP Mainnet, Polygon, Robinhood Chain, Arc: no Chainflip contract
 ```
 
 ---
@@ -333,7 +334,7 @@ BNB_CF_GOV_KEY_EOA               = '\xb9e6ef6fdb106bc8e1a001b9d7e8feaf8bebbc36'
 How the constants were verified (2026-09-29):
 
 - **Topic0 / selectors:** recomputed as `keccak256(canonical signature)` / `[0:4]` from `IVault.sol`, `IKeyManager.sol`, `IShared.sol` (structs written as tuples), `IAggKeyNonceConsumer.sol`, `IGovernanceCommunityGuarded.sol`, `IStateChainGateway.sol`, `IFLIP.sol`, `ICFReceiver.sol` and `IMulticall.sol` (enum `CallType` as `uint8`). Chain and asset ids from `chains.rs` (`Ethereum = 1 … Bsc = 8`) and the asset tests in `chains/assets.rs`. The CREATE2 salt rule from `get_salt` in `eth/deposit_address.rs`.
-- **Addresses:** from the official mainnet address page (Ethereum, Arbitrum, BSC tables) and checked with `eth_getCode` on all eight chains: Vault, KeyManager and AddressChecker code on Ethereum, Arbitrum and BNB only; StateChainGateway and FLIP on Ethereum only; nothing on Base, Avalanche, OP Mainnet, Polygon or Robinhood Chain. Wiring by `eth_call`: `getKeyManager()` of each Vault (and of the gateway) returns the KeyManager of the same chain; `getSuspendedState()` = false; governance and community keys as in §3–§5. The Ethereum governance Safe returned 6 owners and threshold 3.
+- **Addresses:** from the official mainnet address page (Ethereum, Arbitrum, BSC tables) and checked with `eth_getCode` on all eight chains: Vault, KeyManager and AddressChecker code on Ethereum, Arbitrum and BNB only; StateChainGateway and FLIP on Ethereum only; nothing on Base, Avalanche, OP Mainnet, Polygon, Robinhood Chain or Arc (Arc checked 2026-10-30). The Safe singletons named in §3 and the Rango diamond named in §9 have code on Robinhood Chain and Arc; they are not Chainflip contracts. Wiring by `eth_call`: `getKeyManager()` of each Vault (and of the gateway) returns the KeyManager of the same chain; `getSuspendedState()` = false; governance and community keys as in §3–§5. The Ethereum governance Safe returned 6 owners and threshold 3.
 - **Activity (pinned 12-hour window 2026-09-28 00:00–12:00 UTC, any emitter):** `SwapNative` Ethereum 4, others 0; `SwapToken` Ethereum 17, Arbitrum 6, others 0; `FetchedNative` Ethereum 42, others 0; `SignatureAccepted` Ethereum 79, Arbitrum 4, others 0; `XCallNative`, `XCallToken`, `AddGas*`, `TransferNativeFailed`, `TransferTokenFailed`, `ExecuteActionsFailed`: 0 on all eight chains. Gateway on Ethereum: `RedemptionRegistered` 1, `RedemptionExecuted` 1, `Funded` 0; `AggKeySetByAggKey` 0 on Ethereum and Arbitrum. BNB: 0 for every topic (KeyManager `getLastValidateTime()` = 0). The Polygon `SignatureAccepted` count is from the same helper's earlier run (0); a re-run failed at the endpoint.
 - **Sample receipts:** `SwapNative` `0xf7d6cef7081969fe4d6fa41a6dc9219abe8472f63fb37bfbee296aa6d5b219d1` (0.01 ETH, `xSwapNative`, `dstChain` 3, `dstToken` 5); `SwapToken` `0x179850571e36f89d94e4cc3119c94e587cb9f1b3724b10a90ba2e4b95d57a2df` (USDC from the Rango diamond to the Vault); `FetchedNative` `0xb70f181cb89153ba9c20fdd0bb7bfc867babc05d496ea01a888ec6b67c6b40aa`; egress `0x331e3d012014ac57f62644eae0ce0d6688ce8ab52067a3ead0d7b7d1a198dc97`; Arbitrum `SwapToken` `0x9c0ffc7206c028f5d8974774b6ac643d7166f4e7e34e2ef372aaea241d1cc047` and sweep `0x80d8e1deca78cfb2ba5fc8109d06cb7fd756ab58fda90891b6100096469f1bbe`.
 - **Unverified:** the role of the 332-byte contract at `0xBFe612c77C2807Ac5a6A41F84436287578000275` on Ethereum (unverified source); the meaning of the `cfParameters` bytes beyond the refund address (not decoded).

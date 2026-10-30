@@ -1,11 +1,11 @@
-# Swaap Finance V2 — Topics, Selectors, Addresses (Ethereum, Arbitrum, Optimism, Base, Polygon, Avalanche, BNB)
+# Swaap Finance V2 — Topics, Selectors, Addresses (Ethereum, Arbitrum, Optimism, Base, Polygon, Avalanche, BNB, Robinhood Chain)
 
-**Status:** event topic0 hashes and function selectors computed locally with `cast keccak` / `cast sig` from canonical signatures read out of `swaap-labs/swaap-v2-monorepo` (GitHub). Addresses from `docs.swaap.finance` and on-chain verification via `cast` against `publicnode` RPCs on all seven chains. Vault `Swap` topic0 confirmed against live `eth_getLogs` on Ethereum Vault. SafeguardPool `Quote` topic0 confirmed against live logs from a deployed pool. See §8.
+**Status:** event topic0 hashes and function selectors computed locally with `cast keccak` / `cast sig` from canonical signatures read out of `swaap-labs/swaap-v2-monorepo` (GitHub). Addresses from `docs.swaap.finance` and on-chain verification via `cast` against `publicnode` RPCs on all seven chains. Vault `Swap` topic0 confirmed against live `eth_getLogs` on Ethereum Vault. SafeguardPool `Quote` topic0 confirmed against live logs from a deployed pool. See §8. Re-checked on 2026-10-30: a Swaap V2 Vault at the Vault A literal, with its own factories and pools, is live on Robinhood Chain (4663) (§3.5); Swaap is absent on Arc (5042).
 **Scope:** Swaap V2 — the Vault (Balancer V2 fork), SafeguardFactory, and SafeguardPool contracts. No V1 coverage here.
 
 **Architecture in one sentence:** Swaap V2 uses the **Balancer V2 Vault architecture** verbatim — the Vault is the single token custodian, all swaps/joins/exits flow through it, and the Vault's event signatures are **byte-for-byte identical to Balancer V2**. SafeguardPools are pool contracts (not the Vault) that implement off-chain-oracle-signed RfQ pricing and MEV safeguards. To monitor Swaap V2 trade flow, watch **the Vault** (one address per chain) using the same topic0 constants you use for Balancer V2. Cross-reference [`balancer/v2.md`](../balancer/v2.md) for the full Balancer V2 Vault event/selector catalog.
 
-**Key operational distinction — two Vault addresses:** Five chains (Ethereum, Arbitrum, Optimism, Polygon, Avalanche) use Vault A. Base and BNB use Vault B. Both vaults expose the identical Balancer V2 interface and emit identical events. SafeguardFactory is at the **same address** on all seven chains.
+**Key operational distinction — two Vault addresses:** Five chains (Ethereum, Arbitrum, Optimism, Polygon, Avalanche) use Vault A. Base and BNB use Vault B. Robinhood Chain has its own Vault build at the Vault A literal, with its own factories (§3.5). Both vaults expose the identical Balancer V2 interface and emit identical events. SafeguardFactory is at the **same address** on all seven chains.
 
 ---
 
@@ -140,7 +140,7 @@ Active swap activity confirmed: Ethereum (active), Optimism (active), Polygon (a
 
 ### 3.3 SafeguardFactory — all 7 chains
 
-**`0xCc74BD5d8D2d333D14475e022325555ebA3369B8`** — same address on all 7 chains, confirmed.
+**`0xCc74BD5d8D2d333D14475e022325555ebA3369B8`** — same address on all 7 chains above, confirmed. Not on Robinhood Chain (see §3.5).
 
 | Chain | Bytecode | getVault() | isDisabled() |
 |-------|----------|------------|--------------|
@@ -159,6 +159,23 @@ Active swap activity confirmed: Ethereum (active), Optimism (active), Polygon (a
 | Authorizer | `0xCA19Ed3182E6e591207E959de633a14825Cc123c` | Same on ETH/ARB/OP/POLY/AVAX and BNB |
 | ProtocolFeesCollector (A) | `0xa0cC39203c048277E658FF861fafeD8E30E7bd18` | ETH/ARB/OP/POLY/AVAX; `vault()` → Vault A |
 | ProtocolFeesCollector (B) | `0x9892e3E984760e97dAEB30EacFb9f794DA8622B4` | Base and BNB |
+
+### 3.5 Robinhood Chain (chain ID 4663)
+
+Not in `docs.swaap.finance`; the 0x API changelog (2026-07-31) lists Swaap V2 as a liquidity source on Robinhood Chain. Verified with `eth_call` / `eth_getLogs` on 2026-10-30.
+
+| Role | Address | Evidence |
+|------|---------|----------|
+| **Vault** | `0xd315a9C38eC871068FEC378E4Ce78AF528C76293` (Vault A literal) | 27,579 B (a different build from the 24,563 B Vault on the other chains); `WETH()` = `0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73`; emits the Balancer V2 `Swap` topic0 `0x2170c741…` |
+| Authorizer | `0xCA19Ed3182E6e591207E959de633a14825Cc123c` | `Vault.getAuthorizer()`; 3,281 B |
+| ProtocolFeesCollector | `0xa0cC39203c048277E658FF861fafeD8E30E7bd18` | `Vault.getProtocolFeesCollector()`; `vault()` → Vault; 3,083 B |
+| SafeguardFactory (1) | `0x98134802ef46c049f1c69bf87ee088be1a60137a` | 4,440 B; `getVault()` → Vault; created pool `0xaba14de9…590b` (block 5,196,357) |
+| SafeguardFactory (2) | `0xbc40a15ad216b3d969b305c7cf579d25d883263a` | 4,440 B; `getVault()` → Vault; created `Swaap WETH-USDG Safeguard` `0x29bb740b…7d2e` (block 8,754,660) and `Swaap CASHCAT-WETH Safeguard` `0xf5477c10…af2f` (block 11,132,009) |
+
+- The canonical SafeguardFactory `0xCc74…69B8` has **no code** on Robinhood Chain. The two factories here have a different `create` selector (`0x09b4727d`, signature not resolved), so the `create = 0x1e860c13` constant does not match on this chain.
+- The Vault B literal `0x03C01Aca…3B06` is **not** a Vault here: it is a 1,266 B contract whose `owner()` is `0x2f5f498bc3ab1da44a987897db04b1f016027a59`, the EOA that called both factories.
+- Activity: 663 `Swap` logs in blocks 10,000,000–10,100,000 and 93 in blocks 60,000,000–60,100,000, but 0 in the 200,000 blocks before block 101,800,000. The Vault registered three pools in total (`PoolRegistered`, full history).
+- Arc (5042): no Swaap contract. The Balancer Vault literal `0xBA12…F2C8` there (and on Robinhood Chain) is an unrelated forwarder decoy (see [`balancer/v2.md`](../balancer/v2.md) §3).
 
 ---
 
@@ -227,6 +244,9 @@ INIT_TARGET_BALANCES  = 0x67b9340be426386b69cd6d74afa4aec06726970f492cd88855d230
 -- Vault addresses
 VAULT_A = 0xd315a9C38eC871068FEC378E4Ce78AF528C76293  -- ETH/ARB/OP/POLY/AVAX
 VAULT_B = 0x03C01Acae3D0173a93d819efDc832C7C4F153B06  -- Base/BNB
+ROBIN_VAULT = 0xd315a9C38eC871068FEC378E4Ce78AF528C76293  -- Robinhood Chain (same literal as VAULT_A, different build)
+ROBIN_SAFEGUARD_FACTORY_1 = 0x98134802ef46c049f1c69bf87ee088be1a60137a
+ROBIN_SAFEGUARD_FACTORY_2 = 0xbc40a15ad216b3d969b305c7cf579d25d883263a
 
 -- SafeguardFactory (all 7 chains)
 FACTORY = 0xCc74BD5d8D2d333D14475e022325555ebA3369B8

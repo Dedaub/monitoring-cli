@@ -1,12 +1,12 @@
 # Curve Finance — Protocol Reference Index
 
-Monitoring-grade references for Curve across **Ethereum (1), Arbitrum One (42161), Optimism (10), Base (8453), BNB Smart Chain (56), Avalanche C-Chain (43114), Polygon PoS (137)** — plus **Gnosis (100)** as a bonus 8th chain. Verified against live RPC (`publicnode`) + the canonical `curvefi/*` Vyper repos on **2026-06-02**.
+Monitoring-grade references for Curve across **Ethereum (1), Arbitrum One (42161), Optimism (10), Base (8453), BNB Smart Chain (56), Avalanche C-Chain (43114), Polygon PoS (137)** — plus **Gnosis (100)** as a bonus 8th chain. Verified against live RPC (`publicnode`) + the canonical `curvefi/*` Vyper repos on **2026-06-02**. Re-checked on 2026-10-30: the three NG factories (Stableswap-NG `0x8271…E8aD`, Twocrypto-NG `0xe7FB…c88C`, Tricrypto-NG `0x6E28…15FB`) are also on **Robinhood Chain (4663)** and **Arc (5042)** — factory-only, no registry, router, CRV or crvUSD there (curve.md §9d).
 
 Curve is **two product lines** that share governance (veCRV/CRV) but almost no ABI. One file per line, each following the same section layout (spelled out below the table):
 
 | File | Product line | Components | Status |
 |------|--------------|------------|--------|
-| [curve.md](curve.md) | **AMM / DEX + DAO** | StableSwap (classic + NG), CryptoSwap (old tricrypto-2 + Tricrypto-NG + Twocrypto-NG), all factories, the AddressProvider / AddressProvider-NG / MetaRegistry stack, Root/Child gauge factories, CurveRouterNG, and the CRV / veCRV / GaugeController / Minter / FeeDistributor DAO stack | **Live.** 8 chains. Pools immutable (no proxies). |
+| [curve.md](curve.md) | **AMM / DEX + DAO** | StableSwap (classic + NG), CryptoSwap (old tricrypto-2 + Tricrypto-NG + Twocrypto-NG), all factories, the AddressProvider / AddressProvider-NG / MetaRegistry stack, Root/Child gauge factories, CurveRouterNG, and the CRV / veCRV / GaugeController / Minter / FeeDistributor DAO stack | **Live.** 8 chains + factory-only Robinhood Chain and Arc. Pools immutable (no proxies). |
 | [crvusd.md](crvusd.md) | **crvUSD + LlamaLend + scrvUSD** | crvUSD stablecoin, crvUSD **mint markets** (ControllerFactory + per-collateral Controller/LLAMMA/MonetaryPolicy + PegKeepers), **LlamaLend / Curve Lend** (OneWayLendingFactory + ERC-4626 Vault/Controller/LLAMMA per market), **scrvUSD** savings, and the fee plumbing | **Live.** Mint = ETH only; LlamaLend = ETH/ARB/OP; token bridged to all 8. |
 
 Each file follows: **Topics** (chain-agnostic `topic0 = keccak256(event sig)`) → **Function selectors** (chain-agnostic 4-byte) → **Addresses** (per chain, absence noted) → **Cross-chain summary** → **Proxies** → **Detection invariants & gotchas** → **Quick-copy `\x` bytea constants** → **Verification & sources**.

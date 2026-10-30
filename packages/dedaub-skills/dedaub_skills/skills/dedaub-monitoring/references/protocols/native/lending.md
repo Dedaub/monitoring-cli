@@ -1,6 +1,6 @@
 # Native — Credit Pool / Lending (CreditVault + NativeLPToken) — Topics, Selectors, Addresses
 
-**Status:** verified against live RPC on Ethereum(1), BNB Smart Chain(56), Arbitrum One(42161), Base(8453), Avalanche C-Chain(43114), Optimism(10), Polygon PoS(137), and the `Native-org/native-v2-core` repo (`CreditVault.sol`, `NativeLPToken.sol`, `interfaces/ICreditVault.sol`, `libraries/ConstantsLib.sol`) on 2026-06-02. **Re-checked 2026-10-05:** Robinhood Chain (4663) CreditVault added (§3.4a), and the CreditVault `owner()` corrected on all chains (§3).
+**Status:** verified against live RPC on Ethereum(1), BNB Smart Chain(56), Arbitrum One(42161), Base(8453), Avalanche C-Chain(43114), Optimism(10), Polygon PoS(137), and the `Native-org/native-v2-core` repo (`CreditVault.sol`, `NativeLPToken.sol`, `interfaces/ICreditVault.sol`, `libraries/ConstantsLib.sol`) on 2026-06-02. **Re-checked 2026-10-05:** Robinhood Chain (4663) CreditVault added (§3.4a), and the CreditVault `owner()` corrected on all chains (§3). Re-checked on 2026-10-30: Arc (5042) has an unlisted Native CreditVault `0xab6c4485…` with **no markets** (§3.5).
 **Scope:** the **Native Credit Pool** (lending/credit side) only — the `CreditVault` (asset custody + market-maker position/collateral/settlement/liquidation) and the per-asset `NativeLPToken` yield-bearing LP tokens. The **swap side** (NativeRouter V3/V4, NativeRFQPool, NativeBridge) is **out of scope here** and covered by a separate reference — see the boundary note below. Topics + selectors are **chain-agnostic**; addresses are network-specific. **CreditVault is deployed on Ethereum, BNB, Arbitrum, and Base only** — `eth_getCode` returns `0x` for every candidate on Avalanche, Optimism, and Polygon (§ Cross-chain summary).
 
 Native flips on-chain liquidity from *inventory-based* to *credit-based*. Whitelisted private market makers ("traders" / PMMs) borrow assets directly from the `CreditVault` up to a credit limit (computed off-chain) to quote RFQ swaps, instead of pre-funding inventory. The vault holds almost all protocol assets. A trader's net exposure is tracked as a **signed position** `positions[trader][token]` (positive = long, negative = short = borrowed). LPs deposit an underlying asset into its dedicated `NativeLPToken`; the deposit is forwarded **into the CreditVault** (the LP contract holds no underlying), and LP yield comes from **borrowing fees** the traders pay — distributed to LP holders by an off-chain `epochUpdater` calling `epochUpdate` → `distributeYield`, which raises each LP token's exchange rate (capped at +1% per epoch). Traders may also post `NativeLPToken` (or other supported markets) as **collateral**; positions that go underwater are closed by whitelisted **liquidators**.
@@ -283,9 +283,9 @@ From the official addresses page ("Robinhood"). owner `0x0cb4…a664` · signer 
 
 Most Robinhood markets are tokenized equities. The symbol prefix is `NLP-`, not `NT-LP-`.
 
-### 3.5 Avalanche (43114), Optimism (10), Polygon PoS (137), Arc (5042) — **NOT DEPLOYED**
+### 3.5 Avalanche (43114), Optimism (10), Polygon PoS (137) — **NOT DEPLOYED**; Arc (5042) — empty vault
 
-`eth_getCode` = `0x` for all four candidate CreditVault addresses on each of these three chains (2026-06-02). The official addresses page (2026-10-05) lists a CreditVault for Ethereum, BNB, Arbitrum, Base, Robinhood, Monad, X Layer and Morph only. The Robinhood CreditVault address returns `0x` on Arc. **No Native Credit Pool on Avalanche, Optimism, Polygon or Arc.** (Native's swap-side products may differ — out of scope.)
+`eth_getCode` = `0x` for all four candidate CreditVault addresses on each of these three chains (2026-06-02). The official addresses page (2026-10-05) lists a CreditVault for Ethereum, BNB, Arbitrum, Base, Robinhood, Monad, X Layer and Morph only. **No Native Credit Pool on Avalanche, Optimism or Polygon.** **Arc** has an unlisted CreditVault `0xab6c448570bba62b712cfa272b5d8e208429f35d` (20,187 B, `eip712Domain()` = "Native Credit Vault", chainId 5042, `signer()` = `0x0b89…0a5e`, `owner()` = `0xf47e5d29c62c4657e5b8cc2c3541a7d710a967b8` (17,323 B), EIP-1967 slot empty) with **zero LP tokens** (`allLPTokens(0)` reverts) and no logs in the last 5,000 blocks (2026-10-30). The Robinhood CreditVault address returns `0x` on Arc. The Ethereum LP-token address `0xeea56d9b…a480` (NLP-TSLAon) is a Native RFQ pool on Arc — key on `(chainId, address)`.
 
 ---
 
@@ -301,6 +301,7 @@ Most Robinhood markets are tokenized equities. The symbol prefix is `NLP-`, not 
 | Avalanche C-Chain | 43114 | ✓ | **absent** (`0x`) | — | — | — |
 | Optimism | 10 | ✓ | **absent** (`0x`) | — | — | — |
 | Polygon PoS | 137 | ✓ | **absent** (`0x`) | — | — | — |
+| Arc | 5042 | ✓ | `0xab6c4485…08429f35d` (unlisted) | 0 | `0xf47e…67b8` | ✓ |
 
 CreditVault addresses are **distinct per chain** (no CREATE2 identity). LP-token addresses **partially collide** between ETH and BNB (same deployer/nonce, different underlying). Signer `0x0b89…0a5e` is shared across all five deployed target chains; `owner()` is a distinct 17,236-byte contract on each chain (2026-10-05). LP counts are from 2026-06-02 (Robinhood: 2026-10-05).
 
@@ -430,7 +431,8 @@ BNB_CREDIT_VAULT                = '\xba8db0caf781cac69b6acf6c848ac148264cc05d'  
 ARB_CREDIT_VAULT                = '\xba1cf8a63227b46575af823beb4d83d1025eff09'   -- 5 LP tokens
 BASE_CREDIT_VAULT               = '\x74a4cd023e5afb88369e3f22b02440f2614a1367'   -- 5 LP tokens
 RH_CREDIT_VAULT                 = '\x57b8f68ef57af2db70bc9aac891836661ca4cb51'   -- 11 LP tokens
--- NOT deployed on Avalanche(43114) / Optimism(10) / Polygon(137) / Arc(5042): eth_getCode = 0x
+ARC_CREDIT_VAULT                = '\xab6c448570bba62b712cfa272b5d8e208429f35d'   -- unlisted, 0 LP tokens (2026-10-30)
+-- NOT deployed on Avalanche(43114) / Optimism(10) / Polygon(137): eth_getCode = 0x
 
 -- ===== Sample LP tokens (enumerate full set via allLPTokens per chain) =====
 ETH_NTLP_WETH                   = '\x5994258ec80cc6853e2b6f047ec6d213fe89b24b'

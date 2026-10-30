@@ -1,6 +1,6 @@
 # Lodestar Finance — Topics, Selectors, Addresses (Arbitrum One only)
 
-**Status:** verified against Arbitrum One (42161) mainnet RPC (`arbitrum-one-rpc.publicnode.com`) at block ~471,350,000 and the Compound V2 reference (`compound-finance/compound-protocol`) on 2026-06-08. Every topic0/selector recomputed locally as `keccak256(canonical signature)`; every address `eth_getCode`-checked; the proxy/delegator wiring read live from storage + typed getters; the AccrueInterest variant confirmed both in delegate bytecode and on a live log.
+**Status:** verified against Arbitrum One (42161) mainnet RPC (`arbitrum-one-rpc.publicnode.com`) at block ~471,350,000 and the Compound V2 reference (`compound-finance/compound-protocol`) on 2026-06-08. Every topic0/selector recomputed locally as `keccak256(canonical signature)`; every address `eth_getCode`-checked; the proxy/delegator wiring read live from storage + typed getters; the AccrueInterest variant confirmed both in delegate bytecode and on a live log. Re-checked on 2026-10-30: no Lodestar contracts on Robinhood Chain or Arc. The Safe v1.3.0 singleton `0x3e5c6364…d36e` has code on both chains (23800 B, same as Arbitrum) because it is shared Safe infrastructure.
 **Scope:** the seven chains requested — **Lodestar lending is deployed on exactly ONE of them: Arbitrum One (chain 42161).** `eth_getCode` on the Lodestar Unitroller returns empty (`0x`) on **Ethereum (1), Base (8453), BNB (56), Avalanche (43114), Optimism (10), and Polygon PoS (137)** — it is **not deployed** on any of those six. Topics and selectors are chain-agnostic; addresses are Arbitrum-specific. **Operational status: the protocol is FROZEN / wound down** (see orientation + §6).
 
 Lodestar is a **Compound V2 fork** (cToken model) on Arbitrum: lTokens (`lUSDC`, `lETH`, `lARB`, `lplvGLP`, …) are the money markets, a **Comptroller** logic contract sits behind a **Unitroller** proxy as the risk engine, a custom **PriceOracle** (`PriceOracleProxy` with a staleness guard), and per-market **JumpRateModel** interest-rate strategies. Like stock Compound V2 it uses **two bespoke delegatecall-proxy patterns — NOT EIP-1967**: the Unitroller (Comptroller proxy) and per-market lToken **delegators** (`CErc20Delegator`-style; each lToken has its own logic via `implementation()`). The standard EIP-1967 impl slot is empty on every Lodestar contract.
@@ -278,20 +278,6 @@ Lodestar predates EIP-1967 and inherits Compound V2's **two bespoke delegatecall
 - **Absence:** `eth_getCode(0xa86DD95c…)` returns `0x` on Ethereum, Base, BNB, Avalanche, Optimism, and Polygon PoS.
 
 **Authoritative sources:** [`compound-finance/compound-protocol`](https://github.com/compound-finance/compound-protocol) (CToken / Comptroller / Unitroller / CErc20Delegator semantics, byte-for-byte forked); Lodestar Finance docs (`docs.lodestarfinance.io`) and GitHub (`LodestarFinance`); Arbiscan for the deployed contracts; on-chain reads via the Arbitrum One public RPC.
-
-### Independent fact-check (2026-06-08)
-
-| Claim | Method | Verdict |
-|-------|--------|---------|
-| Lodestar is Arbitrum-only; absent on the other 6 requested chains | `eth_getCode` on the Unitroller on all 7 chains | **Confirmed** — non-empty on Arbitrum, `0x` on the other six |
-| `AccrueInterest` is the **4-arg** variant, not the 3-arg | delegate bytecode scan (3-arg absent / 4-arg present) **+** live lETH log with 128-byte data | **Confirmed** |
-| Accrual is **per block** (not timestamp like Moonwell) | `accrualBlockNumber()` + `supplyRatePerBlock()` present in delegate bytecode | **Confirmed** |
-| Proxies are Compound **delegators, NOT EIP-1967** | EIP-1967 impl/admin/beacon slots all `0x` on Unitroller, lToken, impl, oracle, LODE | **Confirmed** |
-| Protocol is **frozen / wound down** post-exploit | live `mintGuardianPaused`=true, `borrowGuardianPaused`=true, `collateralFactor`=0 on all 15 markets | **Confirmed** |
-| Suffered a **Dec-2022 plvGLP oracle-manipulation exploit** | `lplvGLP` market still listed but paused, CF 0; underlying confirmed = `plvGLP` (`0x5326…CFF1`); oracle reverts "Price not fresh" | **Confirmed** (on-chain residue consistent with the public exploit record) |
-| Governance = a **3-of-N Gnosis Safe** (not a Compound Timelock) | Safe singleton in slot 0, `getThreshold()`=3, `VERSION()`="1.3.0"; Timelock `delay()` reverts | **Corrected** — it is a Safe multisig, not a `Timelock` |
-| pauseGuardian is a contract | `eth_getCode` | **Corrected** — it is an **EOA** (no code) |
-| 15 markets enumerated | `getAllMarkets()` returned 15 lTokens, all live | **Confirmed** |
 
 ---
 

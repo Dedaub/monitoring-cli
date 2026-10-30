@@ -15,7 +15,7 @@ Cross-rollup bridge with an **optimistic / off-chain-relayer** design. Two clear
 - **Routers and OPools are immutable; the Aggregator and the VizingPad are not.** The `Aggregator` is an EIP-1967 transparent proxy whose ProxyAdmin owner and `owner()` are one EOA (`0xdd08e0aaaa2e063dafb2df2dee19b5b0dd220ff6`), which can pause it, change its executor and withdraw its balance; the `VizingPad` is a UUPS proxy under `AccessControl`. The OPool owner sets maker/manager/receiver lists. The MDC framework's singletons are upgradeable but their addresses are not published.
 - **Router bytecode is byte-identical on all 6 EVM chains** (sha256 `27f13214…`). Addresses are **unique on ETH/ARB/OP/POLY** but **shared `0x13e46b2a3f8512ed4682a8fb8b560589fe3c2172` on BNB + Base** (and off-target Scroll/Linea/Mantle/Blast/Polygon-zkEVM). `OPool` shares `0x6285a466a98f513e1f6be29acad27d173d3b3c59` on ARB + BNB.
 - **Avalanche C-Chain has no router or OPool** (both `0x`); it is reachable via the Maker-EOA flow and through the unlisted Aggregator proxy.
-- **Robinhood Chain (4663) has no Orbiter contract and no maker activity**, and no official Orbiter list names it (core.md §10).
+- **Robinhood Chain (4663) and Arc (5042) have no Orbiter contract and no maker activity**, and no official Orbiter list names them (core.md §10).
 - **Counterparty chains outside the eight** are common: zkSync Era, Polygon zkEVM, Scroll, Linea, Mantle, Blast, Arbitrum Nova, Manta, Mode, Taiko, plus non-EVM StarkNet / Solana / TON. Decode the destination from the amount suffix; do not assume the other leg is on a target chain.
 
 Verification methodology and per-chain `eth_getCode`/slot reads are detailed in each file's final section (checks dated 2026-06-09, extended on 2026-09-29).

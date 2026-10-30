@@ -1,6 +1,6 @@
 # Arbitrum Canonical Bridge (Nitro) — Topics, Selectors, Addresses (Ethereum L1 ↔ Arbitrum One / Nova L2)
 
-**Status:** verified against live RPC on Ethereum (1), Arbitrum One (42161) and Arbitrum Nova (42170) and against the canonical `OffchainLabs/nitro-contracts` + `OffchainLabs/token-bridge-contracts` repos on 2026-06-09. Extended on 2026-09-29 (live RPC on Ethereum, Arbitrum One and Robinhood Chain): the Classic Outboxes, the DAI, GRT, ARB and wstETH custom gateways and their escrows, `TxToL1`, the 4-argument L2 `outboundTransfer`, and Robinhood Chain (4663) coverage.
+**Status:** verified against live RPC on Ethereum (1), Arbitrum One (42161) and Arbitrum Nova (42170) and against the canonical `OffchainLabs/nitro-contracts` + `OffchainLabs/token-bridge-contracts` repos on 2026-06-09. Extended on 2026-09-29 (live RPC on Ethereum, Arbitrum One and Robinhood Chain): the Classic Outboxes, the DAI, GRT, ARB and wstETH custom gateways and their escrows, `TxToL1`, the 4-argument L2 `outboundTransfer`, and Robinhood Chain (4663) coverage. Re-checked on 2026-10-30: Arc (5042) added as a no-deployment chain (`eth_getCode` returns `0x` at all 83 addresses of this file); the One Rollup and L2 gateway implementations are unchanged.
 **Scope:** the native (canonical) Arbitrum bridge — the Nitro core messaging stack (Inbox / Bridge / Outbox / SequencerInbox / Rollup) plus the token bridge (GatewayRouter + ERC20/Custom/Weth gateways) and the L2 system precompiles (ArbSys, ArbRetryableTx). Event topics and function selectors are **chain-agnostic**; addresses are **network-specific**. The target chains are Ethereum, Base, BNB, Avalanche, Arbitrum One, Optimism, Polygon and Robinhood Chain (4663). **The canonical Arbitrum One / Nova bridge is anchored on Ethereum L1 (chain 1) and Arbitrum One L2 (42161) only of the eight.** Base, BNB, Avalanche, Optimism, Polygon and Robinhood Chain carry **none** of these contracts (`eth_getCode` = `0x` for every address — §6). Arbitrum **Nova** L2 (chain 42170) is the second counterparty but is **outside the eight**; its L1 contracts (which live on Ethereum) are documented in §4 as a recorded finding. Robinhood Chain and the other Arbitrum Orbit chains run their own copies of these contracts under their own addresses: see `orbit.md`.
 
 The bridge is a set of **EIP-1967 transparent proxies** (no CREATE2 vanity, no per-token instances — one fixed singleton per role per rollup). Deposits are L1→L2 messages: a user calls a gateway/Inbox on L1, the `Bridge` enqueues a delayed message (`MessageDelivered`), the `Inbox` records the payload (`InboxMessageDelivered`), and a **retryable ticket** auto-executes on L2. Withdrawals are L2→L1: a user calls `ArbSys.sendTxToL1` (or an L2 gateway that calls it) emitting **`L2ToL1Tx`**, the sequencer posts a batch (`SequencerBatchDelivered`), the Rollup confirms an assertion (`AssertionConfirmed`), and after the ~6.4-day challenge window the user calls `Outbox.executeTransaction` (`OutBoxTransactionExecuted`). The two halves never share an event in the same transaction — attribution is by the cross-chain `messageHash` / `position`, not by `tx.from`.
@@ -335,7 +335,7 @@ All verified via `eth_getCode` non-empty on `https://arbitrum-one-rpc.publicnode
 
 ## 6. Addresses — the other requested chains (NO Arbitrum One / Nova bridge here)
 
-`eth_getCode` returns `0x` for **every** Arbitrum bridge address (Inbox/Bridge/Rollup/L1GatewayRouter and the L2 set) on each of these — verified 2026-06-09, and for Robinhood Chain on 2026-09-29. The canonical One / Nova bridge has no presence on:
+`eth_getCode` returns `0x` for **every** Arbitrum bridge address (Inbox/Bridge/Rollup/L1GatewayRouter and the L2 set) on each of these — verified 2026-06-09, for Robinhood Chain on 2026-09-29, and for Arc on 2026-10-30. The canonical One / Nova bridge has no presence on:
 
 | Chain | ID | RPC checked | Result |
 |---|---|---|---|
@@ -345,6 +345,7 @@ All verified via `eth_getCode` non-empty on `https://arbitrum-one-rpc.publicnode
 | Optimism | 10 | optimism-rpc.publicnode.com | `0x` for Inbox, Bridge, L1GatewayRouter |
 | Polygon PoS | 137 | polygon-bor-rpc.publicnode.com | `0x` for Inbox, Bridge, L1GatewayRouter |
 | Robinhood Chain | 4663 | rpc.mainnet.chain.robinhood.com | `0x` for the One Inbox, Bridge, Rollup, L1GatewayRouter, L2GatewayRouter and L2ERC20Gateway; Robinhood Chain runs its own Nitro stack (`orbit.md` §6) |
+| Arc | 5042 | rpc.mainnet.arc.io | `0x` at every address of this file, ArbSys `0x0000000000000000000000000000000000000064` included; Arc is not a Nitro chain and has no Orbit factory (`orbit.md` §7) |
 
 This is expected: the Arbitrum canonical bridge is **strictly Ethereum-L1-anchored** — its only counterparties are Arbitrum One (42161) and Arbitrum Nova (42170). The L1 side lives **only** on Ethereum; the L2 side lives **only** on the respective Orbit chain. There is no One / Nova deployment on any other settlement layer. Other Orbit chains (Robinhood Chain, the Orbit L2s on Ethereum, the Orbit L3s on Base and on Arbitrum One) use the same contracts at their own addresses: `orbit.md`.
 
@@ -363,6 +364,7 @@ This is expected: the Arbitrum canonical bridge is **strictly Ethereum-L1-anchor
 | Optimism | 10 | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ |
 | Polygon | 137 | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ |
 | Robinhood Chain | 4663 | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ (own ArbSys, see `orbit.md`) |
+| Arc | 5042 | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ |
 
 **Robinhood Chain (4663)** has no One / Nova contract, but it is itself an Orbit L2 on the same Nitro code: its Ethereum-side Bridge is `0xDf8755334ce7A73cCF6b581C02eA649AE3E864b3` (Inbox `0x1A07cc4BD17E0118BdB54D70990D2158AbAD7a2D`, Outbox `0xf0ce991ea4A0d2400A4AB49b20ae333f6Dce3DE9`), and its L2 side (ArbSys `0x0000000000000000000000000000000000000064`, L2GatewayRouter `0x1E324B9316138CA9a73F960213621AD1aaf01B89`) is on 4663. Full rows: `orbit.md` §3.1 and §6.
 

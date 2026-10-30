@@ -1,6 +1,6 @@
 # USDT0 (Tether omnichain bridge) — Topics, Selectors, Addresses (Ethereum + Arbitrum + Optimism + Polygon of the 7; ~23 chains total)
 
-**Status:** verified against Ethereum, Arbitrum One, Optimism, Polygon PoS, Base, BNB, and Avalanche live RPC, the official docs (`docs.usdt0.to`), and the canonical `Everdawn-Labs/usdt0-*` repos / OpenZeppelin audit, on 2026-06-09.
+**Status:** verified against Ethereum, Arbitrum One, Optimism, Polygon PoS, Base, BNB, and Avalanche live RPC, the official docs (`docs.usdt0.to`), and the canonical `Everdawn-Labs/usdt0-*` repos / OpenZeppelin audit, on 2026-06-09. Re-checked on 2026-10-30: all proxy impls and the Safe owner are unchanged; the official deployments page lists a second Ethereum OFT Adapter (the IOTA lockbox, §3); Robinhood Chain (4663) and Arc (5042) are not USDT0 networks.
 **Scope:** the on-chain bridge contracts behind the Dune **"tether"** bridge category — i.e. **USDT0**, the LayerZero-v2 OFT representation of Tether USD₮. Topics + selectors are **chain-agnostic**; addresses are network-specific. Of the seven requested chains, USDT0 is **live on Ethereum (lockbox), Arbitrum One, Optimism, and Polygon PoS**, and **NOT deployed on Base, BNB Smart Chain, or Avalanche C-Chain** (`eth_getCode` = `0x` for every USDT0 address on those three).
 
 USDT0 is a **lock-and-mint omnichain stablecoin** built on **LayerZero v2's OFT (Omnichain Fungible Token) standard**. The canonical collateral is **native USD₮ (`0xdAC17F958D2ee523a2206206994597C13D831ec7`) locked in an Ethereum-mainnet lockbox** — the `OAdapterUpgradeable` "OFT Adapter" at `0x6C96dE32CEa08842dcc4058c14d3aaAD7Fa41dee`. On every other chain, USDT0 is a **freshly mint/burnable token** (`symbol()`/`name()` = `USD₮0`, 6-dec) paired with a sibling **OFT messenger contract** that holds the LayerZero wiring. A cross-chain transfer = `send()` on the source OFT → source token burned/locked → LayerZero relays a verified packet (DVN attests, Executor delivers) → destination OFT calls the destination token's mint → `OFTReceived`. **This is NOT a Tether-treasury EOA mint/burn**: minting/burning is performed by the OFT contracts under LayerZero messaging, not by an off-chain Tether key (the legacy native USD₮ minting is a separate, unrelated flow).
@@ -168,6 +168,7 @@ All verified via `eth_getCode` returning non-empty bytecode on `https://ethereum
 | OFT Adapter impl | `0xcd979b10a55fcdac23ec785ce3066c6ef8a479a4` | `OAdapterUpgradeable` implementation (read live from EIP-1967 slot). |
 | OFT ProxyAdmin | `0x4de7096B2131E84Fd6b2042AD8cd9B4E43F728Fc` | OZ ProxyAdmin (admin slot of the adapter proxy). |
 | **Safe** (owner / LZ delegate) | `0x4DFF9b5b0143E642a3F63a5bcf2d1C328e600bf8` | Gnosis Safe; owns ProxyAdmin + is adapter `owner()`. |
+| **IOTA lockbox** (OFT Adapter, proxy) | `0xAEf027F94008430BF4Fc27FFABB49ea6F1dd3414` | Second `OAdapterUpgradeable` (2,739 B proxy). Serves IOTA L1 only; that mesh is not connected to the other USDT0 chains. `token()` = native USD₮, `approvalRequired()` = `true`, `owner()` = the Safe. Impl `0x1ab288f49e18884b3a5358f4079ca0f40b891d99`, ProxyAdmin `0xa7d54c767364fff0e31199dd65f0a4243054ae52`. |
 | native **USD₮** (inner token) | `0xdAC17F958D2ee523a2206206994597C13D831ec7` | The pre-existing Tether USD₮ locked as collateral. **Not a USDT0 contract.** |
 | LayerZero EndpointV2 | `0x1a44076050125825900e736c501f859c50fe728c` | LZ v2 transport. **Not a USDT0 contract.** |
 
@@ -229,10 +230,10 @@ Verified via `eth_getCode` on `https://polygon-bor-rpc.publicnode.com`. LZ EID *
 
 ## 7. Chains NOT among the 7 (counterparty footprint — recorded findings)
 
-USDT0 is live on **~23 networks**; the majority are **outside the 7 requested**. The lockbox on Ethereum peers to all of them. Counterparty chains (EID, inner-token model):
+USDT0 is live on **24 networks** (official deployments page, 2026-10-30), plus 6 Legacy Mesh networks; the majority are **outside the 7 requested**. The lockbox on Ethereum peers to all of them. Counterparty chains (EID, inner-token model):
 
 - **Outside-7 with USDT0 Token+OFT:** Ink (57073, EID 30339), Berachain (80094, 30362), Unichain (130, 30320), Sei (1329, 30280), HyperEVM (999, 30367, + HyperCore Composer + HyperCore non-EVM), Rootstock (30, 30333), Flare (14, 30295), Corn (21000000, 30331), Conflux eSpace (1030, 30212), Mantle (5000, 30181), Morph (2818, 30322), XLayer (196, 30274), Hedera (295, 30316), Plasma (9745, 30383), Stable (988, 30396), MegaETH (4326, 30398), Monad (143, 30390), Tempo (4217, 30410, + `TempoOFTWrapper`).
-- **Non-EVM:** HyperCore (Hyperliquid L1) via the HyperCore Composer `0x80123Ab57c9bc0C452d6c18F92A653a4ee2e7585` on HyperEVM.
+- **Non-EVM:** HyperCore (Hyperliquid L1) via the HyperCore Composer `0x80123Ab57c9bc0C452d6c18F92A653a4ee2e7585` on HyperEVM; Stellar; IOTA L1 (through the separate IOTA lockbox, §3).
 
 These are **counterparty endpoints, not omissions** — the `OFTSent.dstEid` / `OFTReceived.srcEid` on the 4 in-scope chains will frequently reference these EIDs.
 
@@ -355,6 +356,7 @@ ETH_OFT_ADAPTER             = '\x6c96de32cea08842dcc4058c14d3aaad7fa41dee'   -- 
 ETH_OFT_ADAPTER_IMPL        = '\xcd979b10a55fcdac23ec785ce3066c6ef8a479a4'
 ETH_OFT_PROXYADMIN          = '\x4de7096b2131e84fd6b2042ad8cd9b4e43f728fc'
 ETH_USDT_INNER              = '\xdac17f958d2ee523a2206206994597c13d831ec7'   -- native USD₮ (collateral)
+ETH_OFT_ADAPTER_IOTA        = '\xaef027f94008430bf4fc27ffabb49ea6f1dd3414'   -- IOTA lockbox; impl 0x1ab288f4…
 
 -- ===== Arbitrum One (chain ID 42161, EID 30110) =====
 ARB_OFT                     = '\x14e4a1b13bf7f943c8ff7c51fb60fa964a298d92'   -- impl 0x00678fda…

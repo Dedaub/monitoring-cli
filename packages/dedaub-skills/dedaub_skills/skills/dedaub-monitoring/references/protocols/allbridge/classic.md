@@ -1,6 +1,6 @@
 # Allbridge Classic — Topics, Selectors, Addresses (Ethereum, BNB, Polygon, Avalanche; NOT Arbitrum/Optimism/Base)
 
-**Status:** verified against live RPC on all seven requested chains and the canonical `allbridge-io/allbridge-contract-docs` ABI on 2026-06-09. Topic0s/selectors recomputed locally as `keccak256(signature)` and cross-checked against live `eth_getLogs`; the one vanity address existence-checked via `eth_getCode` on every chain. Robinhood Chain (4663) checked on 2026-09-29: no Classic contract.
+**Status:** verified against live RPC on all seven requested chains and the canonical `allbridge-io/allbridge-contract-docs` ABI on 2026-06-09. Topic0s/selectors recomputed locally as `keccak256(signature)` and cross-checked against live `eth_getLogs`; the one vanity address existence-checked via `eth_getCode` on every chain. Robinhood Chain (4663) checked on 2026-09-29: no Classic contract. Arc (5042) checked on 2026-10-30: no Classic contract.
 **Scope:** Allbridge **Classic** — the original lock/burn-and-unlock token bridge (predecessor to [Core](core.md)). One Solidity Bridge contract per chain at a shared vanity address. Topics + selectors are **chain-agnostic**; the address is one cross-chain vanity literal but only carries real bridge bytecode on four of the seven chains. **Allbridge Classic is deprecated and scheduled to stop in mid-2026** (per the official docs) — but it is **still live** (verified recent `lock`/`unlock` activity on Ethereum).
 
 Classic is a **classic lock/unlock bridge**, not a liquidity-pool bridge. To send: call `lock` (ERC-20) or `lockBase` (native), which transfers the token to the Bridge and **locks it** (native tokens) or **burns** the wrapped representation, emitting `Sent`. An off-chain validator signs a confirmation; the recipient calls `unlock` on the destination Bridge with that signature, which **releases** the locked token (or **mints** the wrapped one), emitting `Received`. There are no pools, no vUSD, no LP tokens, no per-token contracts — a single Bridge contract handles every supported token via a `tokenInfos` registry.
@@ -68,6 +68,7 @@ The Classic Bridge lives at one vanity literal `0xBBbD1BbB4f9b936C3604906D7592A6
 | **Base** | 8453 | **777 B** | ⚠️ Same sweeper as Arbitrum. NOT a Classic bridge. |
 | **Optimism** | 10 | **`0x` (0 B)** | ❌ Not deployed at all. |
 | **Robinhood Chain** | 4663 | **`0x` (0 B, nonce 0)** | ❌ Not deployed; not in the official Classic contract list (checked 2026-09-29). |
+| **Arc** | 5042 | **`0x` (0 B)** | ❌ Not deployed; not in the official Classic contract list (checked 2026-10-30). |
 
 ### 3.1 Ethereum role addresses (read live)
 
@@ -105,6 +106,7 @@ The Classic Bridge lives at one vanity literal `0xBBbD1BbB4f9b936C3604906D7592A6
 | Base | 8453 | ❌ (777-B sweeper at the vanity addr) | |
 | Optimism | 10 | ❌ (`0x`) | |
 | Robinhood Chain | 4663 | ❌ (`0x`, nonce 0) | not in the official list (2026-09-29) |
+| Arc | 5042 | ❌ (`0x`) | not in the official list (2026-10-30) |
 
 Vanity tell: the bridge address `0xBBbD1Bbb…` and the Solana program `BBbD1WSj…` share the `BBbD1` prefix. **But the same literal also carries a non-bridge sweeper on Arbitrum/Base** — never assume "address has code ⇒ Classic bridge"; gate on bytecode size (≈19,273 B) or the presence of the `Sent`/`Received` topic0s.
 

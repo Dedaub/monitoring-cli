@@ -2,7 +2,7 @@
 
 deBridge has two product lines on the same chains. **DLN** (deBridge Liquidity Network) is an intent bridge: a maker locks tokens in an order escrow, a solver pays the receiver on the destination chain, and the escrow repays the solver later. **DMP** (deBridge Messaging Protocol, `DeBridgeGate`) is a validator-signed lock-and-mint bridge and message layer; DLN uses it to carry its unlock and cancel messages. Index both.
 
-**Status:** all constants verified on 2026-09-29 against live RPC on the eight original target chains (Arc added on 2026-10-05), the deBridge deployed-contracts pages, and the verified sources (`debridge-finance/dln-contracts`, `debridge-finance/debridge-contracts-v1`, Blockscout).
+**Status:** all constants verified on 2026-09-29 against live RPC on the eight original target chains (Arc added on 2026-10-05), the deBridge deployed-contracts pages, and the verified sources (`debridge-finance/dln-contracts`, `debridge-finance/debridge-contracts-v1`, Blockscout). Re-checked on 2026-10-30: only the Arc DeBridgeRouter implementation changed (upgrade of 2026-10-29, see [dln.md](dln.md) §6).
 
 | File | Product | Contracts | Proxy pattern | Chains (of the 9) | Status |
 |------|---------|-----------|---------------|-------------------|--------|

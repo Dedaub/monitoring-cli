@@ -2,7 +2,7 @@
 
 **Status:** Verified — all addresses confirmed via `eth_getCode` on Arbitrum One (42161); absent (0x) on all other target chains (Ethereum 1, Base 8453, BNB 56, Optimism 10, Polygon 137).
 **Sources:** [Ramses smart-order-router](https://github.com/RamsesExchange/smart-order-router) · [Ramses v3-contracts](https://github.com/RamsesExchange/ramses-v3-contracts) · live `eth_getLogs` cross-checks on Arbitrum One blocks ~441,981,627 (Burn/Collect), ~271,981,043 (Mint), ~421,981,043 (FeeAdjustment).
-**Last verified:** 2026-06-10
+**Last verified:** 2026-06-10. Re-checked on 2026-10-30: this fee-keyed factory is still live and still Arbitrum-only (absent on Robinhood Chain and Arc too). The newer tickSpacing-keyed `RamsesV3Factory` on Arbitrum, Polygon and Robinhood Chain is in [`v3.md`](v3.md).
 
 ---
 

@@ -1,6 +1,6 @@
 # LI.FI Diamond — Topics, Selectors, Addresses (Ethereum + Base + Arbitrum + Optimism + Polygon + BNB + Avalanche + Robinhood Chain + Arc)
 
-**Status:** verified on 2026-09-29 against live RPC on all eight chains (Arc added 2026-10-05), the canonical `lifinance/contracts` repository (`src/`, `deployments/<network>.json`, `deployments/<network>.diamond.json`, `deployments/_deployments_log_file.json`) and the verified sources on the chain explorers. Every topic0 and selector was recomputed as `keccak256(signature)`. The live facet set of every diamond was read with the loupe call `facets()`, and every live selector was matched to a verified ABI. Every address was existence-checked with `eth_getCode`.
+**Status:** verified on 2026-09-29 against live RPC on all eight chains (Arc added 2026-10-05), the canonical `lifinance/contracts` repository (`src/`, `deployments/<network>.json`, `deployments/<network>.diamond.json`, `deployments/_deployments_log_file.json`) and the verified sources on the chain explorers. Every topic0 and selector was recomputed as `keccak256(signature)`. The live facet set of every diamond was read with the loupe call `facets()`, and every live selector was matched to a verified ABI. Every address was existence-checked with `eth_getCode`. Re-checked on 2026-10-30: `facets()` and `owner()` re-read on all nine diamonds (owners unchanged; facet changes in [facets.md](facets.md) §3); on Robinhood Chain the canonical address `0x1231DEB6…` now holds a `LegacyDiamondAddressVault`, not a diamond.
 **Scope:** the LiFiDiamond (EIP-2535), which is the single entry point of LI.FI for bridge and swap transactions: its transfer events, its admin and security events, its admin and swap selectors, and its address, owner and pauser on each chain. The diamond has the same address on seven chains (`0x1231DEB6f5749EF6cE6943a275A1D3E7486F4EaE`) its own address on Robinhood Chain (`0xB477751B76CF82d00a686A1232f5fCD772414Af3`) and its own address on Arc (`0xA4072583658Fae592A3506A42431cb6316a8d40b`). The per-bridge facets (entry selectors, data structs, facet addresses) are in [facets.md](facets.md). The destination-side contracts (Executor, receivers) and the other periphery are in [periphery.md](periphery.md). Topics and selectors are chain-agnostic; addresses are network-specific.
 
 LI.FI is a bridge and DEX aggregator. It does not run a bridge. The user calls the diamond, the diamond takes the user's tokens (ERC-20 `Transfer` user → diamond, or native value in `msg.value`), takes fees, runs optional source swaps, and then calls the underlying bridge in the same transaction. The underlying bridge emits its own deposit event in that transaction (for example Across `FundsDeposited`, a Relay depository deposit, a Mayan or NEAR Intents deposit). The diamond emits `LiFiTransferStarted` as the source-leg record of every bridge route.
@@ -19,7 +19,7 @@ Four facts to know before indexing:
 | Contract | Address | Chains | Role | Upgradeable? |
 |----------|---------|--------|------|--------------|
 | **LiFiDiamond** | `0x1231DEB6f5749EF6cE6943a275A1D3E7486F4EaE` | ETH·Base·Arb·OP·Poly·BNB·Avax | Entry point. Holds the selector-to-facet table and emits every facet event. | Yes: EIP-2535 `diamondCut`, owner only. |
-| **LiFiDiamond** (Robinhood Chain) | `0xB477751B76CF82d00a686A1232f5fCD772414Af3` | Robinhood Chain (4663) | Same contract, another address. `0x1231DEB6f5749EF6cE6943a275A1D3E7486F4EaE` has no code on Robinhood Chain. | Yes, as above. |
+| **LiFiDiamond** (Robinhood Chain) | `0xB477751B76CF82d00a686A1232f5fCD772414Af3` | Robinhood Chain (4663) | Same contract, another address. `0x1231DEB6f5749EF6cE6943a275A1D3E7486F4EaE` is not the diamond on Robinhood Chain (see §10). | Yes, as above. |
 | **LiFiDiamond** (Arc) | `0xA4072583658Fae592A3506A42431cb6316a8d40b` | Arc (5042) | Same contract, another address. Neither `0x1231DEB6f5749EF6cE6943a275A1D3E7486F4EaE` nor `0xB477751B76CF82d00a686A1232f5fCD772414Af3` has code on Arc. | Yes, as above. |
 | Core facets | see [facets.md](facets.md) §3 | all 9 | DiamondCutFacet, DiamondLoupeFacet, OwnershipFacet, AccessManagerFacet, EmergencyPauseFacet, WithdrawFacet, PeripheryRegistryFacet, WhitelistManagerFacet, CalldataVerificationFacet. | Replaced by `diamondCut`. |
 | GenericSwapFacetV3 | see [facets.md](facets.md) §3 | all 9 | Same-chain swaps. Emits `LiFiGenericSwapCompleted` and `AssetSwapped`. | Replaced by `diamondCut`. |
@@ -28,7 +28,7 @@ Four facts to know before indexing:
 | Pauser wallet | `0xf9d8ba34a51750cf6abfa9de7acd37f182081a4a` | all 9 | Returned by `pauserWallet()`. Can call `pauseDiamond()` and `removeFacet()` with no delay. No code (EOA). | — |
 | Staging diamonds | see §11 | 6 chains | LI.FI test diamonds. Same events and selectors. Not production traffic. | Yes |
 
-Facets live on 2026-09-29 (loupe `facets()`): Ethereum 41 / 150, Base 34 / 134, Arbitrum 33 / 133, Optimism 29 / 121, Polygon 30 / 122, BNB 30 / 115, Avalanche 26 / 105, Robinhood Chain 19 / 68 (facets / selectors). Arc on 2026-10-05: 19 / 71.
+Facets live on 2026-10-30 (loupe `facets()`, facets / selectors): Ethereum 42 / 150, Base 35 / 134, Arbitrum 35 / 138, Optimism 29 / 117, Polygon 30 / 119, BNB 30 / 112, Avalanche 26 / 102, Robinhood Chain 19 / 69, Arc 19 / 71. The October changes (new M0Facet; new versions of CalldataVerificationFacet, GenericSwapFacetV3, LiFiIntentEscrowFacetV2, WhitelistManagerFacet and PaxosTransitFacet) are in [facets.md](facets.md) §3.
 
 ---
 
@@ -300,11 +300,11 @@ All checked with `eth_getCode` on 2026-09-29.
 
 | Role | Address | One-liner |
 |------|---------|-----------|
-| **LiFiDiamond** | `0xB477751B76CF82d00a686A1232f5fCD772414Af3` | 254-byte runtime: a compact diamond fallback (solc 0.8.29) that reads the standard diamond storage slot `0xc8fcad8db84d3cc18b4c41d551ea0ee66dd599cde068d998e57d5e09332c131c`. 19 facets / 68 selectors live. |
+| **LiFiDiamond** | `0xB477751B76CF82d00a686A1232f5fCD772414Af3` | 254-byte runtime: a compact diamond fallback (solc 0.8.29) that reads the standard diamond storage slot `0xc8fcad8db84d3cc18b4c41d551ea0ee66dd599cde068d998e57d5e09332c131c`. 19 facets / 68 selectors live on 2026-09-29; 19 / 69 on 2026-10-30. |
 | Owner: LiFiTimelockController | `0x6E9Beb6997dAE04122f1f8f8980f3dc8225443F3` | `owner()` of the diamond. 10,254-byte contract. `getMinDelay()` = 10,800 s. |
 | Pauser wallet (EOA) | `0xf9d8ba34a51750cf6abfa9de7acd37f182081a4a` | `pauserWallet()` of the diamond. No code on this chain. |
 
-`0x1231DEB6f5749EF6cE6943a275A1D3E7486F4EaE` has no code on Robinhood Chain (nonce 0). No staging diamond and no AcrossFacetPackedV4 is deployed there; the Across route uses AcrossFacetV4 only.
+`0x1231DEB6f5749EF6cE6943a275A1D3E7486F4EaE` had no code on Robinhood Chain on 2026-09-29. On Robinhood Chain it now holds a `LegacyDiamondAddressVault` (837 B; listed in `deployments/robinhood.json`), not a diamond: its only functions are `OWNER()` (`0x117803e3`) = Safe `0xe49447936f02d8be7c2b37de03329bfa8eada6b6` and the owner-only `execute(address,uint256,bytes)` (`0xb61d27f6`). It emits no LI.FI event. No staging diamond and no AcrossFacetPackedV4 is deployed there; the Across route uses AcrossFacetV4 only.
 
 ## 10a. Addresses — Arc (chain ID 5042)
 
@@ -322,19 +322,19 @@ All checked with `eth_getCode` on 2026-10-05. Source: `deployments/arc.json` and
 
 ## 11. Cross-chain summary
 
-| Chain | ID | LiFiDiamond | Owner (timelock) | Facets / selectors | Staging diamond |
+| Chain | ID | LiFiDiamond | Owner (timelock) | Facets / selectors (2026-10-30) | Staging diamond |
 |-------|----|-------------|------------------|--------------------|-----------------|
-| Ethereum | 1 | `0x1231DEB6f5749EF6cE6943a275A1D3E7486F4EaE` | `0x55117ECcC867Db72aEb25f728CCf57C3C3B4faEe` | 41 / 150 | `0xbEbCDb5093B47Cd7add8211E4c77B6826aF7bc5F` |
-| Base | 8453 | `0x1231DEB6f5749EF6cE6943a275A1D3E7486F4EaE` | `0x5604A94A3438C3074EFFF803fab14B7244fe4E29` | 34 / 134 | `0x947330863B5BA5E134fE8b73e0E1c7Eed90446C7` |
-| Arbitrum One | 42161 | `0x1231DEB6f5749EF6cE6943a275A1D3E7486F4EaE` | `0x5604A94A3438C3074EFFF803fab14B7244fe4E29` | 33 / 133 | `0xD3b2b0aC0AFdd0d166a495f5E9fca4eCc715a782` |
-| Optimism | 10 | `0x1231DEB6f5749EF6cE6943a275A1D3E7486F4EaE` | `0x5604A94A3438C3074EFFF803fab14B7244fe4E29` | 29 / 121 | `0x2904f234CCda47206532DBb44e8fE48Dc6d177D7` |
-| Polygon PoS | 137 | `0x1231DEB6f5749EF6cE6943a275A1D3E7486F4EaE` | `0x5604A94A3438C3074EFFF803fab14B7244fe4E29` | 30 / 122 | `0xA235CD94f8B1e2DBc0A9Cb4Cd20d4C921604dfAa` |
-| BNB Smart Chain | 56 | `0x1231DEB6f5749EF6cE6943a275A1D3E7486F4EaE` | `0x55117ECcC867Db72aEb25f728CCf57C3C3B4faEe` | 30 / 115 | `0x2904f234CCda47206532DBb44e8fE48Dc6d177D7` |
-| Avalanche C-Chain | 43114 | `0x1231DEB6f5749EF6cE6943a275A1D3E7486F4EaE` | `0x5604A94A3438C3074EFFF803fab14B7244fe4E29` | 26 / 105 | — |
-| Robinhood Chain | 4663 | `0xB477751B76CF82d00a686A1232f5fCD772414Af3` | `0x6E9Beb6997dAE04122f1f8f8980f3dc8225443F3` | 19 / 68 | — |
+| Ethereum | 1 | `0x1231DEB6f5749EF6cE6943a275A1D3E7486F4EaE` | `0x55117ECcC867Db72aEb25f728CCf57C3C3B4faEe` | 42 / 150 | `0xbEbCDb5093B47Cd7add8211E4c77B6826aF7bc5F` |
+| Base | 8453 | `0x1231DEB6f5749EF6cE6943a275A1D3E7486F4EaE` | `0x5604A94A3438C3074EFFF803fab14B7244fe4E29` | 35 / 134 | `0x947330863B5BA5E134fE8b73e0E1c7Eed90446C7` |
+| Arbitrum One | 42161 | `0x1231DEB6f5749EF6cE6943a275A1D3E7486F4EaE` | `0x5604A94A3438C3074EFFF803fab14B7244fe4E29` | 35 / 138 | `0xD3b2b0aC0AFdd0d166a495f5E9fca4eCc715a782` |
+| Optimism | 10 | `0x1231DEB6f5749EF6cE6943a275A1D3E7486F4EaE` | `0x5604A94A3438C3074EFFF803fab14B7244fe4E29` | 29 / 117 | `0x2904f234CCda47206532DBb44e8fE48Dc6d177D7` |
+| Polygon PoS | 137 | `0x1231DEB6f5749EF6cE6943a275A1D3E7486F4EaE` | `0x5604A94A3438C3074EFFF803fab14B7244fe4E29` | 30 / 119 | `0xA235CD94f8B1e2DBc0A9Cb4Cd20d4C921604dfAa` |
+| BNB Smart Chain | 56 | `0x1231DEB6f5749EF6cE6943a275A1D3E7486F4EaE` | `0x55117ECcC867Db72aEb25f728CCf57C3C3B4faEe` | 30 / 112 | `0x2904f234CCda47206532DBb44e8fE48Dc6d177D7` |
+| Avalanche C-Chain | 43114 | `0x1231DEB6f5749EF6cE6943a275A1D3E7486F4EaE` | `0x5604A94A3438C3074EFFF803fab14B7244fe4E29` | 26 / 102 | — |
+| Robinhood Chain | 4663 | `0xB477751B76CF82d00a686A1232f5fCD772414Af3` | `0x6E9Beb6997dAE04122f1f8f8980f3dc8225443F3` | 19 / 69 | — |
 | Arc | 5042 | `0xA4072583658Fae592A3506A42431cb6316a8d40b` | `0x50Ad2949DBCF80B4019fA9cA01Cc38AB7cE2ED8C` | 19 / 71 | — |
 
-The diamond address `0x1231DEB6f5749EF6cE6943a275A1D3E7486F4EaE` is shared by seven chains. Its runtime is 5,176 bytes on each; the code hash is identical on six chains and differs on Base. The facet sets differ per chain (§0). **Robinhood Chain uses its own diamond `0xB477751B76CF82d00a686A1232f5fCD772414Af3`**, which is listed in `deployments/robinhood.json` and which emitted the LI.FI events on that chain in the pinned window (§15). **Arc uses its own diamond `0xA4072583658Fae592A3506A42431cb6316a8d40b`** (`deployments/arc.json`, §10a). The staging diamonds emit the same topics as production; exclude them by emitter.
+The diamond address `0x1231DEB6f5749EF6cE6943a275A1D3E7486F4EaE` is shared by seven chains. On Robinhood Chain the same literal is a `LegacyDiamondAddressVault` (837 B), not a diamond (§10). Its runtime is 5,176 bytes on each; the code hash is identical on six chains and differs on Base. The facet sets differ per chain (§0). **Robinhood Chain uses its own diamond `0xB477751B76CF82d00a686A1232f5fCD772414Af3`**, which is listed in `deployments/robinhood.json` and which emitted the LI.FI events on that chain in the pinned window (§15). **Arc uses its own diamond `0xA4072583658Fae592A3506A42431cb6316a8d40b`** (`deployments/arc.json`, §10a). The staging diamonds emit the same topics as production; exclude them by emitter.
 
 ---
 

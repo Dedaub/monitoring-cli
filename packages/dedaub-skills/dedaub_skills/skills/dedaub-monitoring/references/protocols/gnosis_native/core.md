@@ -1,6 +1,6 @@
 # Gnosis Chain Bridges (xDai Bridge, AMB, Omnibridge) — Topics, Selectors, Addresses (Ethereum + deprecated BNB side; counterpart Gnosis Chain)
 
-**Status:** verified on 2026-09-29 against Ethereum and BNB RPC (`eth_getCode`, `eth_call`, `eth_getLogs`), `eth_getCode` on the other target chains, one batched `eth_getCode` call to the public Gnosis RPC, the Gnosis Chain docs (bridge pages), and the Sourcify verified sources of every implementation.
+**Status:** verified on 2026-09-29 against Ethereum and BNB RPC (`eth_getCode`, `eth_call`, `eth_getLogs`), `eth_getCode` on the other target chains, one batched `eth_getCode` call to the public Gnosis RPC, the Gnosis Chain docs (bridge pages), and the Sourcify verified sources of every implementation. Re-checked on 2026-10-30: Arc (5042) has no Gnosis bridge contract (`eth_getCode` = `0x` at all 37 addresses of this file).
 **Scope:** the native bridges between Ethereum and Gnosis Chain (chain 100), all built from the tokenbridge code base: the **xDai bridge** (USDS/DAI ↔ native xDAI), the **Arbitrary Message Bridge (AMB)** and the **Omnibridge** (multi-token mediator on the AMB), plus the WETH router and the BridgeRouter entry points, and the deprecated BSC ↔ Gnosis AMB and Omnibridge on BNB Smart Chain. Gnosis Chain is outside the eight target chains; its side is listed for the link keys. Topics and selectors are chain-agnostic; addresses are network-specific.
 
 **Trust model.** Each bridge is validated by an off-chain validator set: 4 of 7 signatures for the AMB and for the xDai bridge (separate `BridgeValidators` contracts, read live). A Gnosis Safe with 8 of 15 owners (`0x42F38ec5A75acCEc50054671233dfAC9C0E7A3F6`) owns and upgrades the Ethereum contracts with no timelock. The docs describe the same model ("4-of-7 Validator Multisig", "8-of-15 Multisig" governance) and state that the Hashi components are deprecated and do not affect message verification.
@@ -174,7 +174,8 @@ Gnosis Chain counterparts (chain 100, outside the eight; from the docs and check
 | Optimism | 10 | — | — | — | same |
 | Polygon PoS | 137 | — | — | — | same |
 | Avalanche C-Chain | 43114 | — | — | — | same |
-| Robinhood Chain | 4663 | — | — | — | same |
+| Robinhood Chain | 4663 | — | — | — | same; the governance Safe literal `0x42F38ec5A75acCEc50054671233dfAC9C0E7A3F6` holds a 170-byte proxy there with no Safe state (`getThreshold()` returns empty data), not the Gnosis governance Safe |
+| Arc | 5042 | — | — | — | same (2026-10-30) |
 
 The counterparty is **Gnosis Chain** (chain 100). The AMB uses EVM chain ids (`sourceChainId`, `destinationChainId`) and encodes its own bridge id in every `messageId` (§7).
 
@@ -259,7 +260,7 @@ BNB_GNO_OMNIBRIDGE               = '\xf0b456250dc9990662a6f25808cc74a6d1131ea9'
 GNOSIS_XDAI_HOME_BRIDGE          = '\x7301cfa0e1756b71869e93d4e4dca5c7d0eb0aa6'
 GNOSIS_AMB_HOME                  = '\x75df5af045d91108662d8080fd1fefad6aa0bb59'
 GNOSIS_OMNIBRIDGE_HOME           = '\xf6a78083ca3e2a662d6dd1703c939c8ace2e268d'
--- Base, Arbitrum, Optimism, Polygon, Avalanche, Robinhood: no deployment
+-- Base, Arbitrum, Optimism, Polygon, Avalanche, Robinhood, Arc: no deployment
 ```
 
 ---

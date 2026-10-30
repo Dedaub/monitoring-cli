@@ -1,6 +1,6 @@
 # Everclear V6 — Topics, Selectors, Addresses (Ethereum, Base, BNB, Avalanche, Arbitrum, Optimism, Polygon)
 
-**Status:** verified against live RPC on every listed chain and the canonical `everclearorg/monorepo` repo (`dev` branch) on 2026-06-09. Re-verified on 2026-09-29: the struct-typed rows (written out as tuples), the per-chain addresses against the Everclear mainnet contracts page, and all eight target chains, Robinhood Chain (4663) included. **The Everclear team announced the protocol sunset on 2026-05-21** (The Block); see §10, item 12.
+**Status:** verified against live RPC on every listed chain and the canonical `everclearorg/monorepo` repo (`dev` branch) on 2026-06-09. Re-verified on 2026-09-29: the struct-typed rows (written out as tuples), the per-chain addresses against the Everclear mainnet contracts page, and all eight target chains, Robinhood Chain (4663) included. Re-checked on 2026-10-30: no Everclear contract on Arc (5042); the Everclear mainnet contracts page lists neither Arc nor Robinhood Chain. **The Everclear team announced the protocol sunset on 2026-05-21** (The Block); see §10, item 12.
 **Scope:** the current **Everclear** intent-based clearing layer (the rebrand of Connext, post-Amarok). Covers the **EverclearSpoke** (per-spoke-chain intent contract), **SpokeGateway** (Hyperlane messaging adapter), and **FeeAdapterV2** (the actual user-facing entrypoint). Topics and selectors are chain-agnostic; addresses are network-specific. The clearing **EverclearHub** lives on Everclear's own L2 (Hyperlane domain **25327**), which is **outside the eight target chains** — its Hub topics are documented in §1.4 as a finding. For the legacy Connext Amarok Diamond, see [amarok.md](amarok.md); for the first generation (NXTP v1), see [nxtp.md](nxtp.md). Robinhood Chain (4663) has no Everclear contract (§8).
 
 Everclear is an **intent/clearing** protocol, not a lock-mint bridge: a user calls `newIntent` (via FeeAdapter) on the origin **Spoke**; solvers fill it on the destination Spoke; the **Hub** (clearing chain) nets and settles via Hyperlane messages between SpokeGateway↔HubGateway. The Spoke and Gateway are **UUPS (ERC-1967) proxies** — `eth_getCode` returns a ~183-byte minimal proxy; the EIP-1967 impl slot is set and the **admin slot is empty** (UUPS, upgrade auth in the impl's `owner`). The **FeeAdapterV2 is a direct (non-proxy) deployment** (~12.8 kB, identical bytecode on all 7 chains). 
@@ -17,8 +17,8 @@ Everclear is an **intent/clearing** protocol, not a lock-mint bridge: a user cal
 |----------|------|--------|------------------------------|
 | **EverclearSpoke** (V6) | Per-chain intent contract: `newIntent`, `fillIntent`, `deposit`/`withdraw`, queue processing, settlement receipt. | **UUPS / ERC-1967** | Vanity `0xa05A3380889115bf313f1Db9d5f335157Be4D816` on ETH/Base/BNB/Arb/OP; **diverges** on Avalanche (`0x9aA2Ecad5C77dfcB4f34893993f313ec4a370460`) and Polygon (`0x7189C59e245135696bFd2906b56607755F84F3fD`). Per-chain impl. |
 | **SpokeGateway** (V6) | Hyperlane messaging adapter (Spoke↔Hub). | **UUPS / ERC-1967** | Vanity `0x9ADA72CCbAfe94248aFaDE6B604D1bEAacc899A7` on ETH/Base/BNB/Arb/OP; diverges on Avax (`0x7EB63a646721de65eBa79ffe91c55DCE52b73c12`) and Polygon (`0x26CFF54f11608Cd3060408690803AB4a43f462f2`). |
-| **FeeAdapterV2** | User-facing entrypoint: `newIntent` (+fee), `newOrder`, Permit2. Wraps the Spoke. | **No** (direct, ~12.8 kB) | **Same literal `0xd0185bfb8107c5b2336bC73cE3fdd9Bfb504540e` on all 7 chains other than Robinhood** (identical bytecode). |
-| **CLEAR / Everclear token** | Governance token. | EIP-1967 proxy (ETH) / OFT | `0x58b9cb810A68a7f3e1E4f8Cb45D1B9B3c79705E8` on ETH/BNB/Arb/OP/Polygon; absent on Base, Avalanche and Robinhood — see [amarok.md](amarok.md) §10. |
+| **FeeAdapterV2** | User-facing entrypoint: `newIntent` (+fee), `newOrder`, Permit2. Wraps the Spoke. | **No** (direct, ~12.8 kB) | **Same literal `0xd0185bfb8107c5b2336bC73cE3fdd9Bfb504540e` on all 7 chains other than Robinhood (and not on Arc)** (identical bytecode). |
+| **CLEAR / Everclear token** | Governance token. | EIP-1967 proxy (ETH) / OFT | `0x58b9cb810A68a7f3e1E4f8Cb45D1B9B3c79705E8` on ETH/BNB/Arb/OP/Polygon; absent on Base, Avalanche, Robinhood and Arc — see [amarok.md](amarok.md) §10. |
 | **EverclearHub** + **HubGateway** | Clearing-chain core (netting, invoices, settlements). | UUPS | On the Everclear L2 (Hyperlane domain **25327**) — NOT on any of the seven. §1.4. |
 
 ---
@@ -196,6 +196,7 @@ The Hub is the **netting/clearing brain**; spoke chains never run it. Cross-chai
 | **Avalanche** | 43114 | `0x9aA2Ecad5C77dfcB4f34893993f313ec4a370460` | `0x7EB63a646721de65eBa79ffe91c55DCE52b73c12` | `0xd0185bfb8107c5b2336bC73cE3fdd9Bfb504540e` | ⚠️ Spoke/GW diverge |
 | **Polygon** | 137 | `0x7189C59e245135696bFd2906b56607755F84F3fD` | `0x26CFF54f11608Cd3060408690803AB4a43f462f2` | `0xd0185bfb8107c5b2336bC73cE3fdd9Bfb504540e` | ⚠️ Spoke/GW diverge |
 | **Robinhood Chain** | 4663 | ❌ `0x` | ❌ `0x` | ❌ `0x` | not deployed |
+| **Arc** | 5042 | ❌ `0x` | ❌ `0x` | ❌ `0x` | not deployed |
 | Everclear L2 (Hub) | domain 25327 | — (Hub `0xa05A3380889115bf313f1Db9d5f335157Be4D816`) | HubGateway `0xEFfAB7cCEBF63FbEFB4884964b12259d4374FaAa` | — | outside the eight |
 
 **Seven of the eight target chains run an Everclear Spoke** (contrast Amarok, which skips Avalanche). **Robinhood Chain (4663) has none:** `eth_getCode` = `0x` (nonce 0) at the Spoke, Gateway and FeeAdapter literals of every chain in this file, and the Everclear mainnet contracts page has no Robinhood entry (2026-09-29). The **FeeAdapterV2 literal `0xd0185bfb8107c5b2336bC73cE3fdd9Bfb504540e` is identical on all 7 deployed chains** — the single most reliable cross-chain tell. Spoke/Gateway share a vanity on 5 of 7 (Avax + Polygon diverge). Counterparty chains outside the seven that Everclear also clears include the **Everclear L2 hub (25327)** plus **zkSync Era, Linea, Blast, Scroll, Mode, Mantle, Unichain, Ronin, and others** (Hyperlane domains).
@@ -229,7 +230,7 @@ The Hub is the **netting/clearing brain**; spoke chains never run it. Cross-chai
 10. **`Deposited`/`Withdrawn` are solver liquidity, not user bridging.** A user bridge does not emit `Deposited`. Solvers pre-fund the destination Spoke; `IntentFilled` consumes that liquidity.
 11. **Hyperlane domain ≠ chainId for most chains, but coincidentally equals chainId for many** (BNB=56, Avax=43114, Arb=42161, OP=10, Polygon=137, Base=8453, ETH=1). The **hub** is domain 25327 with no matching public chainId. Don't conflate with the Connext/Nomad domains used by Amarok ([amarok.md](amarok.md)).
 12. **Sunset and residual activity.** The Everclear team announced on 2026-05-21 that the protocol is sunset and that no user funds remain (The Block). Measured in the pinned window 2026-09-28 00:00 to 12:00 UTC: 0 `IntentAdded`, 0 `IntentFilled` and 0 `Settled` logs from any emitter on each of the eight target chains. The Spoke and Gateway proxies are still upgradeable by their owners, so keep `Upgraded`, `OwnershipTransferred` and `Withdrawn` monitors on them.
-13. **Not on Robinhood Chain.** No code at any Everclear literal on chain 4663 and no entry in the official contracts page. Everclear also has Spokes on chains outside the eight (Unichain, zkSync Era, Ronin, ApeChain, Mode, Zircuit, Linea, Blast, Scroll, Taiko, Berachain, Gnosis, Mantle, Sonic, Ink), some at other literals: key on `(chainId, address)`.
+13. **Not on Robinhood Chain or Arc.** No code at any Everclear literal on chain 4663 or 5042 and no entry in the official contracts page. Everclear also has Spokes on chains outside the eight (Unichain, zkSync Era, Ronin, ApeChain, Mode, Zircuit, Linea, Blast, Scroll, Taiko, Berachain, Gnosis, Mantle, Sonic, Ink), some at other literals: key on `(chainId, address)`.
 
 ---
 
@@ -297,7 +298,7 @@ EIP1967_ADMIN_SLOT            = '\xb53127684a568b3173ae13b9f8a6016e243e63b6e8ee1
 SHARED_SPOKE                  = '\xa05a3380889115bf313f1db9d5f335157be4d816'
 SHARED_GATEWAY                = '\x9ada72ccbafe94248afade6b604d1beaacc899a7'
 FEE_ADAPTER_ALL_7             = '\xd0185bfb8107c5b2336bc73ce3fdd9bfb504540e'  -- identical on all 7 deployed chains
--- Robinhood Chain (4663): no Everclear contract (eth_getCode = 0x at every literal in this block)
+-- Robinhood Chain (4663) and Arc (5042): no Everclear contract (eth_getCode = 0x at every literal in this block)
 -- Avalanche (divergent)
 AVAX_SPOKE                    = '\x9aa2ecad5c77dfcb4f34893993f313ec4a370460'
 AVAX_GATEWAY                  = '\x7eb63a646721de65eba79ffe91c55dce52b73c12'
