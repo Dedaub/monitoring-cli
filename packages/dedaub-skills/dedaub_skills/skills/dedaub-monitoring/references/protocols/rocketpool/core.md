@@ -1,6 +1,6 @@
 # Rocket Pool — Core Protocol (Ethereum mainnet) — Topics, Selectors, Addresses, Versions
 
-**Status:** verified 2026-05-29. Every mainnet address below was resolved **live** from the on-chain `RocketStorage` registry (`getAddress(keccak256("contract.address", name))`) and confirmed to hold code; addresses are independently EIP-55 re-checksummed. Topic0s marked **✓** were observed in live `eth_getLogs` / tx receipts this session; **src** = keccak-256 of the verbatim signature from `rocket-pool/rocketpool` `master` (the Saturn-1 / v1.4 codebase), not log-confirmed this pass. Selectors marked **✓** returned sane values via live `eth_call`.
+**Status:** verified 2026-05-29. Every mainnet address below was resolved **live** from the on-chain `RocketStorage` registry (`getAddress(keccak256("contract.address", name))`) and confirmed to hold code; addresses are independently EIP-55 re-checksummed. Topic0s marked **✓** were observed in live `eth_getLogs` / tx receipts this session; **src** = keccak-256 of the verbatim signature from `rocket-pool/rocketpool` `master` (the Saturn-1 / v1.4 codebase), not log-confirmed this pass. Selectors marked **✓** returned sane values via live `eth_call`. Re-checked on 2026-10-30: all 69 registry names re-resolved live. Only `rocketDAOProtocolVerifier` changed (now `0xc4D85aA3…`).
 
 **Scope:** Rocket Pool's **core protocol is Ethereum-mainnet ONLY** (chain ID 1). Node operators, minipools, megapools, RPL staking, the deposit pool, oracles, rewards and governance all live here. On every other chain Rocket Pool is **only the bridged rETH token** (no staking, no core contracts) — see [l2.md](l2.md). rETH and RPL are also tradable everywhere but minted/burned only via this core.
 
@@ -377,7 +377,7 @@ All resolved **live** from `RocketStorage` 2026-05-29 and confirmed to hold code
 | `rocketDAOProtocol` | `0xCaC25e88276A333cF9d4196d112D93af67ef809A` |
 | `rocketDAOProtocolProposals` | `0xcf7F6E23cD8189B7F56b14F66e11241C8ac0F03b` |
 | `rocketDAOProtocolProposal` | `0x2D627A50Dc1C4EDa73E42858E8460b0eCF300b25` |
-| `rocketDAOProtocolVerifier` | `0xd1f7e573cdC64FC0B201ca37aB50bC7Dd880040A` |
+| `rocketDAOProtocolVerifier` | `0xc4D85aA3e318c38005F6D73cC53E5A2b4223723a` (registry read 2026-10-30, `version()`=3; was `0xd1f7e573cdC64FC0B201ca37aB50bC7Dd880040A`) |
 | `rocketDAOProtocolActions` | `0xB50d513de40eE70A662c39207b4382a693f9e08D` ⚠ 136 B (stub) |
 | `rocketDAOProtocolSettingsAuction` | `0x364F989A3C9a1F66cB51b9043680974eA08C0d18` |
 | `rocketDAOProtocolSettingsDeposit` | `0x227BE8dD01DF8ad9BED0178e4F8cEC2996C5c365` |

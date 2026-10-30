@@ -1,6 +1,6 @@
-# TeleSwap (TeleportDAO) — Topics, Selectors, Addresses (Ethereum, Base, Arbitrum, Optimism connectors; Polygon and BNB home chains; NOT Avalanche, NOT Robinhood, NOT Arc)
+# TeleSwap (TeleportDAO) — Topics, Selectors, Addresses (Ethereum, Base, Arbitrum, Optimism connectors, Robinhood Chain connector (unlisted); Polygon and BNB home chains; NOT Avalanche, NOT Arc)
 
-**Status:** verified on 2026-09-29 against live RPC on all eight target chains, the official contract list `TeleportDAO/teleswap-cli` (`assets/config/contracts.json`, from `@teleportdao/configs@4.1.0`), the verified sources on the Blockscout explorers (`EthConnectorLogic`, `PolyConnectorLogic`, `CcTransferRouterLogic`, `CcExchangeRouterLogic`, `BurnRouterLogic`, `LockersManagerLogic`, `BitcoinRelay`, `TeleBTCLogic`) and sample receipts. Every topic0 and selector was recomputed as `keccak256(signature)` from those verified ABIs. Every address was existence-checked with `eth_getCode`; proxy implementations and admins were read from the EIP-1967 slots. **Re-checked 2026-10-05:** all four EthConnectors, both PolyConnectors and the BNB BurnRouter were upgraded (Ethereum and Polygon on 2026-10-04; the others observed by 2026-10-05; new implementations in §3 to §6); the new connector events and functions (the filler path) are in §1 and §2.
+**Status:** verified on 2026-09-29 against live RPC on all eight target chains, the official contract list `TeleportDAO/teleswap-cli` (`assets/config/contracts.json`, from `@teleportdao/configs@4.1.0`), the verified sources on the Blockscout explorers (`EthConnectorLogic`, `PolyConnectorLogic`, `CcTransferRouterLogic`, `CcExchangeRouterLogic`, `BurnRouterLogic`, `LockersManagerLogic`, `BitcoinRelay`, `TeleBTCLogic`) and sample receipts. Every topic0 and selector was recomputed as `keccak256(signature)` from those verified ABIs. Every address was existence-checked with `eth_getCode`; proxy implementations and admins were read from the EIP-1967 slots. **Re-checked 2026-10-05:** all four EthConnectors, both PolyConnectors and the BNB BurnRouter were upgraded (Ethereum and Polygon on 2026-10-04; the others observed by 2026-10-05; new implementations in §3 to §6); the new connector events and functions (the filler path) are in §1 and §2. **Re-checked 2026-10-30:** an EthConnector now runs on **Robinhood Chain (4663)** at `0xec4A7D93750BbcE2A07fd1bc748507ea645e9d52` (§6.1). The official list does not name it yet. All other implementations are unchanged since 2026-10-05.
 **Scope:** TeleSwap, the Bitcoin bridge of TeleportDAO. Two layers: (1) the **home chains** Polygon PoS (137) and BNB Smart Chain (56), where teleBTC is minted and burned against Bitcoin through the Bitcoin light-client relay, the lockers and the routers; (2) the **EVM connectors** on Ethereum (1), Base (8453), Arbitrum One (42161) and Optimism (10), which move a user's tokens to a home chain over Across to swap them into BTC, and deliver BTC-funded swaps back. **Avalanche C-Chain (43114), Robinhood Chain (4663) and Arc (5042) have no TeleSwap contract.** Topics and selectors are chain-agnostic. Addresses are network-specific.
 
 TeleSwap keeps BTC with **lockers**: operators that hold BTC on Bitcoin and post collateral on the home chain. A BTC deposit to a locker's Bitcoin script is proven to the home chain through the `BitcoinRelay` light client; the `CcTransferRouter` then mints teleBTC (`NewWrap`), or the `CcExchangeRouter` mints and swaps it (`NewWrapAndSwapV2`). A withdrawal to Bitcoin burns teleBTC through the `BurnRouter` (`NewUnwrap`); the locker pays on Bitcoin, and the proof of that payment closes the request (`PaidUnwrap`, with the Bitcoin transaction id).
@@ -31,7 +31,7 @@ Three facts to know before you index:
 
 ## 1. Topics (chain-agnostic — `topic0 = keccak256(event signature)`)
 
-### 1.1 EthConnector (Ethereum, Base, Arbitrum, Optimism)
+### 1.1 EthConnector (Ethereum, Base, Arbitrum, Optimism, Robinhood Chain)
 
 | topic0 | Event |
 |--------|-------|
@@ -220,7 +220,7 @@ Meaning and value:
 | Role | Address | One-liner |
 |------|---------|-----------|
 | **EthConnector** (proxy) | `0xFA1B28052Bd8087B1CF64eE9429FEB324e95B0ff` | Official connector (`connectors.ethereum`). 2,118 B proxy; implementation `0x756B770b38c03B0A249Aef5FE6e06F9B34a3D431` (verified `EthConnectorLogic`, set by `Upgraded` at block 26,121,906, 2026-10-04 22:13 UTC). Previous implementation `0xe5a2357b7e6f2fd1f21d6aa7880084c2cf828548`, retired at that block (observed 2026-10-05). `across()` = Across SpokePool `0x5c7BCd6E7De5423a257D81B442095A1a6ced35C5`; `currChainId()` = 1. |
-| Old `EthConnectorLogic` implementation | `0xec4A7D93750BbcE2A07fd1bc748507ea645e9d52` | 5,967 B, not a proxy, same deployer `0x2D3E4AeB9347C224DAe7F1dc1213bE082F6FddEC`. **Not the connector on Ethereum** (it is the connector address on Base, Arbitrum and Optimism). |
+| Old `EthConnectorLogic` implementation | `0xec4A7D93750BbcE2A07fd1bc748507ea645e9d52` | 5,967 B, not a proxy, same deployer `0x2D3E4AeB9347C224DAe7F1dc1213bE082F6FddEC`. **Not the connector on Ethereum** (it is the connector address on Base, Arbitrum, Optimism and Robinhood Chain). |
 | Filler | `0x4a00edf7F07Ecb48a4A3FD798e0fb79D90ef21a9` | `filler()` of the Ethereum and Base EthConnectors (set by `FillerUpdated` after the upgrade); 23 B code = an EIP-7702 delegated account. `filler()` is zero on Arbitrum and Optimism. |
 | Across depositor / refund operator (EOA) | `0x144c5fb302dbaa789fc59bbec301169eaa56c5fc` | `acrossAdmin()` of every EthConnector; the `depositor` in the Across `FundsDeposited` logs. |
 | Proxy admin (EOA) | `0x4565ae5c90e52c058410fc7f05711ffed9b6e62a` | EIP-1967 admin of every TeleSwap proxy. |
@@ -270,9 +270,17 @@ One official connector address on all three chains (`connectors.base`, `connecto
 
 Same-address traps on BNB: `0xFA1B28052Bd8087B1CF64eE9429FEB324e95B0ff` is a 23,549 B contract with BurnRouter topics (an old BurnRouter implementation, not a connector), and `0xec4A7D93750BbcE2A07fd1bc748507ea645e9d52` is a 6,438 B contract with no TeleSwap topic. Neither is in the official list.
 
-### 6.1 Avalanche C-Chain (43114), Robinhood Chain (4663) and Arc (5042) — NO TeleSwap deployment
+### 6.1 Robinhood Chain (chain ID 4663) — EthConnector (not in the official list)
 
-`eth_getCode` returns `0x` at `0xFA1B28052Bd8087B1CF64eE9429FEB324e95B0ff`, `0xec4A7D93750BbcE2A07fd1bc748507ea645e9d52`, `0xE0166434A2ad67536B5FdAFCc9a6C1B41CC5e085` and `0x9b95Dc17acFD8E028F192971165aE7Be76e6a954` on Avalanche and Robinhood Chain (and on Arc, checked 2026-10-05), and the official list names none of these chains.
+| Role | Address | One-liner |
+|------|---------|-----------|
+| **EthConnector** (proxy) | `0xec4A7D93750BbcE2A07fd1bc748507ea645e9d52` | Same literal as on Base, Arbitrum and Optimism. 2,109 B proxy; implementation `0x423a067699ccf73cf1fe62ef93abecca48a67863` (22,773 B, byte-identical to the Base implementation `0xd3685A1Ad6A3A1eE65871d8716661BDa4448dA06`). EIP-1967 admin = EOA `0x4565ae5c90e52c058410fc7f05711ffed9b6e62a`; `owner()` = EOA `0x24004f4f6d2e75b039d528e82b100355d8b1d4fb` (the same wallets as on the other chains). `currChainId()` = 4663; `across()` = the Robinhood Across SpokePool `0xD29C85F15DF544bA632C9E25829fd29d767d7978`; `wrappedNativeToken()` = WETH `0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73`; `filler()` = 0; `targetChainConnectorProxy()` = 0 (Base: the Polygon PolyConnector). |
+
+Read on 2026-10-30. The connector had no code on 2026-09-29, and it is not in `contracts.json`. It emitted one `MsgSent` in the 8,000,000 blocks to block 101,791,347: tx `0x611d9a4b253e154c04257f77dac3ef58be75cfd5ccce086e3d53a77f0eecdfb4` (block 97,611,331, 2026-10-25 13:12 UTC). `eth_getCode` returns `0x` at `0xFA1B28052Bd8087B1CF64eE9429FEB324e95B0ff`, `0xE0166434A2ad67536B5FdAFCc9a6C1B41CC5e085` and `0x9b95Dc17acFD8E028F192971165aE7Be76e6a954` on Robinhood Chain. There is no home-chain contract (router, lockers, teleBTC) on Robinhood Chain.
+
+### 6.2 Avalanche C-Chain (43114) and Arc (5042) — NO TeleSwap deployment
+
+`eth_getCode` returns `0x` at `0xFA1B28052Bd8087B1CF64eE9429FEB324e95B0ff`, `0xec4A7D93750BbcE2A07fd1bc748507ea645e9d52`, `0xE0166434A2ad67536B5FdAFCc9a6C1B41CC5e085` and `0x9b95Dc17acFD8E028F192971165aE7Be76e6a954` on Avalanche and on Arc (re-checked 2026-10-30), and the official list names neither chain.
 
 ---
 
@@ -287,12 +295,12 @@ Same-address traps on BNB: `0xFA1B28052Bd8087B1CF64eE9429FEB324e95B0ff` is a 23,
 | Polygon PoS | 137 | — | `0xE0166434A2ad67536B5FdAFCc9a6C1B41CC5e085` | ✓ (§5) | `MsgReceived` 77, `NewUnwrap` 94 |
 | BNB Smart Chain | 56 | — | `0x9b95Dc17acFD8E028F192971165aE7Be76e6a954` | ✓ (§6) | `MsgReceived` 82, `NewUnwrap` 192 |
 | Avalanche C-Chain | 43114 | — (`0x`) | — (`0x`) | — | — |
-| Robinhood Chain | 4663 | — (`0x`) | — (`0x`) | — | — |
+| Robinhood Chain | 4663 | `0xec4A7D93750BbcE2A07fd1bc748507ea645e9d52` (unlisted) | — (`0x`) | — | `MsgSent` 1 on 2026-10-25 (§6.1) |
 | Arc | 5042 | — (`0x`) | — (`0x`) | — | — |
 
 **Outside the eight (official list):** Unichain connector `0x45e4d542c570fb6194467FFEDF7cc09867279a96`; home chains BOB and BSquared (their own routers, lockers and relays; on BSquared the CcExchangeRouter shares the address `0xE0166434A2ad67536B5FdAFCc9a6C1B41CC5e085` with the Polygon PolyConnector); a TON swap router; and Bitcoin itself (the lockers' scripts).
 
-**Chain ids:** the connectors use EVM chain ids (`currChainId()` = 1, 8453, 42161, 10). `NewWrapV2.lzDstEid` is a LayerZero endpoint id.
+**Chain ids:** the connectors use EVM chain ids (`currChainId()` = 1, 8453, 42161, 10, 4663). `NewWrapV2.lzDstEid` is a LayerZero endpoint id.
 
 ---
 
@@ -309,7 +317,7 @@ The EthConnector ABI has `paused()` but no `pause()` function, so the connectors
 
 ## 9. Detection invariants & gotchas
 
-1. **EVM to BTC, source leg:** `MsgSent` on an EthConnector (Ethereum, Base, Arbitrum, Optimism). In the same transaction: ERC-20 `Transfer` user to connector (or native `msg.value`), then the Across `FundsDeposited` from the SpokePool with `destinationChainId` = 137 or 56 and `recipient` = the home-chain PolyConnector. The sample on Ethereum sent 0.0243 ETH as WETH to BSC (Across `destinationChainId` 56).
+1. **EVM to BTC, source leg:** `MsgSent` on an EthConnector (Ethereum, Base, Arbitrum, Optimism, Robinhood Chain). In the same transaction: ERC-20 `Transfer` user to connector (or native `msg.value`), then the Across `FundsDeposited` from the SpokePool with `destinationChainId` = 137 or 56 and `recipient` = the home-chain PolyConnector. The sample on Ethereum sent 0.0243 ETH as WETH to BSC (Across `destinationChainId` 56).
 2. **Home-chain leg:** the Across relayer fills on the home chain and calls the PolyConnector: `FilledRelay` (Across), `MsgReceived`, then `NewSwapAndUnwrap*` with the same `uniqueCounter` and the source `chainId`. The PolyConnector gives the tokens to the BurnRouter, which swaps them to teleBTC; the LockersManager burns the teleBTC (`BurnByLocker`, teleBTC `Burn`, `Transfer` to `0x0`), and the BurnRouter emits `NewUnwrap` with `userTargetAddress` = the PolyConnector. The BSC sample `0x59445ba9e48caff9187d152bdaee75dfa47f3a070690d783b9244afc5e6047dc` shows this chain of events in one transaction.
 3. **Bitcoin leg:** the payout happens on Bitcoin. The only EVM trace is `PaidUnwrap(lockerTargetAddress, requestIdOfLocker, bitcoinTxId, bitcoinTxOutputIndex)`, which the locker's `burnProof` emits later. An unpaid request after its `deadline` can be disputed (`BurnDispute`), which slashes the locker.
 4. **Attribution:** the real user of an EVM-to-BTC request is in the PolyConnector's `NewSwapAndUnwrap*` (`userTargetAddress`, topic1) and in the decoded `MsgSent.data` (refund address). On the source chain `tx.from` can be an aggregator: the Ethereum sample `0x8305510a6d6bd655d1b9ff7187c6ef12264aec4c97eb26316196398d8cf66701` came through the Rango Diamond `0x69460570c93f9de5e2edbc3052bf10125f0ca22d`. `swapAndUnwrap` (not V2) uses `tx.origin` as the refund address.
@@ -406,6 +414,7 @@ ETH_TELESWAP_CONNECTOR                  = '\xfa1b28052bd8087b1cf64ee9429feb324e9
 BASE_TELESWAP_CONNECTOR                 = '\xec4a7d93750bbce2a07fd1bc748507ea645e9d52'
 ARB_TELESWAP_CONNECTOR                  = '\xec4a7d93750bbce2a07fd1bc748507ea645e9d52'
 OP_TELESWAP_CONNECTOR                   = '\xec4a7d93750bbce2a07fd1bc748507ea645e9d52'
+ROBIN_TELESWAP_CONNECTOR                = '\xec4a7d93750bbce2a07fd1bc748507ea645e9d52'   -- not in contracts.json; impl 0x423a0676…
 POLY_TELESWAP_POLY_CONNECTOR            = '\xe0166434a2ad67536b5fdafcc9a6c1b41cc5e085'
 BNB_TELESWAP_POLY_CONNECTOR             = '\x9b95dc17acfd8e028f192971165ae7be76e6a954'
 -- ===== Polygon home chain =====
@@ -427,7 +436,7 @@ ETH_TELESWAP_PROXY_ADMIN_EOA            = '\x4565ae5c90e52c058410fc7f05711ffed9b
 ETH_TELESWAP_OWNER_EOA                  = '\x24004f4f6d2e75b039d528e82b100355d8b1d4fb'
 ETH_TELESWAP_ACROSS_ADMIN_EOA           = '\x144c5fb302dbaa789fc59bbec301169eaa56c5fc'
 ETH_TELESWAP_FILLER                     = '\x4a00edf7f07ecb48a4a3fd798e0fb79d90ef21a9'   -- also Base; EIP-7702 delegated account
--- Avalanche (43114) and Robinhood (4663): no TeleSwap contract
+-- Avalanche (43114) and Arc (5042): no TeleSwap contract
 ```
 
 ---
@@ -442,7 +451,7 @@ How every constant was verified (2026-09-29):
   - EthConnector: Ethereum 135 `MsgSent`; Base 11 `MsgSent`; Arbitrum 13 `MsgSent`; Optimism 0 logs. No `MsgReceived` or `WrappedAndSwappedToDestChain` on any EthConnector.
   - BNB: PolyConnector 165 logs (`MsgReceived` 82, `NewSwapAndUnwrap` 79, `NewSwapAndUnwrapUniversal` 2, `FailedSwapAndUnwrap` 1, `WithdrawnFundsToSourceChain` 1); BurnRouter 363 (`NewUnwrap` 192, `PaidUnwrap` 171); CcExchangeRouter 691 (`NewWrapAndSwapV2` 250, `FillerRefunded` 199, `RequestFilledV2` 194, `FailedWrapAndSwapV2` 24, `RefundProcessed` 24); LockersManager 466 (`MintByLocker` 274, `BurnByLocker` 192); CcTransferRouter 0.
   - Polygon: PolyConnector 154 logs (`MsgReceived` 77, `NewSwapAndUnwrap` 76, `NewSwapAndUnwrapUniversal` 1); BurnRouter 181 (`NewUnwrap` 94, `PaidUnwrap` 87); CcExchangeRouter 282 (`NewWrapAndSwapV2` 122, `RequestFilledV2` 75, `FillerRefunded` 75, `FailedWrapAndSwapV2` 5, `RefundProcessed` 5); LockersManager 221 (`MintByLocker` 127, `BurnByLocker` 94); CcTransferRouter 0.
-  - Avalanche and Robinhood: no contract.
+  - Avalanche: no contract. Robinhood Chain: no contract in the window (the connector of §6.1 came later).
 - **Sample transactions (receipts read):** Ethereum `0x8305510a6d6bd655d1b9ff7187c6ef12264aec4c97eb26316196398d8cf66701` (block 26,072,266; Rango Diamond calls the connector with 0.0243 ETH; `MsgSent`; WETH `Deposit` into the Across SpokePool; Across `FundsDeposited` with `destinationChainId` 56). BSC `0x59445ba9e48caff9187d152bdaee75dfa47f3a070690d783b9244afc5e6047dc` (block 124,425,555; Across `FilledRelay` from origin 42161; USDT relayer to PolyConnector; `MsgReceived`; USDT to the BurnRouter; swap to teleBTC; `BurnByLocker` and teleBTC `Burn`; `NewUnwrap`; `NewSwapAndUnwrap`).
 
 Authoritative sources:

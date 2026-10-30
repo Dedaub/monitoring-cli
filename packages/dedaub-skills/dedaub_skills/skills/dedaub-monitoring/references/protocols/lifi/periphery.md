@@ -1,6 +1,6 @@
 # LI.FI Periphery — Topics, Selectors, Addresses (Ethereum + Base + Arbitrum + Optimism + Polygon + BNB + Avalanche + Robinhood Chain + Arc)
 
-**Status:** verified on 2026-09-29 against live RPC on all eight chains (Arc added 2026-10-05), `lifinance/contracts` (`src/Periphery/`, `src/Security/`, `deployments/<network>.json`, `deployments/<network>.diamond.json` → `Periphery`) and the explorer-verified sources of the deployed contracts. Every topic0 and selector was recomputed as `keccak256(signature)`. Every address was existence-checked with `eth_getCode`.
+**Status:** verified on 2026-09-29 against live RPC on all eight chains (Arc added 2026-10-05), `lifinance/contracts` (`src/Periphery/`, `src/Security/`, `deployments/<network>.json`, `deployments/<network>.diamond.json` → `Periphery`) and the explorer-verified sources of the deployed contracts. Every topic0 and selector was recomputed as `keccak256(signature)`. Every address was existence-checked with `eth_getCode`. Re-checked on 2026-10-30 against `deployments/<network>.json`: only Permit2Proxy changed (new address on the seven shared chains and on Robinhood Chain; Arc unchanged).
 **Scope:** the contracts around the LiFiDiamond: the **destination side** (Executor and the bridge receivers: ReceiverAcrossV3, ReceiverAcrossV4, ReceiverStargateV2, ReceiverChainflip, ReceiverOIF and the legacy Receiver), the **entry helpers** (Permit2Proxy, ERC20Proxy), the **fee contracts** (FeeCollector, FeeForwarder, LiFuelFeeCollector), and the **utilities** (TokenWrapper, GasZipPeriphery, LiFiDEXAggregator, Patcher, OutputValidator, LidoWrapper), plus the **LiFiTimelockController** that owns the diamond. The diamond itself is in [diamond.md](diamond.md). Topics and selectors are chain-agnostic; addresses are network-specific.
 
 The periphery contracts are plain, immutable contracts. Most of them have a different address on each chain, because LI.FI redeploys them with chain-specific constructor arguments (the Executor, the Across spoke pool, the LayerZero endpoint). Always key them on `(chain, address)`.
@@ -193,7 +193,8 @@ Existence-checked with `eth_getCode` on 2026-09-29 (runtime size in bytes).
 | ReceiverChainflip | `0x543733e09D7DD158Ee85024f7e95ff1460ef21D6` | 4,562 |  |
 | ReceiverOIF | `0xe6ee2a573047598B2452a879F2188B31d0442dbF` | 3,843 |  |
 | Receiver (legacy) | `0x050e198E36A73a1e32F15C3afC58C4506d82f657` | 9,116 | Not in the current periphery registry. |
-| Permit2Proxy | `0x89c6340B1a1f4b25D36cd8B063D49045caF3f818` | 8,185 |  |
+| Permit2Proxy | `0x8eEd5E28216C0Bc6F817df40Ae6CA11C2294CC1c` | 8,037 | Current (redeployed about 2026-10-28; `deployments/<network>.json`). `LIFI_DIAMOND()` = the diamond; `owner()` = `0x156cebba59deb2cb23742f70dcb0a11cc775591f`. Same code hash on all seven chains. |
+| Permit2Proxy (previous) | `0x89c6340B1a1f4b25D36cd8B063D49045caF3f818` | 8,185 | Still has code; no longer in the deployment file. `owner()` = `0x37347dd595c49212c5fc2d95ea10d1085896f51e` (Ethereum). |
 | ERC20Proxy | `0x68E1Acfa805dcA813116Ed6507E01c38D44318f0` | 2,552 |  |
 | FeeCollector | `0x3Ef238c36035880EfbDfa239d218186b79Ad1d6F` | 4,717 |  |
 | FeeForwarder | `0xCE40449B773a3E6E5e769ADb4e567179d4828cbd` | 3,037 |  |
@@ -219,7 +220,8 @@ Existence-checked with `eth_getCode` on 2026-09-29 (runtime size in bytes).
 | ReceiverStargateV2 | `0x1493e7B8d4DfADe0a178dAD9335470337A3a219A` | 7,367 | `executor()` = the Executor above. |
 | ReceiverOIF | `0xe6ee2a573047598B2452a879F2188B31d0442dbF` | 3,843 |  |
 | Receiver (legacy) | `0xeC03B65CbDc5f8858b02F44EBa54C90664249fb1` | 9,116 | Not in the current periphery registry. |
-| Permit2Proxy | `0x89c6340B1a1f4b25D36cd8B063D49045caF3f818` | 8,185 |  |
+| Permit2Proxy | `0x8eEd5E28216C0Bc6F817df40Ae6CA11C2294CC1c` | 8,037 | Current (redeployed about 2026-10-28; `deployments/<network>.json`). `LIFI_DIAMOND()` = the diamond; `owner()` = `0x156cebba59deb2cb23742f70dcb0a11cc775591f`. Same code hash on all seven chains. |
+| Permit2Proxy (previous) | `0x89c6340B1a1f4b25D36cd8B063D49045caF3f818` | 8,185 | Still has code; no longer in the deployment file. `owner()` = `0x37347dd595c49212c5fc2d95ea10d1085896f51e` (Ethereum). |
 | ERC20Proxy | `0x74a55CaDb12501A3707E9F3C5dfd8b563C6A5940` | 2,963 |  |
 | FeeCollector | `0x0A6d96E7f4D7b96CFE42185DF61E64d255c12DFf` | 7,218 |  |
 | FeeForwarder | `0xCE40449B773a3E6E5e769ADb4e567179d4828cbd` | 3,037 |  |
@@ -246,7 +248,8 @@ Existence-checked with `eth_getCode` on 2026-09-29 (runtime size in bytes).
 | ReceiverChainflip | `0x37F584941242C8eada60bd6D8480cC0B6E36a0Cf` | 4,562 |  |
 | ReceiverOIF | `0xe6ee2a573047598B2452a879F2188B31d0442dbF` | 3,843 |  |
 | Receiver (legacy) | `0x050e198E36A73a1e32F15C3afC58C4506d82f657` | 9,116 | Not in the current periphery registry. |
-| Permit2Proxy | `0x89c6340B1a1f4b25D36cd8B063D49045caF3f818` | 8,185 |  |
+| Permit2Proxy | `0x8eEd5E28216C0Bc6F817df40Ae6CA11C2294CC1c` | 8,037 | Current (redeployed about 2026-10-28; `deployments/<network>.json`). `LIFI_DIAMOND()` = the diamond; `owner()` = `0x156cebba59deb2cb23742f70dcb0a11cc775591f`. Same code hash on all seven chains. |
+| Permit2Proxy (previous) | `0x89c6340B1a1f4b25D36cd8B063D49045caF3f818` | 8,185 | Still has code; no longer in the deployment file. `owner()` = `0x37347dd595c49212c5fc2d95ea10d1085896f51e` (Ethereum). |
 | ERC20Proxy | `0x5741A7FfE7c39Ca175546a54985fA79211290b51` | 2,963 |  |
 | FeeCollector | `0xB0210dE78E28e2633Ca200609D9f528c13c26cD9` | 5,760 |  |
 | FeeForwarder | `0xCE40449B773a3E6E5e769ADb4e567179d4828cbd` | 3,037 |  |
@@ -271,7 +274,8 @@ Existence-checked with `eth_getCode` on 2026-09-29 (runtime size in bytes).
 | ReceiverStargateV2 | `0x556701899905f2f83AcA2977D3202Ee3a80f37b7` | 7,390 |  |
 | ReceiverOIF | `0xe6ee2a573047598B2452a879F2188B31d0442dbF` | 3,843 |  |
 | Receiver (legacy) | `0x050e198E36A73a1e32F15C3afC58C4506d82f657` | 9,116 | Not in the current periphery registry. |
-| Permit2Proxy | `0x89c6340B1a1f4b25D36cd8B063D49045caF3f818` | 8,185 |  |
+| Permit2Proxy | `0x8eEd5E28216C0Bc6F817df40Ae6CA11C2294CC1c` | 8,037 | Current (redeployed about 2026-10-28; `deployments/<network>.json`). `LIFI_DIAMOND()` = the diamond; `owner()` = `0x156cebba59deb2cb23742f70dcb0a11cc775591f`. Same code hash on all seven chains. |
+| Permit2Proxy (previous) | `0x89c6340B1a1f4b25D36cd8B063D49045caF3f818` | 8,185 | Still has code; no longer in the deployment file. `owner()` = `0x37347dd595c49212c5fc2d95ea10d1085896f51e` (Ethereum). |
 | ERC20Proxy | `0x314bE5fcf0A204837896e6028C47A9e1FC2919c7` | 2,552 |  |
 | FeeCollector | `0x271970eE66c03c9D62d8e8c718b9841f2Ea7D817` | 4,717 |  |
 | FeeForwarder | `0xCE40449B773a3E6E5e769ADb4e567179d4828cbd` | 3,037 |  |
@@ -297,7 +301,8 @@ Existence-checked with `eth_getCode` on 2026-09-29 (runtime size in bytes).
 | ReceiverStargateV2 | `0x1493e7B8d4DfADe0a178dAD9335470337A3a219A` | 7,367 |  |
 | ReceiverOIF | `0xe6ee2a573047598B2452a879F2188B31d0442dbF` | 3,843 |  |
 | Receiver (legacy) | `0x050e198E36A73a1e32F15C3afC58C4506d82f657` | 9,116 | Not in the current periphery registry. |
-| Permit2Proxy | `0x89c6340B1a1f4b25D36cd8B063D49045caF3f818` | 8,185 |  |
+| Permit2Proxy | `0x8eEd5E28216C0Bc6F817df40Ae6CA11C2294CC1c` | 8,037 | Current (redeployed about 2026-10-28; `deployments/<network>.json`). `LIFI_DIAMOND()` = the diamond; `owner()` = `0x156cebba59deb2cb23742f70dcb0a11cc775591f`. Same code hash on all seven chains. |
+| Permit2Proxy (previous) | `0x89c6340B1a1f4b25D36cd8B063D49045caF3f818` | 8,185 | Still has code; no longer in the deployment file. `owner()` = `0x37347dd595c49212c5fc2d95ea10d1085896f51e` (Ethereum). |
 | ERC20Proxy | `0x5741A7FfE7c39Ca175546a54985fA79211290b51` | 2,963 |  |
 | FeeCollector | `0xbD6C7B0d2f68c2b7805d88388319cfB6EcB50eA9` | 5,760 |  |
 | FeeForwarder | `0xCE40449B773a3E6E5e769ADb4e567179d4828cbd` | 3,037 |  |
@@ -323,7 +328,8 @@ Existence-checked with `eth_getCode` on 2026-09-29 (runtime size in bytes).
 | ReceiverStargateV2 | `0x1493e7B8d4DfADe0a178dAD9335470337A3a219A` | 7,367 |  |
 | ReceiverOIF | `0xe6ee2a573047598B2452a879F2188B31d0442dbF` | 3,843 |  |
 | Receiver (legacy) | `0x050e198E36A73a1e32F15C3afC58C4506d82f657` | 9,116 | Not in the current periphery registry. |
-| Permit2Proxy | `0x89c6340B1a1f4b25D36cd8B063D49045caF3f818` | 8,185 |  |
+| Permit2Proxy | `0x8eEd5E28216C0Bc6F817df40Ae6CA11C2294CC1c` | 8,037 | Current (redeployed about 2026-10-28; `deployments/<network>.json`). `LIFI_DIAMOND()` = the diamond; `owner()` = `0x156cebba59deb2cb23742f70dcb0a11cc775591f`. Same code hash on all seven chains. |
+| Permit2Proxy (previous) | `0x89c6340B1a1f4b25D36cd8B063D49045caF3f818` | 8,185 | Still has code; no longer in the deployment file. `owner()` = `0x37347dd595c49212c5fc2d95ea10d1085896f51e` (Ethereum). |
 | ERC20Proxy | `0x5741A7FfE7c39Ca175546a54985fA79211290b51` | 2,963 |  |
 | FeeCollector | `0xbD6C7B0d2f68c2b7805d88388319cfB6EcB50eA9` | 5,760 |  |
 | FeeForwarder | `0xCE40449B773a3E6E5e769ADb4e567179d4828cbd` | 3,037 |  |
@@ -346,7 +352,8 @@ Existence-checked with `eth_getCode` on 2026-09-29 (runtime size in bytes).
 | ReceiverStargateV2 | `0x1493e7B8d4DfADe0a178dAD9335470337A3a219A` | 7,367 |  |
 | ReceiverOIF | `0xa2712aEecbff8a1542c78Cf49C4fE4CE4B09E1dB` | 3,843 |  |
 | Receiver (legacy) | `0x050e198E36A73a1e32F15C3afC58C4506d82f657` | 9,116 | Not in the current periphery registry. |
-| Permit2Proxy | `0x89c6340B1a1f4b25D36cd8B063D49045caF3f818` | 8,185 |  |
+| Permit2Proxy | `0x8eEd5E28216C0Bc6F817df40Ae6CA11C2294CC1c` | 8,037 | Current (redeployed about 2026-10-28; `deployments/<network>.json`). `LIFI_DIAMOND()` = the diamond; `owner()` = `0x156cebba59deb2cb23742f70dcb0a11cc775591f`. Same code hash on all seven chains. |
+| Permit2Proxy (previous) | `0x89c6340B1a1f4b25D36cd8B063D49045caF3f818` | 8,185 | Still has code; no longer in the deployment file. `owner()` = `0x37347dd595c49212c5fc2d95ea10d1085896f51e` (Ethereum). |
 | ERC20Proxy | `0x5741A7FfE7c39Ca175546a54985fA79211290b51` | 2,963 |  |
 | FeeCollector | `0xB0210dE78E28e2633Ca200609D9f528c13c26cD9` | 5,760 |  |
 | FeeForwarder | `0xCE40449B773a3E6E5e769ADb4e567179d4828cbd` | 3,037 |  |
@@ -369,7 +376,8 @@ Existence-checked with `eth_getCode` on 2026-09-29 (runtime size in bytes).
 | Executor | `0x464fC28B9CbC1781286c8626B6E925275c8C14F1` | 7,732 |  |
 | ReceiverAcrossV4 | `0x90dd81bD07763f39dF31D0089B61520461557D71` | 4,179 | `SPOKEPOOL()` = `0xD29C85F15DF544bA632C9E25829fd29d767d7978`; `EXECUTOR()` = the Executor above. |
 | ReceiverOIF | `0xc1DcE9F7F5a7477CaE473D262e47b05bF2E712a3` | 3,843 |  |
-| Permit2Proxy | `0x8eABB4E117fB70b346592e013855f6d825F50af1` | 8,037 |  |
+| Permit2Proxy | `0x60f93734a7555ab6dAa272afA0C5FedFc4062fba` | 8,037 | Current (redeployed about 2026-10-28). `LIFI_DIAMOND()` = `0xB477751B76CF82d00a686A1232f5fCD772414Af3`; `owner()` = `0x156cebba59deb2cb23742f70dcb0a11cc775591f`. |
+| Permit2Proxy (previous) | `0x8eABB4E117fB70b346592e013855f6d825F50af1` | 8,037 | Still has code; no longer in the deployment file. |
 | ERC20Proxy | `0xfb3973800ADf5B997E910F2DD90158924370612A` | 2,552 |  |
 | FeeCollector | `0xAD257784C6D50640d1EFa31cfB3e75bD566f63BA` | 4,717 |  |
 | FeeForwarder | `0xF4BFFE4dfC693f37715A47c15BdA8af9ed8f7Cf1` | 3,037 |  |
@@ -504,7 +512,8 @@ ETH_LIFI_RECEIVER_STARGATE_V2            = '\xb539b40793171211dca8834da044fc14bc
 ETH_LIFI_RECEIVER_CHAINFLIP              = '\x543733e09d7dd158ee85024f7e95ff1460ef21d6'
 ETH_LIFI_RECEIVER_OIF                    = '\xe6ee2a573047598b2452a879f2188b31d0442dbf'
 ETH_LIFI_RECEIVER_LEGACY                 = '\x050e198e36a73a1e32f15c3afc58c4506d82f657'
-ETH_LIFI_PERMIT2_PROXY                   = '\x89c6340b1a1f4b25d36cd8b063d49045caf3f818'
+ETH_LIFI_PERMIT2_PROXY                   = '\x8eed5e28216c0bc6f817df40ae6ca11c2294cc1c'
+ETH_LIFI_PERMIT2_PROXY_PREVIOUS          = '\x89c6340b1a1f4b25d36cd8b063d49045caf3f818'
 ETH_LIFI_ERC20_PROXY                     = '\x68e1acfa805dca813116ed6507e01c38d44318f0'
 ETH_LIFI_FEE_COLLECTOR                   = '\x3ef238c36035880efbdfa239d218186b79ad1d6f'
 ETH_LIFI_FEE_FORWARDER                   = '\xce40449b773a3e6e5e769adb4e567179d4828cbd'
@@ -518,7 +527,8 @@ BASE_LIFI_RECEIVER_ACROSS_V3             = '\xca6e6b692f568055ada0bf72a06d1ebbc9
 BASE_LIFI_RECEIVER_STARGATE_V2           = '\x1493e7b8d4dfade0a178dad9335470337a3a219a'
 BASE_LIFI_RECEIVER_OIF                   = '\xe6ee2a573047598b2452a879f2188b31d0442dbf'
 BASE_LIFI_RECEIVER_LEGACY                = '\xec03b65cbdc5f8858b02f44eba54c90664249fb1'
-BASE_LIFI_PERMIT2_PROXY                  = '\x89c6340b1a1f4b25d36cd8b063d49045caf3f818'
+BASE_LIFI_PERMIT2_PROXY                  = '\x8eed5e28216c0bc6f817df40ae6ca11c2294cc1c'
+BASE_LIFI_PERMIT2_PROXY_PREVIOUS         = '\x89c6340b1a1f4b25d36cd8b063d49045caf3f818'
 BASE_LIFI_ERC20_PROXY                    = '\x74a55cadb12501a3707e9f3c5dfd8b563c6a5940'
 BASE_LIFI_FEE_COLLECTOR                  = '\x0a6d96e7f4d7b96cfe42185df61e64d255c12dff'
 BASE_LIFI_FEE_FORWARDER                  = '\xce40449b773a3e6e5e769adb4e567179d4828cbd'
@@ -533,7 +543,8 @@ ARB_LIFI_RECEIVER_STARGATE_V2            = '\x1493e7b8d4dfade0a178dad9335470337a
 ARB_LIFI_RECEIVER_CHAINFLIP              = '\x37f584941242c8eada60bd6d8480cc0b6e36a0cf'
 ARB_LIFI_RECEIVER_OIF                    = '\xe6ee2a573047598b2452a879f2188b31d0442dbf'
 ARB_LIFI_RECEIVER_LEGACY                 = '\x050e198e36a73a1e32f15c3afc58c4506d82f657'
-ARB_LIFI_PERMIT2_PROXY                   = '\x89c6340b1a1f4b25d36cd8b063d49045caf3f818'
+ARB_LIFI_PERMIT2_PROXY                   = '\x8eed5e28216c0bc6f817df40ae6ca11c2294cc1c'
+ARB_LIFI_PERMIT2_PROXY_PREVIOUS          = '\x89c6340b1a1f4b25d36cd8b063d49045caf3f818'
 ARB_LIFI_ERC20_PROXY                     = '\x5741a7ffe7c39ca175546a54985fa79211290b51'
 ARB_LIFI_FEE_COLLECTOR                   = '\xb0210de78e28e2633ca200609d9f528c13c26cd9'
 ARB_LIFI_FEE_FORWARDER                   = '\xce40449b773a3e6e5e769adb4e567179d4828cbd'
@@ -547,7 +558,8 @@ OP_LIFI_RECEIVER_ACROSS_V3               = '\x28c7ef3789cf91c918cf86e5ef4b40febe
 OP_LIFI_RECEIVER_STARGATE_V2             = '\x556701899905f2f83aca2977d3202ee3a80f37b7'
 OP_LIFI_RECEIVER_OIF                     = '\xe6ee2a573047598b2452a879f2188b31d0442dbf'
 OP_LIFI_RECEIVER_LEGACY                  = '\x050e198e36a73a1e32f15c3afc58c4506d82f657'
-OP_LIFI_PERMIT2_PROXY                    = '\x89c6340b1a1f4b25d36cd8b063d49045caf3f818'
+OP_LIFI_PERMIT2_PROXY                    = '\x8eed5e28216c0bc6f817df40ae6ca11c2294cc1c'
+OP_LIFI_PERMIT2_PROXY_PREVIOUS           = '\x89c6340b1a1f4b25d36cd8b063d49045caf3f818'
 OP_LIFI_ERC20_PROXY                      = '\x314be5fcf0a204837896e6028c47a9e1fc2919c7'
 OP_LIFI_FEE_COLLECTOR                    = '\x271970ee66c03c9d62d8e8c718b9841f2ea7d817'
 OP_LIFI_FEE_FORWARDER                    = '\xce40449b773a3e6e5e769adb4e567179d4828cbd'
@@ -561,7 +573,8 @@ POLY_LIFI_RECEIVER_ACROSS_V3             = '\xca6e6b692f568055ada0bf72a06d1ebbc9
 POLY_LIFI_RECEIVER_STARGATE_V2           = '\x1493e7b8d4dfade0a178dad9335470337a3a219a'
 POLY_LIFI_RECEIVER_OIF                   = '\xe6ee2a573047598b2452a879f2188b31d0442dbf'
 POLY_LIFI_RECEIVER_LEGACY                = '\x050e198e36a73a1e32f15c3afc58c4506d82f657'
-POLY_LIFI_PERMIT2_PROXY                  = '\x89c6340b1a1f4b25d36cd8b063d49045caf3f818'
+POLY_LIFI_PERMIT2_PROXY                  = '\x8eed5e28216c0bc6f817df40ae6ca11c2294cc1c'
+POLY_LIFI_PERMIT2_PROXY_PREVIOUS         = '\x89c6340b1a1f4b25d36cd8b063d49045caf3f818'
 POLY_LIFI_ERC20_PROXY                    = '\x5741a7ffe7c39ca175546a54985fa79211290b51'
 POLY_LIFI_FEE_COLLECTOR                  = '\xbd6c7b0d2f68c2b7805d88388319cfb6ecb50ea9'
 POLY_LIFI_FEE_FORWARDER                  = '\xce40449b773a3e6e5e769adb4e567179d4828cbd'
@@ -575,7 +588,8 @@ BNB_LIFI_RECEIVER_ACROSS_V3              = '\x22713fa768c255fd7a6186ad39896126ed
 BNB_LIFI_RECEIVER_STARGATE_V2            = '\x1493e7b8d4dfade0a178dad9335470337a3a219a'
 BNB_LIFI_RECEIVER_OIF                    = '\xe6ee2a573047598b2452a879f2188b31d0442dbf'
 BNB_LIFI_RECEIVER_LEGACY                 = '\x050e198e36a73a1e32f15c3afc58c4506d82f657'
-BNB_LIFI_PERMIT2_PROXY                   = '\x89c6340b1a1f4b25d36cd8b063d49045caf3f818'
+BNB_LIFI_PERMIT2_PROXY                   = '\x8eed5e28216c0bc6f817df40ae6ca11c2294cc1c'
+BNB_LIFI_PERMIT2_PROXY_PREVIOUS          = '\x89c6340b1a1f4b25d36cd8b063d49045caf3f818'
 BNB_LIFI_ERC20_PROXY                     = '\x5741a7ffe7c39ca175546a54985fa79211290b51'
 BNB_LIFI_FEE_COLLECTOR                   = '\xbd6c7b0d2f68c2b7805d88388319cfb6ecb50ea9'
 BNB_LIFI_FEE_FORWARDER                   = '\xce40449b773a3e6e5e769adb4e567179d4828cbd'
@@ -587,7 +601,8 @@ AVAX_LIFI_EXECUTOR                       = '\x2dfadab8266483bed9fd9a292ce56596a2
 AVAX_LIFI_RECEIVER_STARGATE_V2           = '\x1493e7b8d4dfade0a178dad9335470337a3a219a'
 AVAX_LIFI_RECEIVER_OIF                   = '\xa2712aeecbff8a1542c78cf49c4fe4ce4b09e1db'
 AVAX_LIFI_RECEIVER_LEGACY                = '\x050e198e36a73a1e32f15c3afc58c4506d82f657'
-AVAX_LIFI_PERMIT2_PROXY                  = '\x89c6340b1a1f4b25d36cd8b063d49045caf3f818'
+AVAX_LIFI_PERMIT2_PROXY                  = '\x8eed5e28216c0bc6f817df40ae6ca11c2294cc1c'
+AVAX_LIFI_PERMIT2_PROXY_PREVIOUS         = '\x89c6340b1a1f4b25d36cd8b063d49045caf3f818'
 AVAX_LIFI_ERC20_PROXY                    = '\x5741a7ffe7c39ca175546a54985fa79211290b51'
 AVAX_LIFI_FEE_COLLECTOR                  = '\xb0210de78e28e2633ca200609d9f528c13c26cd9'
 AVAX_LIFI_FEE_FORWARDER                  = '\xce40449b773a3e6e5e769adb4e567179d4828cbd'
@@ -598,7 +613,8 @@ AVAX_LIFI_TIMELOCK                       = '\x5604a94a3438c3074efff803fab14b7244
 RH_LIFI_EXECUTOR                         = '\x464fc28b9cbc1781286c8626b6e925275c8c14f1'
 RH_LIFI_RECEIVER_ACROSS_V4               = '\x90dd81bd07763f39df31d0089b61520461557d71'
 RH_LIFI_RECEIVER_OIF                     = '\xc1dce9f7f5a7477cae473d262e47b05bf2e712a3'
-RH_LIFI_PERMIT2_PROXY                    = '\x8eabb4e117fb70b346592e013855f6d825f50af1'
+RH_LIFI_PERMIT2_PROXY                    = '\x60f93734a7555ab6daa272afa0c5fedfc4062fba'
+RH_LIFI_PERMIT2_PROXY_PREVIOUS           = '\x8eabb4e117fb70b346592e013855f6d825f50af1'
 RH_LIFI_ERC20_PROXY                      = '\xfb3973800adf5b997e910f2dd90158924370612a'
 RH_LIFI_FEE_COLLECTOR                    = '\xad257784c6d50640d1efa31cfb3e75bd566f63ba'
 RH_LIFI_FEE_FORWARDER                    = '\xf4bffe4dfc693f37715a47c15bda8af9ed8f7cf1'

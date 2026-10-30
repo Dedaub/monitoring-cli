@@ -1,6 +1,6 @@
 # Beets (Beethoven X) — Topics, Selectors, Addresses (Optimism)
 
-**Status:** all addresses independently verified on-chain via `cast` against publicnode RPCs (2026-06). Swap topic0 live-confirmed against Optimism Vault logs (block 125173056). No-proxy confirmed on all contracts (EIP-1967 slot = 0x0 on all). Beets-specific WeightedPoolFactory confirmed absent (0x) on Base and BNB only; unrelated contracts exist at the same address on Ethereum (6392B), Arbitrum (3072B), Avalanche (1628B), and Polygon (2776B) — all different bytecode from Optimism's 24476B.
+**Status:** all addresses independently verified on-chain via `cast` against publicnode RPCs (2026-06). Swap topic0 live-confirmed against Optimism Vault logs (block 125173056). No-proxy confirmed on all contracts (EIP-1967 slot = 0x0 on all). Beets-specific WeightedPoolFactory confirmed absent (0x) on Base and BNB only; unrelated contracts exist at the same address on Ethereum (6392B), Arbitrum (3072B), Avalanche (1628B), and Polygon (2776B) — all different bytecode from Optimism's 24476B. Re-checked on 2026-10-30: no Beets deployment on Robinhood Chain (4663) or Arc (5042); the Vault literal there is a forwarder decoy (§4).
 **Scope:** Beets on **Optimism (chain ID 10) only**. Fantom and Sonic deployments are out of scope. The 6 other target chains (Ethereum 1, Base 8453, BNB 56, Avalanche 43114, Arbitrum 42161, Polygon 137) have no Beets-specific deployment — the Vault address is shared with Balancer V2 on those chains (see [`balancer/v2.md`](../balancer/v2.md)).
 
 **Core architecture:** Beets is a Balancer V2 friendly fork. The Vault is the **same** contract as Balancer V2's (`0xBA12222222228d8Ba445958a75a0704d566BF2C8`) — the vanity address is deterministic and identical across all Balancer V2 chains. All Vault event topic0s, function selectors, and the single-Vault custody model are **identical to Balancer V2** — see [`balancer/v2.md`](../balancer/v2.md) §1–§2 for the full topic0 and selector reference. This file documents what is **Beets-specific**: its Optimism pool factory addresses, peripheral contracts, and the Authorizer/governance on that chain.
@@ -99,8 +99,10 @@ These are Beets's own factory deployments, at different addresses than Balancer 
 | BNB | 56 | `0xBA12…F2C8` (Balancer) | **0x** | Not Beets |
 | Avalanche | 43114 | `0xBA12…F2C8` (Balancer) | unrelated contract (~1628 bytes) | Not Beets |
 | Polygon | 137 | `0xBA12…F2C8` (Balancer) | unrelated contract (~2776 bytes) | Not Beets |
+| Robinhood Chain | 4663 | forwarder decoy (2109 bytes) | **0x** | Not Beets, not Balancer |
+| Arc | 5042 | forwarder decoy (2747 bytes) | **0x** | Not Beets, not Balancer |
 
-The Vault address `0xBA12222222228d8Ba445958a75a0704d566BF2C8` on the non-Optimism chains is the Balancer V2 Vault, not a Beets deployment.
+The Vault address `0xBA12222222228d8Ba445958a75a0704d566BF2C8` on the other non-Optimism chains above is the Balancer V2 Vault, not a Beets deployment. On Robinhood Chain and Arc, the Vault and Authorizer (`0xA331…3aE6`) literals hold a small old-solc ETH/token forwarder that the original Balancer deployer EOA created; it is not a Vault and emits no Vault events (see [`balancer/v2.md`](../balancer/v2.md) §3). The ProtocolFeesCollector, BalancerHelpers, both Beets factories and the live Authorizer have no code on either chain (2026-10-30).
 
 ---
 

@@ -1,6 +1,6 @@
 # Velodrome Finance — Compressed Reference Index
 
-**Status:** topic0/selectors computed locally with keccak (pycryptodome) from canonical source; addresses pulled from `velodrome-finance/*` `deployment-addresses/` JSON and re-verified on-chain via `eth_call`/`eth_getCode`/`eth_getLogs` vs publicnode/drpc (2026-06).
+**Status:** topic0/selectors computed locally with keccak (pycryptodome) from canonical source; addresses pulled from `velodrome-finance/*` `deployment-addresses/` JSON and re-verified on-chain via `eth_call`/`eth_getCode`/`eth_getLogs` vs publicnode/drpc (2026-06). Re-checked on 2026-10-30: Velodrome is **legacy since 2026-10-21**. Dromos Labs merged it with Aerodrome into **Aero** (new contracts, new AERO token; see [`../aerodrome/aero.md`](../aerodrome/aero.md)). Velodrome gauges are killed, pools still trade, and VELO / veVELO convert at 0.044 AERO per VELO.
 
 **What Velodrome is.** Velodrome is the **Solidly ve(3,3) AMM native to Optimism** — the *original* of the codebase that **Aerodrome (Base) is a fork of** (the prompt's "Velodrome is an Aerodrome fork" is backwards: Aerodrome, launched Aug 2023, forked Velodrome V2). Same team (formerly veDAO / "the Velodrome team"), same contracts, different chain + token (VELO vs AERO). The shared AMM/governance event & selector layout is documented (and on-chain verified) in [`aerodrome/amm.md`](../aerodrome/amm.md) and [`aerodrome/slipstream.md`](../aerodrome/slipstream.md); this folder is the Velodrome-specific, multi-chain-complete companion.
 
@@ -12,11 +12,13 @@ The prompt asked for Velodrome on **Ethereum, Base, Binance, Avalanche, Arbitrum
 |---|---|---|
 | **Optimism** (10) | ✅ **YES — root/home chain** | Full V2 AMM + Slipstream + ve(3,3) governance + cross-chain root. |
 | **Base** (8453) | ⚠️ **Partial** | Sister-protocol **Aerodrome** is the AMM here. Velodrome only deploys the *restricted-reward token bridge* leg on Base (XOP/restricted XERC20), **no Velodrome AMM/pools**. See [`superchain.md`](superchain.md). |
-| **Ethereum** (1) | ❌ No AMM | No Velodrome AMM/pools. A **bridged XVELO/VELO representation** may appear on Ethereum for the merger, and aggregators list "Ethereum" among VELO-supported chains — but there is **nothing to monitor as a DEX** there. Full DEX planned under the **"Aero" Velodrome+Aerodrome merger**, Q2 2026 (Base/OP/Ethereum/Circle Arc) — **not yet live** as of 2026-06. |
+| **Ethereum** (1) | ❌ No AMM | No Velodrome AMM/pools. A **bridged XVELO/VELO representation** may appear on Ethereum for the merger, and aggregators list "Ethereum" among VELO-supported chains — but there is **nothing to monitor as a DEX** there. The **Aero** merger DEX went live on 2026-10-21 on Ethereum, Base, Optimism, Arbitrum, Robinhood Chain and Arc with its own contracts: see [`../aerodrome/aero.md`](../aerodrome/aero.md). |
 | **Binance / BNB** (56) | ❌ No | Never deployed. |
 | **Avalanche** (43114) | ❌ No | Never deployed. |
 | **Arbitrum** (42161) | ❌ No | Not an OP-Stack/Superchain chain; not deployed. |
 | **Polygon PoS** (137) | ❌ No | Not deployed. |
+| **Robinhood Chain** (4663) | ❌ No | No Velodrome contract (`eth_getCode` = `0x` for every address in this folder, 2026-10-30). Aero is deployed here. |
+| **Arc** (5042) | ❌ No | No Velodrome contract. Five Velodrome literals have code on Arc but hold other contracts (see [`superchain.md`](superchain.md) roster and [`slipstream.md`](slipstream.md)). Aero is deployed here. |
 
 **Where Velodrome actually lives = the Optimism Superchain (OP-Stack) only.** Root chain = **Optimism**; leaf chains via the Root/Leaf + Hyperlane cross-chain stack: **Mode, Lisk, Fraxtal, Metal, Soneium, Ink, Unichain, Superseed, Swell, Celo, Bob** (+ restricted-bridge-only on **Base**). Full leaf list, addresses and architecture in [`superchain.md`](superchain.md).
 
@@ -28,7 +30,7 @@ The prompt asked for Velodrome on **Ethereum, Base, Binance, Avalanche, Arbitrum
 | [`slipstream.md`](slipstream.md) | **Slipstream** — concentrated-liquidity AMM (Uniswap-V3 fork + gauge integration). Two live OP CL deployments + the superchain CL leaf stack. |
 | [`superchain.md`](superchain.md) | **Superchain expansion** — Root/Leaf cross-chain architecture, Hyperlane message module, XVELO bridgeable token, leaf-chain deployment addresses (deterministic, shared across all leaf chains). |
 
-**Version history:** V1 (Solidly fork, May 2022 — deprecated, legacy `VELO` token `0x3c8B650257cFb5f272f799F5e2b4e65093a11a05` ✓) → **V2 (June 2023, current)** → Slipstream CL (2024) → Superchain/SuperSwaps cross-chain (2024–2025).
+**Version history:** V1 (Solidly fork, May 2022 — deprecated, legacy `VELO` token `0x3c8B650257cFb5f272f799F5e2b4e65093a11a05` ✓) → **V2 (June 2023 → 2026-10-21)** → Slipstream CL (2024) → Superchain/SuperSwaps cross-chain (2024–2025) → **merged into Aero (2026-10-21; V2, Slipstream and Superchain become legacy)** — [`../aerodrome/aero.md`](../aerodrome/aero.md).
 
 ## Key facts for monitoring
 - **veToken is an ERC-721 veNFT** (veVELO), keyed by `tokenId`, not an ERC-20 balance.

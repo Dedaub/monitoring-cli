@@ -1,6 +1,6 @@
-# Mayan Forwarder and Deposit Addresses — Topics, Selectors, Addresses (Ethereum + Base + Arbitrum + Optimism + Polygon + BNB + Avalanche; NOT Robinhood Chain)
+# Mayan Forwarder and Deposit Addresses — Topics, Selectors, Addresses (Ethereum + Base + Arbitrum + Optimism + Polygon + BNB + Avalanche; NOT Robinhood Chain or Arc)
 
-**Status:** verified on 2026-09-29 against live RPC on all eight chains, the verified sources on Blockscout (`MayanForwarder2`, `MPSFactory`, `MPSSmartWallet`), the `mayan-finance/swap-sdk` (`addresses.ts`, `MayanForwarderArtifact`) and docs.mayan.finance (`resources/chains-contracts`, `integration/forwarder-contract`, `features/deposit-addresses`). Topic0 and selector values were recomputed as `keccak256(signature)` from the verified ABIs and matched against live logs, transaction selectors and deployed bytecode. Addresses were existence-checked with `eth_getCode`.
+**Status:** verified on 2026-09-29 against live RPC on all eight chains, the verified sources on Blockscout (`MayanForwarder2`, `MPSFactory`, `MPSSmartWallet`), the `mayan-finance/swap-sdk` (`addresses.ts`, `MayanForwarderArtifact`) and docs.mayan.finance (`resources/chains-contracts`, `integration/forwarder-contract`, `features/deposit-addresses`). Topic0 and selector values were recomputed as `keccak256(signature)` from the verified ABIs and matched against live logs, transaction selectors and deployed bytecode. Addresses were existence-checked with `eth_getCode`. Re-checked on 2026-10-30: no Mayan contract on Arc (5042) either; `eth_getCode` returns `0x` at every address of this file there, and Arc is not in the Mayan chain config.
 **Scope:** the Mayan entry contracts that sit in front of the bridge routes: the **Mayan Forwarder** (`MayanForwarder2`, "the single entry point for EVM swaps"), the **deposit-address** contracts (`MPSFactory` and the `MPSSmartWallet` clones), and the **Shuttle** contract that the Forwarder allows. None of them is a bridge by itself: each hands the funds to Swift, MCTP, Fast MCTP, the Wormhole swap or Shuttle in the same transaction. Robinhood Chain (4663) has none of them. Topics and selectors are chain-agnostic; addresses are network-specific.
 
 The Forwarder holds no balance. It pulls the user's token (or takes `msg.value`), optionally swaps it through an allowed swap protocol into a "middle token", approves the Mayan protocol and calls it with the `protocolData` / `mayanData` calldata. It then emits one marker event. The marker names the Mayan protocol and carries its calldata, so the order parameters (for example the Swift order) can be decoded from it. **The Forwarder events are markers, not deposits**: the deposit is the protocol's own event or `Transfer` in the same transaction (for example `OrderCreated` of SwiftSource). Many orders do not use the Forwarder at all.
@@ -212,6 +212,7 @@ Pinned window 2026-09-28 00:00–12:00 UTC: `ForwardedERC20` 51, `ForwardedEth` 
 | BNB Smart Chain | 56 | 4 | ✅ | ✅ | ✅ | ❌ |
 | Avalanche C-Chain | 43114 | 6 | ✅ | ✅ | ✅ | ✅ |
 | **Robinhood Chain** | 4663 | — | ❌ | ❌ | ❌ | ❌ |
+| **Arc** | 5042 | — | ❌ | ❌ | ❌ | ❌ |
 
 The docs "Chains & Contracts" page says that the Forwarder "is deployed at the same address on every supported EVM chain"; its bytecode hash is identical on all seven chains above. Deposit addresses accept deposits on Ethereum, BSC, Polygon, Avalanche, Arbitrum, Optimism, Base and Monad (docs "Deposit Addresses").
 
@@ -334,6 +335,7 @@ AVAX_MPS_WALLET_IMPL_DOCS   = '\xfd7188cf0ac99705cc8c595a1d198c2a43df467c'
 AVAX_MAYAN_SHUTTLE          = '\xcbe9186a89db78714785765055e09dd6166e0833'
 AVAX_MAYAN_GUARDIAN_EOA     = '\x933e3922e04d47a466e60a20e486b372b64f1ea8'
 -- Robinhood Chain (4663): none of these contracts
+-- Arc (5042): none of these contracts
 ```
 
 ---

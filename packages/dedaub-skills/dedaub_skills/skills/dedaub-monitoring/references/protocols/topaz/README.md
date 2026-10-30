@@ -1,7 +1,7 @@
-# Topaz Dex — Compressed Reference Index (BNB Chain only)
+# Topaz Dex — Compressed Reference Index (BNB hub + Robinhood, Base, Ethereum, Arc spokes)
 
-**Status:** every topic0/selector computed locally with keccak from the canonical source (`topazdex/topaz-contacts`, `topazdex/topaz-slipstream`) and re-verified on-chain via `publicnode` BSC RPC on 2026-06-05 (33/33 contracts have bytecode; all view-function wiring cross-links; clone bytecode + live `eth_getLogs` confirmed).
-**Scope:** Topaz is **BNB's "agentic" ve(3,3) DEX** — a **Velodrome V2 fork** (the `v2` Solidly AMM + ve(3,3) governance) plus an **Aerodrome Slipstream fork** (the `v3` concentrated-liquidity product). It is deployed **only on BNB Smart Chain (chain id 56)**. The other six chains in the monitoring set (Ethereum, Base, Arbitrum, Optimism, Avalanche, Polygon PoS) have **no Topaz deployment** (verified: `eth_getCode` = `0x` for TOPAZ, Voter, CLFactory, NPM on all six).
+**Status:** every topic0/selector computed locally with keccak from the canonical source (`topazdex/topaz-contacts`, `topazdex/topaz-slipstream`) and re-verified on-chain via `publicnode` BSC RPC on 2026-06-05 (33/33 contracts have bytecode; all view-function wiring cross-links; clone bytecode + live `eth_getLogs` confirmed). Re-checked on 2026-10-30: Topaz is now a five-chain hub-and-spoke deployment. BNB is the hub; Robinhood Chain (4663), Base (8453), Ethereum (1) and Arc (5042) are spokes with xTOPAZ (LayerZero OFT), a local Voter, PoolFactory and CLFactory — see [`multichain.md`](multichain.md).
+**Scope:** Topaz is **BNB's "agentic" ve(3,3) DEX** — a **Velodrome V2 fork** (the `v2` Solidly AMM + ve(3,3) governance) plus an **Aerodrome Slipstream fork** (the `v3` concentrated-liquidity product). The TOPAZ token, veTOPAZ and Minter live **only on BNB Smart Chain (chain id 56)**, the hub. Since 2026-09 the same AMM and CL code also runs on four spokes — **Robinhood Chain, Base, Ethereum and Arc** — at different addresses ([`multichain.md`](multichain.md)). Arbitrum, Optimism, Avalanche and Polygon PoS have **no Topaz deployment**.
 
 This protocol is the same codebase as our [`aerodrome/`](../aerodrome/) docs (Aerodrome = Velodrome V2 + Slipstream on Base). If a fact isn't here, the Aerodrome/Velodrome and `uniswap/v3.md` references are byte-compatible for the shared pieces. Topaz-specific deltas are called out explicitly.
 
@@ -10,6 +10,7 @@ This protocol is the same codebase as our [`aerodrome/`](../aerodrome/) docs (Ae
 | File | Product | Contracts |
 |------|---------|-----------|
 | [`amm.md`](amm.md) | **Topaz v2** (Solidly AMM) **+ the shared ve(3,3) governance** | Pool (volatile+stable), PoolFactory, Router, Voter, VotingEscrow (veTOPAZ), Minter, RewardsDistributor, Gauge (v2), Fees/BribeVotingReward, factories, BonusLock, AirdropDistributor, TOPAZ token |
+| [`multichain.md`](multichain.md) | **Hub-and-spoke expansion** (2026-09) | BNB hub additions (xTOPAZ, XTopazOFTAdapter, EpochCoordinator); spoke Voter, PoolFactory, CLFactory, NPM, routers, XTopazOFT, XTopazVotingVault, SpokeEmissionReceiver on Robinhood, Base, Ethereum, Arc |
 | [`slipstream.md`](slipstream.md) | **Topaz v3** (concentrated liquidity = Slipstream) | CLFactory, CLPool, CLGauge, NonfungiblePositionManager, SwapRouter, QuoterV2, MixedRouteQuoterV1, fee modules, descriptors |
 
 The **ve(3,3) layer (Voter / VotingEscrow / Minter / RewardsDistributor) is shared** by both products — it lives in [`amm.md`](amm.md) and `slipstream.md` references it. A single `Voter` creates and feeds emissions to **both** v2 `Gauge`s and v3 `CLGauge`s; the `FactoryRegistry` whitelists exactly the two pool factories (verified `poolFactories()` → `[PoolFactory, CLFactory]`).
@@ -31,19 +32,21 @@ The **ve(3,3) layer (Voter / VotingEscrow / Minter / RewardsDistributor) is shar
 
 | Chain | id | Topaz? |
 |-------|----|--------|
-| **BNB Smart Chain** | **56** | **✓ full deployment (v2 + v3 + ve(3,3))** |
-| Ethereum | 1 | ✗ not deployed (`getCode`=0x) |
-| Base | 8453 | ✗ not deployed |
+| **BNB Smart Chain** | **56** | **✓ hub: full deployment (v2 + v3 + ve(3,3) + xTOPAZ adapter)** |
+| Robinhood Chain | 4663 | ✓ spoke (v2 + v3 + xTOPAZ + local Voter) — [`multichain.md`](multichain.md) |
+| Arc | 5042 | ✓ spoke — [`multichain.md`](multichain.md) |
+| Ethereum | 1 | ✓ spoke — [`multichain.md`](multichain.md) |
+| Base | 8453 | ✓ spoke — [`multichain.md`](multichain.md) |
 | Arbitrum One | 42161 | ✗ not deployed |
 | Optimism | 10 | ✗ not deployed |
 | Avalanche C-Chain | 43114 | ✗ not deployed |
 | Polygon PoS | 137 | ✗ not deployed |
 
-> If Topaz ever multi-chains, the contracts are CREATE2/CREATE-deployed per chain, so **addresses will differ** — re-derive per chain; only topics/selectors are chain-agnostic.
+> Spoke addresses differ from BNB, and several spoke addresses are BNB addresses of **different** contracts (for example `0x268d1C8a…` = BNB FactoryRegistry but Robinhood UniversalRouter; `0x7B1d8745…` = BNB AirdropDistributor but Arc UniversalRouter). Only topics/selectors are chain-agnostic.
 
 ## Top-level detection invariants (see each file for the full list)
 
-1. **One chain only (BNB, 56).** Any "Topaz" address on another chain is unrelated.
+1. **Hub on BNB, spokes on Robinhood, Base, Ethereum, Arc.** Key every address on `(chain, address)`; the same address is a different contract on another chain.
 2. **v2 AMM `Swap` topic0 `0xb3e27736…` ≠ Uniswap V2 `Swap` `0xd78ad95f…`** (different arg order: `amount0In,amount1In,amount0Out,amount1Out`).
 3. **v3 CL events are byte-identical to Uniswap V3** (`Swap 0xc42079f9…`, `Mint 0x7a53080b…`, `Burn 0x0c396cd9…`, `Collect 0x70935338…`). Disambiguate Topaz CL by **pool address provenance** (clone of `CLPool_impl`, created by `CLFactory`), not by topic0.
 4. **veTOPAZ is an ERC-721** — locks/votes are keyed by `tokenId`; the escrow emits ERC-721 `Transfer`.

@@ -1,6 +1,6 @@
 # Blackhole DEX — Classic AMM + Governance (Solidly/ve(3,3)) — Topics, Selectors, Addresses (Avalanche C-Chain)
 
-**Status:** Verified — all addresses confirmed via `eth_getCode` on Avalanche C-Chain (43114); absent (`0x`) on all other target chains (Ethereum 1, Base 8453, BNB 56, Arbitrum 42161, Optimism 10, Polygon 137). Deployment block ~67,000,000 (early 2024). topic0s cross-checked against live `eth_getLogs` on Avalanche.
+**Status:** Verified — all addresses confirmed via `eth_getCode` on Avalanche C-Chain (43114); absent (`0x`) on all other target chains (Ethereum 1, Base 8453, BNB 56, Arbitrum 42161, Optimism 10, Polygon 137). Deployment block ~67,000,000 (early 2024). topic0s cross-checked against live `eth_getLogs` on Avalanche. Re-checked on 2026-10-30: the MinterUpgradeable impl rotated to `0xa6f06de7…` (EIP-1967 slot read live). VoterV3 and GaugeManager impls are unchanged. PairFactory, GaugeFactory, BribeFactory, AutoVotingEscrowManager and VeArtProxy are transparent proxies (2,227 B; impl and admin slots read live), not plain contracts.
 **Sources:** [Blackhole docs](https://docs.blackhole.xyz) · live `eth_getLogs` and `eth_getTransactionReceipt` cross-checks on Avalanche C-Chain · bytecode analysis · keccak256 computed locally.
 **Last verified:** 2026-06-09
 
@@ -20,7 +20,7 @@
 
 **Architecture note:** Blackhole Classic is a ThenaFi fork (BNB Chain) which is itself a Solidly/ve(3,3) fork. Closely resembles Velodrome V1, Pharaoh Legacy AMM, and Camelot V2. Classic pairs have two types (stable=true / stable=false) distinguished by the `stable()` flag on each Pair and by `PairFactory.isPair()`. Gauge rewards flow: `MinterUpgradeable.update_period()` mints weekly BLACK → `GaugeManager.distribute()` → `GaugeV2.notifyRewardAmount()` → staked LP holders claim. veNFT holders earn protocol fees via `RewardDistributor.claim(tokenId)`.
 
-**Proxy pattern:** VoterV3, GaugeManager, MinterUpgradeable are OpenZeppelin `TransparentUpgradeableProxy` with a shared `ProxyAdmin` at `0xd763061cc3015642ca104496107bc69944c74bed` (owned by `0xe3Df22b04F1F788fF025ADc2466638f5AaE588e0`). The EIP-1967 `_IMPLEMENTATION_SLOT` (`0x360894…382bbc`) is **populated** — VoterV3 impl = `0x6bD81E7eaFA4B21d5AD069B452Ab4b8bb40c4525`, GaugeManager impl = `0x66c6650a106e82FC40824077fA501D6f28974091`, MinterUpgradeable impl = `0x86EbA1b766667B99dd4f9a40d01960e36CF753e3` (all verified via `eth_getStorageAt`). VotingEscrow is a non-upgradeable contract (no proxy slots).
+**Proxy pattern:** VoterV3, GaugeManager, MinterUpgradeable, PairFactory, GaugeFactory, BribeFactory, AutoVotingEscrowManager and VeArtProxy are OpenZeppelin `TransparentUpgradeableProxy` (VeArtProxy has its own ProxyAdmin `0xa7c81d9f…`; the others share one) with a shared `ProxyAdmin` at `0xd763061cc3015642ca104496107bc69944c74bed` (owned by `0xe3Df22b04F1F788fF025ADc2466638f5AaE588e0`). The EIP-1967 `_IMPLEMENTATION_SLOT` (`0x360894…382bbc`) is **populated** — VoterV3 impl = `0x6bD81E7eaFA4B21d5AD069B452Ab4b8bb40c4525`, GaugeManager impl = `0x66c6650a106e82FC40824077fA501D6f28974091`, MinterUpgradeable impl = `0xa6f06de7b59da6d429c9d3922cace184b3f04488` (re-read 2026-10-30; was `0x86EbA1b7…`) (all verified via `eth_getStorageAt`). VotingEscrow is a non-upgradeable contract (no proxy slots).
 
 ---
 
@@ -175,7 +175,7 @@ Standard ERC-20 events only:
 | `0x2e1a7d4d` | `withdraw(uint256 amount)` | Unstake LP tokens. |
 | `0x31279d3d` | `getReward(address account, address[] tokens)` | Claim gauge rewards. |
 
-### 2.6 MinterUpgradeable (proxy → impl `0x86EbA1b766667B99dd4f9a40d01960e36CF753e3`)
+### 2.6 MinterUpgradeable (proxy → impl `0xa6f06de7b59da6d429c9d3922cace184b3f04488`, read 2026-10-30; was `0x86EbA1b7…`)
 | Selector | Signature | Notes |
 |----------|-----------|-------|
 | `0xed29fc11` | `update_period()` | Advance epoch, mint weekly BLACK emission. Callable by anyone once per week. |
@@ -195,17 +195,17 @@ Standard ERC-20 events only:
 |----------|---------|-------|
 | **BLACK token** | `0xcd94a87696FAC69Edae3a70fE5725307Ae1c43f6` | `name()="BLACKHOLE"`, `symbol()="BLACK"`. ERC-20. Non-upgradeable. |
 | **RouterV2** | `0xe946A9f39312E2346BA79DAb865B0e9A74f2F981` | Non-upgradeable. |
-| **PairFactory** | `0xfE926062Fb99CA5653080d6C14fE945Ad68c265C` | Non-upgradeable. `allPairsLength()=87`. `stableFee()=5` bp, `volatileFee()=70` bp. `0x36610013…` dispatch prefix. |
+| **PairFactory** | `0xfE926062Fb99CA5653080d6C14fE945Ad68c265C` | **Proxy** (TransparentUpgradeableProxy, 2,227 B). Impl: `0x0dea372e70350d9c298a3825f0249fe2dbad26f8`. Admin: shared ProxyAdmin. `allPairsLength()=87`. `stableFee()=5` bp, `volatileFee()=70` bp. `0x36610013…` dispatch prefix. |
 | **VotingEscrow** (veBLACK) | `0xEac562811cc6abDbB2c9EE88719eCA4eE79Ad763` | `name()="veBlack"`, `symbol()="veBLACK"`. ERC-721 veNFT. **Non-upgradeable** (no proxy admin). |
 | **VoterV3** | `0xE30D0C8532721551a51a9FeC7FB233759964d9e3` | **Proxy** (TransparentUpgradeableProxy). Impl: `0x6bD81E7eaFA4B21d5AD069B452Ab4b8bb40c4525`. Admin: `0xd763061cc3015642ca104496107bc69944c74bed` (ProxyAdmin). |
 | **GaugeManager** | `0x59aa177312Ff6Bdf39C8Af6F46dAe217bf76CBf6` | **Proxy** (TransparentUpgradeableProxy). Impl: `0x66c6650a106e82FC40824077fA501D6f28974091`. Admin: same ProxyAdmin. |
-| **GaugeFactory** | `0x9E95eF7D8b87708641923C48C4eB298ED7CA6552` | Non-upgradeable. `0x36610013…` dispatch. |
-| **MinterUpgradeable** | `0xAcc34Ad51457930989fB5050C2Dce6339F06479B` | **Proxy** (TransparentUpgradeableProxy). Impl: `0x86EbA1b766667B99dd4f9a40d01960e36CF753e3`. Admin: same ProxyAdmin. `active_period()=1780531200`. |
-| **BribeFactory** | `0xfE842861b9F79Bb77CCb6043731D433D63B365dF` | Non-upgradeable. `0x36610013…` dispatch. |
+| **GaugeFactory** | `0x9E95eF7D8b87708641923C48C4eB298ED7CA6552` | **Proxy** (TransparentUpgradeableProxy, 2,227 B). Impl: `0xe46d245942dc01c5ea3e1dd05f3268ace867b5e1`. Admin: shared ProxyAdmin. |
+| **MinterUpgradeable** | `0xAcc34Ad51457930989fB5050C2Dce6339F06479B` | **Proxy** (TransparentUpgradeableProxy). Impl: `0xa6f06de7b59da6d429c9d3922cace184b3f04488` (7,683 B; read 2026-10-30; was `0x86EbA1b766667B99dd4f9a40d01960e36CF753e3`). Admin: same ProxyAdmin. `active_period()=1780531200`. |
+| **BribeFactory** | `0xfE842861b9F79Bb77CCb6043731D433D63B365dF` | **Proxy** (TransparentUpgradeableProxy, 2,227 B). Impl: `0x19844c931406cc9bd237aa3e169310978a33f0b9`. Admin: shared ProxyAdmin. |
 | **RewardDistributor** | `0x7c7BD86BaF240dB3DbCc3f7a22B35c5bAa83bA28` | Non-upgradeable. Distributes protocol yield to veNFT holders. |
-| **AutoVotingEscrowManager** | `0x3755DF8a937e9505aF7B14D8b13E83f133Ed11c3` | Non-upgradeable. `0x36610013…` dispatch. |
+| **AutoVotingEscrowManager** | `0x3755DF8a937e9505aF7B14D8b13E83f133Ed11c3` | **Proxy** (TransparentUpgradeableProxy, 2,227 B). Impl: `0xf7f32fe3af99005fb4839a735458321f8754112e`. Admin: shared ProxyAdmin. |
 | **BlackClaim** | `0x91B8C8c51A11a7033C34257C3768035EfF4F7736` | Non-upgradeable. Token distribution contract. |
-| **VeArtProxy** | `0xcA756Ef397b8F039d04b4ff967F43417B723aFdE` | Non-upgradeable. `0x36610013…` dispatch. Returns veNFT SVG art. |
+| **VeArtProxy** | `0xcA756Ef397b8F039d04b4ff967F43417B723aFdE` | **Proxy** (TransparentUpgradeableProxy, 2,227 B). Impl: `0x12c8daac334a0c07877b9e63b70b3407e98aa269`. Admin: a different ProxyAdmin `0xa7c81d9fc8e46ca251f14113758e090782a0eca0` (owner `0x34a2909cbced3fddd8c20a2fd3d1abb5b5c89957`). Returns veNFT SVG art. |
 | **GenesisPoolManager** | `0x0EB1e103116b8Ec5f13a72F6943440340c4840dd` | Non-upgradeable. |
 | **ProxyAdmin** | `0xd763061cc3015642ca104496107bc69944c74bed` | Admin for VoterV3, GaugeManager, MinterUpgradeable. `owner()=0xe3Df22b04F1F788fF025ADc2466638f5AaE588e0`. |
 

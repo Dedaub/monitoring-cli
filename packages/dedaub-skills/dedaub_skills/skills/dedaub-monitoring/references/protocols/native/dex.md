@@ -1,6 +1,6 @@
 # Native — Swap Engine (NativeRouter V6/V4/V3, NativeRFQPool, NativeBridge) — Topics, Selectors, Addresses
 
-**Status:** verified against live RPC on Ethereum (1), Base (8453), BNB Smart Chain (56), Arbitrum One (42161), Avalanche C-Chain (43114), Optimism (10), Polygon PoS (137), plus Sourcify-verified ABIs and the `Native-org/native-v2-core` repo, on 2026-06-02. **Re-checked 2026-10-05** against the official addresses page and live RPC: **NativeRouter V6 + NativeRFQPool V6** added on every deployed chain (V3 and V4 "will be phased out by end of October 2026"), V3/V4 pools now live on BNB/Arbitrum/Base, **Robinhood Chain (4663)** added (§6a), NativeBridge no longer listed.
+**Status:** verified against live RPC on Ethereum (1), Base (8453), BNB Smart Chain (56), Arbitrum One (42161), Avalanche C-Chain (43114), Optimism (10), Polygon PoS (137), plus Sourcify-verified ABIs and the `Native-org/native-v2-core` repo, on 2026-06-02. **Re-checked 2026-10-05** against the official addresses page and live RPC: **NativeRouter V6 + NativeRFQPool V6** added on every deployed chain (V3 and V4 "will be phased out by end of October 2026"), V3/V4 pools now live on BNB/Arbitrum/Base, **Robinhood Chain (4663)** added (§6a), NativeBridge no longer listed. Re-checked on 2026-10-30: Arc (5042) has an **unlisted, idle** V4-generation set (router, RFQ pool, CreditVault with no markets) — see §6b.
 
 **Scope:** the **Native Swap Engine** (DEX/RFQ side) only — `NativeRouter` (V3 and V4), `NativeRFQPool` ("NativePool" / credit pool), and `NativeBridge`. Topics + selectors are **chain-agnostic**; addresses are network-specific. **Boundary:** the lending / Credit-Pool side (`CreditVault`, `NativeLPToken`) is covered by a separate reference and is intentionally NOT detailed here — but note that every Router/Pool/Bridge in this file points its `vault()` / `treasury()` at the chain's `CreditVault`, which is the seam between the two halves (see §"Detection invariants").
 
@@ -274,9 +274,22 @@ From the official addresses page ("Robinhood" section). All verified via `eth_ge
 
 **Address reuse trap:** `0x4Df7557734B382EB542BEa6c74786D398DF4CC19` is the V6 router on Robinhood Chain, the CreditVault on X Layer and Morph (official page), and the former CreditVault owner address on Ethereum/BNB/Base. `0x45F4D4AED68A04E9a48EED69E1C8b15d7875d25F` is the V6 pool here and the V4 router on X Layer and Morph. Key on `(chainId, address)`.
 
+## 6b. Addresses — Arc (chain ID 5042) — unlisted, idle
+
+Not on the official addresses page (2026-10-30), but present on-chain. Identity read live on `https://arc-rpc.publicnode.com` on 2026-10-30: `eip712Domain()` names and `chainId` = 5042, the router's `vault()` and the pool's `router()` / `treasury()` all cross-link, and the CreditVault `signer()` is the shared Native signer `0x0b89c5eb…0a5e`. Byte sizes match the Robinhood **V4** router (15,637 B) and **V4** pool (9,478 B). EIP-1967 slots are empty. The CreditVault has **no markets** (`allLPTokens(0)` reverts) and the three contracts emitted **no logs** in the last 5,000 blocks.
+
+| Role | Address | One-liner |
+|------|---------|-----------|
+| NativeRouter (V4 build) | `0x5d4c35e9c9a06061ba80e34b531bba88bf9952bc` | `eip712Domain()` = "Native Router" v1; `vault()` = CreditVault below |
+| NativeRFQPool (V4 build) | `0xeea56d9b036ae933d4e6cdaf1ca3a46fa0d7a480` | `eip712Domain()` = "Native RFQ Pool"; `router()` = router above; `treasury()` = CreditVault. **Same address as the Ethereum NLP-TSLAon LP token** — different contract |
+| *CreditVault (boundary)* | `0xab6c448570bba62b712cfa272b5d8e208429f35d` | 20,187 B, "Native Credit Vault"; same address as the X Layer / Morph V4 pool (official page) |
+| Router / pool `owner()` | `0x095bf2f664a913b9f175802da91e8e5491bff9f6` | 171 B Safe proxy |
+
+No V6 or V3 contract was found on Arc. **Decoy:** `0x45F4D4AED68A04E9a48EED69E1C8b15d7875d25F` (the Robinhood V6 pool) has 119 B on Arc — a stub whose every call reverts with error `0xea3559ef`; it is not a pool.
+
 ---
 
-## 7. Addresses — Avalanche (43114), Optimism (10), Polygon PoS (137), Arc (5042) — NOT DEPLOYED
+## 7. Addresses — Avalanche (43114), Optimism (10), Polygon PoS (137) — NOT DEPLOYED (Arc: see §6b)
 
 The Native Swap Engine is **not deployed** on Avalanche C-Chain, Optimism, or Polygon PoS. `eth_getCode` returns `0x` for **every** Swap-Engine address (V4 router, V3 router, bridge — checked the ETH/Base/BNB/Arb variants of each) on all three chains, verified on `https://avalanche-c-chain-rpc.publicnode.com`, `https://optimism-rpc.publicnode.com`, and `https://polygon-bor-rpc.publicnode.com` on 2026-06-02.
 
@@ -304,7 +317,7 @@ The Native docs addresses page (2026-10-05) lists Ethereum, BNB, Arbitrum, Base,
 | Avalanche | 43114 | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ |
 | Optimism | 10 | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ |
 | Polygon | 137 | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ |
-| Arc | 5042 | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ |
+| Arc | 5042 | ✗ | V4 build, unlisted, idle | ✗ | ✓ V4 build only | ✗ | `0xab6c4485…` (no markets) |
 
 - **Routers are NOT CREATE2-identical** across chains (same role, same byte-length per role, different bytecode hash & different deployed address). The per-chain admin (`owner()`) also differs.
 - Every deployed chain now has a V6, a V4 and a V3 pool (official page; `router()`/`treasury()` read live 2026-10-05). In ~24 h windows to 2026-10-05, `RFQTrade` per pool: Arbitrum V4 55 / V6 16 / V3 5; Base V4 24 / V6 4 / V3 1. Keep indexing `NativePoolUpdated` on each router for new pools.
@@ -493,7 +506,12 @@ RH_NATIVE_RFQ_POOL_V3             = '\x55b503d1a03fc73a875765827ffc28cc15e15f06'
 RH_CREDIT_VAULT_BOUNDARY          = '\x57b8f68ef57af2db70bc9aac891836661ca4cb51'
 RH_ADMIN_OWNER                    = '\xd133ce2041e166e1a429ae61ef6c7e9491a06ce3'
 
--- ===== NOT deployed: Avalanche (43114), Optimism (10), Polygon (137), Arc (5042) =====
+-- ===== Arc (chain ID 5042) — unlisted, idle V4-build set =====
+ARC_NATIVE_ROUTER_V4              = '\x5d4c35e9c9a06061ba80e34b531bba88bf9952bc'
+ARC_NATIVE_RFQ_POOL_V4            = '\xeea56d9b036ae933d4e6cdaf1ca3a46fa0d7a480'
+ARC_CREDIT_VAULT_BOUNDARY         = '\xab6c448570bba62b712cfa272b5d8e208429f35d'
+
+-- ===== NOT deployed: Avalanche (43114), Optimism (10), Polygon (137) =====
 ```
 
 ---

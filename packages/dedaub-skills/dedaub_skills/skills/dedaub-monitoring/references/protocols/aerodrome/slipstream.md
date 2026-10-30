@@ -1,6 +1,6 @@
 # Aerodrome / Velodrome Slipstream (Concentrated Liquidity) — Compressed Reference (Base + Optimism)
 
-**Status:** topic0/selectors via `cast keccak`/`cast sig` (verified, read from `aerodrome-finance/slipstream` source); addresses on-chain re-verified with `cast` vs `publicnode` (2026-05) — NFPM `symbol()` = "AERO-CL-POS" / "VELO-CL-POS".
+**Status:** topic0/selectors via `cast keccak`/`cast sig` (verified, read from `aerodrome-finance/slipstream` source); addresses on-chain re-verified with `cast` vs `publicnode` (2026-05) — NFPM `symbol()` = "AERO-CL-POS" / "VELO-CL-POS". Re-checked on 2026-10-30: legacy since the Aero launch of 2026-10-21 (gauges killed, pools still trade). The Aero CL stack (new CLFactory per chain, NFPM `AERO-CL` `0x4857DB57…C60b`, 6-arg `IncreaseLiquidity`) is in [`aero.md`](aero.md).
 **Scope:** **Slipstream** — the concentrated-liquidity AMM of **Aerodrome (Base)** and **Velodrome (Optimism)**, a Uniswap-V3-based core with ve(3,3) gauge integration. The classic Solidly AMM + the shared **ve(3,3) governance** (Voter, VotingEscrow, AERO/VELO, gauges) are in [`amm.md`](amm.md) — Slipstream pools plug into that same governance.
 **Key fact:** Slipstream's CL pool events are a **Uniswap-V3 fork → core pool event topic0s are IDENTICAL to Uniswap V3** (`uniswap/v3.md`); differences are: a Slipstream-specific **`CollectFees`** (gauge fee withdrawal), a **tickSpacing-based `PoolCreated`** (no fee tiers), and pools indexed by **tickSpacing** rather than fee.
 

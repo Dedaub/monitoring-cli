@@ -1,11 +1,11 @@
 # Connext Amarok — Topics, Selectors, Addresses (Ethereum, Base, BNB, Arbitrum, Optimism, Polygon)
 
-**Status:** verified against live RPC on every listed chain and the canonical `connext/monorepo` repo on 2026-06-09. Re-verified on 2026-09-29 against the same sources: the `Reconciled` topic, the struct-typed rows (written out as tuples), and all eight target chains, Robinhood Chain (4663) included.
+**Status:** verified against live RPC on every listed chain and the canonical `connext/monorepo` repo on 2026-06-09. Re-verified on 2026-09-29 against the same sources: the `Reconciled` topic, the struct-typed rows (written out as tuples), and all eight target chains, Robinhood Chain (4663) included. Re-checked on 2026-10-30: no Amarok diamond on Arc (5042) (§9).
 **Scope:** the original **Connext Amarok** cross-chain bridge — a single **EIP-2535 Diamond** (`ConnextDiamond`) per chain holding all bridge logic in facets (`BridgeFacet` for `xcall`/`execute`, `RoutersFacet` for liquidity), plus the canonical token registry / xERC20 surface. Topics and selectors are chain-agnostic; addresses are network-specific. Connext rebranded to **Everclear** and Amarok bridging has effectively been superseded by the Everclear intent layer — see [core.md](core.md). The first generation, NXTP v1 (TransactionManager), is in [nxtp.md](nxtp.md). The Amarok Diamond remains deployed and was still emitting `XCalled`/`execute` into **late 2025** (last `xcall`/`xcallIntoLocal` ~Aug 2025, last `execute` ~Sep 2025), now largely dormant.
 
 Amarok is **upgradeable via the Diamond standard (EIP-2535)**, not EIP-1967: there is no single implementation slot — function selectors are routed to per-function **facet** addresses recorded in diamond storage at slot `keccak256("diamond.standard.diamond.storage")`. `eth_getCode` on the Diamond returns a small (~4.9 kB) dispatcher; reading the EIP-1967 impl slot returns `0x0` (it is NOT an EIP-1967 proxy). Each chain hosts an **independent Diamond at a different address** (no shared CREATE2 vanity), governed by a **different per-chain owner Safe**. Connext uses **Nomad/Connext "domain" IDs** (e.g. Ethereum = 6648936, the ASCII of "eth"), which differ from both chainId and from Everclear's Hyperlane domains — read `domain()` to confirm which chain a Diamond serves.
 
-> **Not deployed on Avalanche or Robinhood Chain.** No Amarok `ConnextDiamond` exists on Avalanche C-Chain (43114) at any known Connext address (`eth_getCode` = `0x`), even though Avalanche *is* a configured Connext domain (`1635148152`) in `connext/chaindata`. Robinhood Chain (4663) has no code at any of the six Diamond literals and is not a Connext domain. Of the eight target chains, Amarok lives on **six: Ethereum, Base, BNB, Arbitrum, Optimism, Polygon**. Counterparty chains outside the seven that Amarok also connected include **Gnosis (100), Linea (59144), Mantle (5000), Metis (1088), Moonbeam (1284)** (per `connext/chaindata`).
+> **Not deployed on Avalanche, Robinhood Chain or Arc.** No Amarok `ConnextDiamond` exists on Avalanche C-Chain (43114) at any known Connext address (`eth_getCode` = `0x`), even though Avalanche *is* a configured Connext domain (`1635148152`) in `connext/chaindata`. Robinhood Chain (4663) and Arc (5042) have no code at any of the six Diamond literals and are not Connext domains. Of the eight target chains, Amarok lives on **six: Ethereum, Base, BNB, Arbitrum, Optimism, Polygon**. Counterparty chains outside the seven that Amarok also connected include **Gnosis (100), Linea (59144), Mantle (5000), Metis (1088), Moonbeam (1284)** (per `connext/chaindata`).
 
 ---
 
@@ -154,11 +154,15 @@ Verified via `eth_getCode` on `https://polygon-bor-rpc.publicnode.com`. `domain(
 | Owner | `0x0970Adeb473609F91D03e9Bba85f49C445040cd7` |
 | CLEAR token (OFT) | `0x58b9cb810A68a7f3e1E4f8Cb45D1B9B3c79705E8` (present, 1 356 B proxy) |
 
-## 9. Addresses — Avalanche C-Chain (chain ID 43114) and Robinhood Chain (chain ID 4663)
+## 9. Addresses — Avalanche C-Chain (chain ID 43114), Robinhood Chain (chain ID 4663) and Arc (chain ID 5042) — not deployed
 
 **No Amarok ConnextDiamond.** `eth_getCode` = `0x` for every known Connext Diamond address on `https://avalanche-c-chain-rpc.publicnode.com`. Avalanche is a registered Connext domain (`1635148152`) but the Amarok core was not deployed there. CLEAR token is also absent on Avalanche.
 
 **Robinhood Chain: no Amarok ConnextDiamond.** `eth_getCode` = `0x` (nonce 0) at all six Diamond literals and at the CLEAR token literal on `https://rpc.mainnet.chain.robinhood.com` (2026-09-29). Robinhood Chain is not a Connext domain in `connext/chaindata`, and it launched after Amarok went dormant.
+
+**Arc: no Amarok ConnextDiamond.** `eth_getCode` = `0x` at all six Diamond literals and at the CLEAR token literal on `https://rpc.mainnet.arc.io` (2026-10-30). Arc is not a Connext domain.
+
+The only Amarok literal with code on Robinhood Chain and Arc is the DiamondLoupe facet `0x3bcf4185443a339517ad4e580067f178d1b68e1d` (2,126 B, byte-identical to Ethereum; `facets()` returns an empty list): a stateless facet copy, not a diamond.
 
 ---
 
@@ -174,6 +178,7 @@ Verified via `eth_getCode` on `https://polygon-bor-rpc.publicnode.com`. `domain(
 | **Polygon** | 137 | 1886350457 | `0x11984dc4465481512eb5b777E44061C158CF2259` | `0x0970Adeb473609F91D03e9Bba85f49C445040cd7` | ✅ (OFT) |
 | **Avalanche** | 43114 | 1635148152 | ❌ `0x` | — | ❌ |
 | **Robinhood Chain** | 4663 | — (not a Connext domain) | ❌ `0x` | — | ❌ |
+| **Arc** | 5042 | — (not a Connext domain) | ❌ `0x` | — | ❌ |
 
 **No shared vanity address** for the Diamond — every chain's Diamond and owner Safe is distinct (unlike the Everclear Spoke, which is vanity-shared). Key on `(chainId, address)`. The **CLEAR token** is the only contract that re-uses one literal (`0x58b9cb810A68a7f3e1E4f8Cb45D1B9B3c79705E8`) across chains, and even that is absent on Base, Avalanche and Robinhood Chain.
 
@@ -202,7 +207,7 @@ Verified via `eth_getCode` on `https://polygon-bor-rpc.publicnode.com`. `domain(
 7. **No shared Diamond address & a different owner Safe per chain.** Key everything on `(chainId, address)`; never assume one governance key.
 8. **Routers front liquidity.** `RouterLiquidityAdded`/`Removed` track LP capital; `execute` consumes router balances for fast transfers. `routerBalances(router, asset)` is the live accounting.
 9. **CLEAR token is shared-address but partial.** `0x58b9cb810A68a7f3e1E4f8Cb45D1B9B3c79705E8` is present on ETH (canonical, upgradeable) and as an OFT on BNB/Arb/OP/Polygon, **absent on Base and Avalanche**. It is the Everclear governance token, not a bridge-wrapped asset.
-10. **Not on Avalanche or Robinhood Chain.** Every Amarok core address returns `0x` on Avalanche despite it being a configured domain, and on Robinhood Chain. Record as "not deployed here."
+10. **Not on Avalanche, Robinhood Chain or Arc.** Every Amarok core address returns `0x` on Avalanche despite it being a configured domain, and on Robinhood Chain and Arc. Record as "not deployed here."
 11. **Slow path = `Reconciled` + `Receive`.** When the bridge message of a transfer reaches the destination, `InboxFacet.handle` emits `Receive` (tokens minted or released to the Diamond) and `Reconciled` (`transferId`, the routers to repay, one `amount`). If routers fronted the transfer, `Reconciled` repays them; if not, `execute` pays the receiver after reconciliation. Join on `transferId` (topic1 of `Reconciled`).
 12. **The Base Diamond literal is a different contract on Ethereum.** `0xB8448C6f7f7887D36DcA487370778e419e9ebE3F` is an older Amarok `RoutersFacet` on Ethereum (8,344 B). A facet emits nothing by itself (events come from the Diamond), but an address-only rule would misfire. Key on `(chainId, address)`.
 
@@ -252,7 +257,7 @@ BNB_DIAMOND   = '\xcd401c10afa37d641d2f594852da94c700e4f2ce'
 ARB_DIAMOND   = '\xee9dec2712cce65174b561151701bf54b99c24c8'
 OP_DIAMOND    = '\x8f7492de823025b4cfaab1d34c58963f2af5deda'
 POLY_DIAMOND  = '\x11984dc4465481512eb5b777e44061c158cf2259'
--- Avalanche and Robinhood Chain: NOT DEPLOYED (eth_getCode = 0x)
+-- Avalanche, Robinhood Chain and Arc: NOT DEPLOYED (eth_getCode = 0x)
 
 -- ===== ETH facets (upgrade-mutable; read facets() live) =====
 ETH_BRIDGE_FACET   = '\x3606b0d9c84224892c7407d4e8dcfd7e9e2126a2'
@@ -279,7 +284,7 @@ How constants were verified (2026-06-09):
 - **Topic0 + selectors:** recomputed locally as `keccak256(canonical signature)` / `[0:4]` from `BridgeFacet.sol`, `RoutersFacet.sol`, `DiamondCutFacet.sol` and `LibConnextStorage.sol` (`TransferInfo`/`ExecuteArgs`) in `connext/monorepo`. `XCalled` (`0xed8e6ba697dd65259e5ce532ac08ff06d1a3607bcec58f8f0937fe36a5666c54`) cross-checked against **19 live `XCalled` logs** on the Ethereum Diamond near block `0x15c3da1`. On 2026-09-29, `Reconciled` was re-derived from `InboxFacet.sol` and matched live: the Ethereum Diamond, blocks 17,481,593 to 17,486,592, emitted 37 `XCalled`, 65 `Executed`, 35 `TransferRelayerFeesIncreased`, 18 `Reconciled`, 18 `Receive` and 3 `ExternalCalldataExecuted`. The struct-typed rows were written out from `LibConnextStorage.sol` (`TransferInfo`, `ExecuteArgs`) and their hashes equal the listed values. Selectors `xcall`/`xcallIntoLocal`/`execute`/`addRouterLiquidity` confirmed by live `facetAddress(selector)` calls resolving to the BridgeFacet/RoutersFacet.
 - **Addresses + facets:** Diamond addresses from the Connext deployments registry / docs, existence-checked via `eth_getCode` on each chain's publicnode RPC. ETH facet set read live via `facets()` (13 facets). `domain()` and `owner()` read live per chain. Avalanche confirmed absent (`eth_getCode` = `0x`).
 - **Proxy classification:** EIP-1967 impl slot read live on every Diamond → `0x0` (not EIP-1967); diamond standard storage slot derived as `keccak256("diamond.standard.diamond.storage")`. CLEAR token impl read from the EIP-1967 slot (`0x8d9a1606b12aedd7469d154149d66e3418ef890c` on ETH).
-- **Chain coverage:** Connext domain table from `connext/chaindata` `crossChain.json` (lists Avalanche as a domain even though the Amarok core is absent there); counterparty chains outside the eight (Gnosis, Linea, Mantle, Metis, Moonbeam) noted from the same source. Robinhood Chain (4663): `eth_getCode` = `0x` at all six Diamond literals and the CLEAR literal (2026-09-29).
+- **Chain coverage:** Connext domain table from `connext/chaindata` `crossChain.json` (lists Avalanche as a domain even though the Amarok core is absent there); counterparty chains outside the eight (Gnosis, Linea, Mantle, Metis, Moonbeam) noted from the same source. Robinhood Chain (4663): `eth_getCode` = `0x` at all six Diamond literals and the CLEAR literal (2026-09-29). Arc (5042): the same result (2026-10-30).
 - **Pinned 12-hour window 2026-09-28 00:00 to 12:00 UTC:** `XCalled` and `Executed` from any emitter: Ethereum 0, Base 0, Arbitrum 0, Optimism 0, Polygon 0, BNB 0, Avalanche 0, Robinhood 0.
 
 Authoritative sources:

@@ -1,6 +1,6 @@
-# Mayan Wormhole Swap — Topics, Selectors, Addresses (Ethereum + Base + Arbitrum + Optimism + Polygon + BNB + Avalanche; NOT Robinhood Chain)
+# Mayan Wormhole Swap — Topics, Selectors, Addresses (Ethereum + Base + Arbitrum + Optimism + Polygon + BNB + Avalanche; NOT Robinhood Chain or Arc)
 
-**Status:** verified on 2026-09-29 against live RPC on all eight chains, the `mayan-finance/swap-sdk` ABI (`MayanSwapArtifact`), docs.mayan.finance (`architecture/wh-swap`) and the Mayan chain config (`https://sia.mayan.finance/v10/init`). The contract source is not verified on the explorer, so every selector below was also checked in the deployed bytecode (PUSH4 in the dispatcher) on Ethereum and Base. Topic0 values were recomputed as `keccak256(signature)` and matched against live logs. Addresses were existence-checked with `eth_getCode`.
+**Status:** verified on 2026-09-29 against live RPC on all eight chains, the `mayan-finance/swap-sdk` ABI (`MayanSwapArtifact`), docs.mayan.finance (`architecture/wh-swap`) and the Mayan chain config (`https://sia.mayan.finance/v10/init`). The contract source is not verified on the explorer, so every selector below was also checked in the deployed bytecode (PUSH4 in the dispatcher) on Ethereum and Base. Topic0 values were recomputed as `keccak256(signature)` and matched against live logs. Addresses were existence-checked with `eth_getCode`. Re-checked on 2026-10-30: no Mayan contract on Arc (5042) either; `eth_getCode` returns `0x` at every address of this file there, and Arc is not in the Mayan chain config.
 **Scope:** the original Mayan route: the input moves over the **Wormhole Token Bridge** to Solana, a driver swaps it on Solana, and the output returns over the Token Bridge. The EVM contract is **MayanSwap**. It has the same address on six chains and a different address on Base. Robinhood Chain (4663) has no MayanSwap. Topics and selectors are chain-agnostic; addresses are network-specific.
 
 MayanSwap emits **no event on the source chain**. A source transaction shows two Wormhole Core `LogMessagePublished` logs: one with `sender` = the chain's Token Bridge (the token transfer to Solana) and one with `sender` = MayanSwap (the swap parameters). On the destination chain `redeem` / `redeemAndUnwrap` completes the Token Bridge transfer and pays the recipient. It emits `Redeemed(emitterChainId, emitterAddress, sequence)`, the key of the Token Bridge VAA that it consumed. For an EVM destination that VAA comes from Solana (emitter chain 1), so an EVM-to-EVM swap has **no single on-chain key**: the path crosses Solana.
@@ -154,6 +154,7 @@ Pinned window 2026-09-28 00:00–12:00 UTC: `Redeemed` 0; `LogMessagePublished` 
 | BNB Smart Chain | 56 | 4 | ✅ `0xBF5f3f65102aE745A48BD521d10BaB5BF02A9eF4` | ✅ `0xB6F6D86a8f9879A9c87f643768d9efc38c1Da6E7` | 0 / 0 |
 | Avalanche C-Chain | 43114 | 6 | ✅ `0xBF5f3f65102aE745A48BD521d10BaB5BF02A9eF4` | ✅ `0x0e082F06FF657D94310cB8cE8B0D9a04541d8052` | 0 / 0 |
 | **Robinhood Chain** | 4663 | — | ❌ (no code at either address) | — | — |
+| **Arc** | 5042 | — | ❌ (no code at either address) | — | — |
 
 The swap itself runs on Solana (Mayan program `FC4eXxkyrMPTjiYUpp4EAnkmwMbQyZ6NDCh1kfLn6vsf`, Wormhole chain 1), outside the eight chains.
 
@@ -230,6 +231,7 @@ AVAX_MAYAN_SWAP            = '\xbf5f3f65102ae745a48bd521d10bab5bf02a9ef4'
 AVAX_WORMHOLE_TOKEN_BRIDGE = '\x0e082f06ff657d94310cb8ce8b0d9a04541d8052'
 AVAX_WORMHOLE_CORE         = '\x54a8e5f9c4cba08f9943965859f6c34eaf03e26c'
 -- Robinhood Chain (4663): no MayanSwap
+-- Arc (5042): no MayanSwap
 ```
 
 ---

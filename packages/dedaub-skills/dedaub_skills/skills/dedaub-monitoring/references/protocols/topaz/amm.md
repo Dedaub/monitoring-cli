@@ -1,6 +1,6 @@
 # Topaz v2 (Solidly AMM) + ve(3,3) Governance — Compressed Reference (BNB Chain, id 56)
 
-**Status:** topic0/selectors computed with keccak from `topazdex/topaz-contacts` source; addresses + wiring re-verified on-chain vs `bsc-rpc.publicnode.com` on 2026-06-05.
+**Status:** topic0/selectors computed with keccak from `topazdex/topaz-contacts` source; addresses + wiring re-verified on-chain vs `bsc-rpc.publicnode.com` on 2026-06-05. Re-checked on 2026-10-30: BNB addresses unchanged (`PoolFactory.allPoolsLength()` = 25). BNB is now the hub of a five-chain deployment; the Robinhood Chain, Base, Ethereum and Arc spokes and the new BNB hub contracts (xTOPAZ, OFT adapter, EpochCoordinator) are in [`multichain.md`](multichain.md). On the spokes, `0x268d1C8a…` (BNB FactoryRegistry) is the Robinhood UniversalRouter and `0x7B1d8745…` (BNB AirdropDistributor) is the Arc UniversalRouter — same address, different contract. The admin Safe `0xf407739e…` is the `Voter.governor()` on every chain.
 **Scope:** the **classic Solidly-style AMM** (volatile `xy=k` + stable `x³y+xy³=k` pools) and the **ve(3,3) stack** (Voter, VotingEscrow veTOPAZ, Minter, RewardsDistributor, Gauge, Fees/Bribe rewards) — **shared with the v3/Slipstream product in [`slipstream.md`](slipstream.md)**. Topaz is a **Velodrome V2 fork**; most events/selectors are identical to [`aerodrome/amm.md`](../aerodrome/amm.md). Topaz-only additions: `BonusLock`, `AirdropDistributor`, ERC-2771 `Forwarder`, a growth+decay `Minter`.
 **Key facts:** veTOPAZ is an **ERC-721 veNFT** (not ERC-20). Pools are **EIP-1167 clones**. The v2 `Swap` topic0 differs from Uniswap V2; several other topics collide by signature with Uni V2 / Curve / Balancer (see Detection).
 
@@ -249,7 +249,7 @@ See `references/proxies.md` for EIP-1167 detection details.
 
 ## 5. Detection invariants & gotchas
 
-1. **BNB Chain (56) only.** No Topaz on ETH/Base/Arb/OP/Avax/Polygon (verified empty bytecode).
+1. **The addresses in this file are BNB Chain (56) only.** Since 2026-09 Topaz also has spokes on Robinhood Chain, Base, Ethereum and Arc with their own addresses ([`multichain.md`](multichain.md)); none on Arb/OP/Avax/Polygon. Some spoke addresses equal BNB addresses of other contracts, so key on `(chain, address)`.
 2. **v2 `Swap` topic0 `0xb3e27736…` ≠ Uniswap V2 `Swap` `0xd78ad95f…`** — different arg layout (`amount0In,amount1In,amount0Out,amount1Out`). Don't reuse the Uni V2 constant.
 3. **Same-name topic0 collisions** (disambiguate by emitting contract): `Mint(address,uint256,uint256)` `0x4c209b5f…` = Uni V2/Sushi Mint; `Sync(uint256,uint256)` `0xcf2aa508…` = Sushi Trident; veNFT `Supply` `0x5e2aa66e…` = Curve/Balancer; Gauge `Withdraw(address,uint256)` `0x884edad9…` = Curve/Balancer gauge.
 4. **Three different `NotifyReward` topics:** Voter `(address,address,uint256)` `0xf70d5c69…`; Gauge/CLGauge `(address,uint256)` `0x09566775…`; Fees/Bribe Reward `(address,address,uint256,uint256)` `0x52977ea9…`. Don't conflate.

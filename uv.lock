@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 5
 requires-python = "==3.13.*"
 
 [manifest]
@@ -143,8 +143,9 @@ wheels = [
 
 [[package]]
 name = "monitoring-cli"
-version = "0.5.1"
+version = "0.5.2"
 source = { editable = "." }
+default-groups = ["dev", "lint"]
 dependencies = [
     { name = "dedaub-skills" },
     { name = "httpx" },

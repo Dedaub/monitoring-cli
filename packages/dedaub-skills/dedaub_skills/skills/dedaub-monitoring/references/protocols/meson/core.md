@@ -1,6 +1,6 @@
 # Meson — Topics, Selectors, Addresses (all eight chains: Ethereum, Base, Arbitrum, Optimism, Polygon, BNB, Avalanche, Robinhood)
 
-**Status:** verified on 2026-09-29 against live RPC on all eight chains, the Sourcify-verified `UpgradableMeson` implementation on Base (`0x03650533d2a35847c007f25bc630f468905f6241`, solc 0.8.28), the Sourcify-verified `ProxyToMeson` on Ethereum, the official Meson relayer chain list (`https://relayer.meson.fi/api/v1/list`) and the Meson Solidity docs.
+**Status:** verified on 2026-09-29 against live RPC on all eight chains, the Sourcify-verified `UpgradableMeson` implementation on Base (`0x03650533d2a35847c007f25bc630f468905f6241`, solc 0.8.28), the Sourcify-verified `ProxyToMeson` on Ethereum, the official Meson relayer chain list (`https://relayer.meson.fi/api/v1/list`) and the Meson Solidity docs. Re-checked on 2026-10-30: the Ethereum implementation rotated on 2026-10-19 (§4); Arc (5042) is not in the relayer chain list; the other seven implementations are unchanged.
 **Scope:** the single Meson contract (one UUPS proxy at `0x25aB3Efd52e6470681CE037cD546Dc60726948D3` on every chain), which is both the source-side escrow (`MesonSwap`) and the destination-side LP pool (`MesonPools`). Topics and selectors are chain-agnostic. Addresses are network-specific, but this one proxy address is the same on all eight target chains.
 
 Meson is an atomic-swap style bridge for stablecoins, ETH, BNB, BTC and a few other assets. Every swap is described by one 256-bit integer, `encodedSwap`. The same `encodedSwap` is `topic1` of the source event and of the destination event, so it is an exact on-chain link key on both sides. The swap amount, the LP fee, the expiry, both Meson chain codes and both token indexes are packed inside it.
@@ -181,7 +181,7 @@ All existence-checked with `eth_getCode` on 2026-09-29. The proxy is in the offi
 
 | Chain | ID | Meson proxy | Proxy code | Current implementation (EIP-1967 slot) | Tokens in the relayer list |
 |-------|----|-------------|-----------|----------------------------------------|----------------------------|
-| Ethereum | 1 | `0x25aB3Efd52e6470681CE037cD546Dc60726948D3` | 802 B | `0x3c774719e0126415b870b4abfff89f8f59c5d906` | USDC `0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48`, USDT `0xdac17f958d2ee523a2206206994597c13d831ec7`, PYUSD `0x6c3ea9036406852006290770BEdFcAbA0e23A0e8`, USD1 `0x8d0D000Ee44948FC98c9B98A4FA4921476f08B0d`, WBTC `0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599`, ETH |
+| Ethereum | 1 | `0x25aB3Efd52e6470681CE037cD546Dc60726948D3` | 802 B | `0xf7dace615099950410bd07f52427a0448429518a` (since 2026-10-19, block 26,224,030; was `0x3c774719e0126415b870b4abfff89f8f59c5d906`) | USDC `0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48`, USDT `0xdac17f958d2ee523a2206206994597c13d831ec7`, PYUSD `0x6c3ea9036406852006290770BEdFcAbA0e23A0e8`, USD1 `0x8d0D000Ee44948FC98c9B98A4FA4921476f08B0d`, WBTC `0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599`, ETH |
 | Base | 8453 | `0x25aB3Efd52e6470681CE037cD546Dc60726948D3` | 643 B | `0x03650533d2a35847c007f25bc630f468905f6241` | USDC `0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913`, ETH |
 | Arbitrum One | 42161 | `0x25aB3Efd52e6470681CE037cD546Dc60726948D3` | 802 B | `0xa96e19d0f696690a416c610b4b34aac5be6fafc0` | USDC `0xaf88d065e77c8cC2239327C5EDb3A432268e5831`, USDT0 `0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9`, WBTC `0x2f2a2543B76A4166549F7aaB2e75Bef0aefC5B0f`, ETH |
 | Optimism | 10 | `0x25aB3Efd52e6470681CE037cD546Dc60726948D3` | 802 B | `0xe70e9a845fabd41fb3de258c41f4bfe395cd30c2` | USDC `0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85`, USDT `0x94b008aA00579c1307B0EF2c499aD98a8ce58e58`, USDT0 `0x01bFF41798a0BcF287b996046Ca68b395DbC1071`, ETH |
@@ -295,7 +295,7 @@ BNB_MESON                        = '\x25ab3efd52e6470681ce037cd546dc60726948d3'
 AVAX_MESON                       = '\x25ab3efd52e6470681ce037cd546dc60726948d3'
 RH_MESON                         = '\x25ab3efd52e6470681ce037cd546dc60726948d3'
 -- implementations (point-in-time; read the EIP-1967 slot)
-ETH_MESON_IMPL                   = '\x3c774719e0126415b870b4abfff89f8f59c5d906'
+ETH_MESON_IMPL                   = '\xf7dace615099950410bd07f52427a0448429518a'   -- since 2026-10-19
 BASE_MESON_IMPL                  = '\x03650533d2a35847c007f25bc630f468905f6241'
 ARB_MESON_IMPL                   = '\xa96e19d0f696690a416c610b4b34aac5be6fafc0'
 OP_MESON_IMPL                    = '\xe70e9a845fabd41fb3de258c41f4bfe395cd30c2'

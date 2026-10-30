@@ -1,6 +1,6 @@
 # Chainlink — Protocol Reference Index
 
-Monitoring-grade references for Chainlink's product suite across **Ethereum (1), Base (8453), BNB Smart Chain (56), Avalanche C-Chain (43114), Arbitrum One (42161), Optimism (10), Polygon PoS (137)**. Verified 2026-05-29. CCIP also covers Robinhood Chain (4663) and Arc (5042) — see [ccip.md](ccip.md) §4.7 / §4.7b (Arc added 2026-10-05).
+Monitoring-grade references for Chainlink's product suite across **Ethereum (1), Base (8453), BNB Smart Chain (56), Avalanche C-Chain (43114), Arbitrum One (42161), Optimism (10), Polygon PoS (137)**. Verified 2026-05-29. CCIP, the LINK token and the Data Streams VerifierProxy also cover Robinhood Chain (4663) and Arc (5042) (re-checked 2026-10-30) — see [ccip.md](ccip.md) §4.7 / §4.7b (Arc added 2026-10-05), [link-token.md](link-token.md) §3 and [data-streams.md](data-streams.md).
 
 Chainlink is not a single versioned protocol like Uniswap — it's a suite of products, each with its own versions. One file per product (each covers its versions):
 

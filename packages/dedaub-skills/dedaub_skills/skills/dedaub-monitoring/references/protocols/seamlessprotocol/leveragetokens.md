@@ -1,6 +1,6 @@
 # Seamless Leverage Tokens (Morpho-powered ILM) — Topics, Selectors, Addresses (Base + Ethereum)
 
-**Status:** verified against Base + Ethereum mainnet RPC and the canonical `seamless-protocol/leverage-tokens` GitHub repo (source + Foundry broadcasts) on 2026-06-08. Non-obvious claims additionally cross-checked against primary sources — see §9.
+**Status:** verified against Base + Ethereum mainnet RPC and the canonical `seamless-protocol/leverage-tokens` GitHub repo (source + Foundry broadcasts) on 2026-06-08. Non-obvious claims additionally cross-checked against primary sources — see §10.
 **Scope:** Seamless's **current** product — the **Leverage Token** protocol ("Integrated Liquidity Markets" successor), an ERC-20-tokenised leveraged-position factory built on top of **Morpho** lending. Deployed on **Base (8453)** and **Ethereum (1)** only. `eth_getCode` = `0x` for every Leverage-Token contract on **BNB (56), Avalanche (43114), Arbitrum (42161), Optimism (10), Polygon (137)** (verified 2026-06-08). Topics + selectors are chain-agnostic; addresses are network-specific. The legacy Aave-V3-fork lending market is a separate, deprecated product — see [v1.md](v1.md). The **Seamless Morpho Vaults** (smUSDC/smcbBTC/smWETH) are standard MetaMorpho V1.1 vaults — addresses in §5; their event/selector ABI is the MetaMorpho one in [../morpho/v1.md](../morpho/v1.md).
 
 A Leverage Token is an ERC-20 representing a share of a leveraged position between two assets (collateral vs debt). The **`LeverageManager`** is the singleton core: it creates LeverageTokens permissionlessly and routes user mint/redeem/rebalance, relying only on price data. Each LeverageToken is configured at creation with a **`LendingAdapter`** (here always a **`MorphoLendingAdapter`** — owns the actual Morpho collateral/debt position) and a **`RebalanceAdapter`** (defines rebalance triggers/auction logic). LeverageTokens are deployed as **beacon proxies** by a **`BeaconProxyFactory`** (the beacon is the factory itself), so a single beacon upgrade re-points every LeverageToken atomically. The `LeverageManager`, `RebalanceAdapter` and `BeaconProxyFactory` are upgradeable; everything else (adapters, periphery) is immutable.
@@ -343,14 +343,6 @@ How every constant was verified (2026-06-08):
 - **Addresses:** taken from the repo README + `script/{1,8453}/DeployConstants.sol` + Foundry broadcasts (`Core.s.sol`, `DeployLeverageManagerImplementation`, `CreateLeverageToken.*`); existence-checked via `eth_getCode` on each chain. Base LeverageManager wiring read live (impl `0xfE9101…` via EIP-1967 slot; weETH/WETH-17x beacon slot = factory `0xE0b2…`).
 - **Proxy classification:** EIP-1967 impl/beacon/admin slots read live — LeverageManager = UUPS (impl set, admin `0x`); BeaconProxyFactory = beacon (impl slot `0x`, `implementation()` callable); each LeverageToken = beacon proxy (beacon slot = factory); MorphoLendingAdapter/Router/adapters = immutable (impl slot `0x`); Seamless Morpho Vaults = immutable MetaMorpho V1.1 (impl slot `0x`, `MORPHO()` = `0xBBBB…`, curator = Gauntlet).
 - **Chain absence:** `eth_getCode` = `0x` for the LeverageManager, factory, adapter factory and vaults on BNB, Avalanche, Arbitrum, Optimism, Polygon.
-
-### Independent fact-check (2026-06-08)
-
-- **"Leverage Tokens are Morpho-powered (Seamless 2.0), not a new Aave fork"** — *confirmed.* The only `LendingAdapter` is `MorphoLendingAdapter`; `morpho()` / vault `MORPHO()` = the canonical Base/ETH Morpho Blue singleton `0xBBBB…EEFFCb`.
-- **"Deployed on Base AND Ethereum"** — *confirmed.* Both chains have a live UUPS LeverageManager proxy + factory; `LeverageTokenCreated` fired on each.
-- **"Same addresses, different roles across chains"** — *confirmed* by reading EIP-1967 slots: `0x5C37…E351` is a 141-B UUPS proxy on ETH but a 2,730-B impl/adapter on Base, etc.
-- **"Each LeverageToken is a beacon proxy whose beacon is the factory"** — *confirmed.* weETH/WETH-17x beacon slot = `0xE0b2…be57` (the factory).
-- **"Product is deprecated / winding down (PMF failure)"** — *confirmed.* 2026-04-07 wind-down statement names Leverage Tokens' lack of product-market fit; app offline 2026-06-30; Morpho Vaults drained by curator Gauntlet; stkSEAM yield off.
 
 Authoritative sources:
 - GitHub: `seamless-protocol/leverage-tokens` (README, `src/`, `script/`, `broadcast/`)

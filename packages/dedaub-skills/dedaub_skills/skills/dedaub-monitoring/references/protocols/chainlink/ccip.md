@@ -1,6 +1,6 @@
 # Chainlink CCIP — Topics, Selectors, Chain Selectors, Addresses
 
-**Status:** verified 2026-05-29. Chain selectors verified against `smartcontractkit/chain-selectors`; Router addresses verified via `eth_getCode` (non-empty) on every chain; Ethereum support contracts + `ccipSend`/`isChainSupported` selectors verified against live bytecode; Ethereum Router `typeAndVersion() = "Router 1.2.0"`. Extended 2026-09-29: the 1.6.0 and 2.0.0 ramps, the legacy Ethereum↔Base EVM2EVM ramps, the token pools and the support contracts of all eight target chains, taken from the CCIP Directory data (`smartcontractkit/documentation` `src/config/data/ccip/v1_2_0/mainnet/{chains,lanes,tokens}.json`) and checked with `eth_getCode` and `typeAndVersion()`; ramp and pool events re-derived from `smartcontractkit/chainlink-ccip` (`main` = 2.0.0, branch `contracts-ccip-release/1.6.0`) and `smartcontractkit/ccip` (tag `v2.17.0-ccip1.5.16`); two §2.2 rows corrected; Robinhood Chain (4663) added. Arc (5042) added 2026-10-05 from the same Directory data and the CCIP API, checked live.
+**Status:** verified 2026-05-29. Chain selectors verified against `smartcontractkit/chain-selectors`; Router addresses verified via `eth_getCode` (non-empty) on every chain; Ethereum support contracts + `ccipSend`/`isChainSupported` selectors verified against live bytecode; Ethereum Router `typeAndVersion() = "Router 1.2.0"`. Extended 2026-09-29: the 1.6.0 and 2.0.0 ramps, the legacy Ethereum↔Base EVM2EVM ramps, the token pools and the support contracts of all eight target chains, taken from the CCIP Directory data (`smartcontractkit/documentation` `src/config/data/ccip/v1_2_0/mainnet/{chains,lanes,tokens}.json`) and checked with `eth_getCode` and `typeAndVersion()`; ramp and pool events re-derived from `smartcontractkit/chainlink-ccip` (`main` = 2.0.0, branch `contracts-ccip-release/1.6.0`) and `smartcontractkit/ccip` (tag `v2.17.0-ccip1.5.16`); two §2.2 rows corrected; Robinhood Chain (4663) added. Arc (5042) added 2026-10-05 from the same Directory data and the CCIP API, checked live. Re-checked on 2026-10-30 against the Directory data (commit `d188abea`, 2026-10-28) and live RPC: Arc now has a 1.6.0 ramp pair (Solana lane); Robinhood Chain has 10 lanes on 2.0.0 and two new pools (cbADA, cbLTC); FeeQuoter 2.0.0 of both chains added.
 **Scope:** Ethereum (1), Base (8453), BNB Smart Chain (56), Avalanche C-Chain (43114), Arbitrum One (42161), Optimism (10), Polygon PoS (137), Robinhood Chain (4663), Arc (5042). LINK token (a valid fee token): [link-token.md](link-token.md).
 
 CCIP sends arbitrary messages + token transfers across chains. A user calls **`Router.ccipSend()`** on the source chain; the lane's **OnRamp** emits the message; the DON commits it on the destination's **OffRamp**, which executes it via the destination **Router**. **CCIP does NOT use EVM chain IDs** — every lane is addressed by a uint64 **chain selector** (§1).
@@ -212,7 +212,7 @@ In both generations **`sender` is the ramp that called the pool** (the OnRamp on
 
 ### 4.3 Ramps per chain — 1.6.0 and 2.0.0 (one of each per chain, all lanes)
 
-From the CCIP Directory `lanes.json` (2026-09-29); every address has code and the listed `typeAndVersion()` (§7). The **2.0.0** pair serves every lane between two target chains (Robinhood Chain: lanes to Ethereum, Base, Arbitrum and BNB among the targets); the **1.6.0** pair serves lanes to other chains.
+From the CCIP Directory `lanes.json` (2026-09-29); every address has code and the listed `typeAndVersion()` (§7). The **2.0.0** pair serves every lane between two target chains (Robinhood Chain: lanes to Ethereum, Base, Arbitrum, BNB, Avalanche and Polygon among the targets); the **1.6.0** pair serves lanes to other chains.
 
 | Chain | OnRamp 2.0.0 | OffRamp 2.0.0 | OnRamp 1.6.0 | OffRamp 1.6.0 |
 |-------|--------------|---------------|--------------|---------------|
@@ -224,11 +224,11 @@ From the CCIP Directory `lanes.json` (2026-09-29); every address has code and th
 | BNB | `0x84a0797B31Ac0d3E1D06157663dd4b18cFFdA188` | `0x4914044f8d787bd5DC7528f00775D850dC54477e` | `0xf09AFe78d3c7d359b334d7cB88995751F7eC5E13` | `0xA27056438FfA1f286AB197488808692F0db93F8B` |
 | Avalanche | `0xa556c22b7F73A15963813a9a0fDBA50f44fe5cf9` | `0x65D04D8dA1405b50d3508aaF94e1B6F5f1A3895C` | `0x02A4D69cFfeC00Fbf7F3B60c93e3529Dfc58894d` | `0xe72d25aDd538E8ef9CeF85622eA8912a6CB98Be6` |
 | Robinhood Chain | `0xE86CeddDAEfa1999AaE234C056B51877BFfBD73f` | `0x5060De90b723a7Eb705742Ff1a22a908b1D8b626` | `0xe72d25aDd538E8ef9CeF85622eA8912a6CB98Be6` | `0xcDca5D374e46A6DDDab50bD2D9acB8c796eC35C3` |
-| Arc | `0x7690d0F529E32A1be9FA46095221B9EF99D2224D` | `0xe71C0473f07C288D3F96DC0E9893c33417deafc9` | — | — |
+| Arc | `0x7690d0F529E32A1be9FA46095221B9EF99D2224D` | `0xe71C0473f07C288D3F96DC0E9893c33417deafc9` | `0x051665f2455116e929b9972c36d23070F5054Ce0` | `0x91339eb99C4c2Be9A071203DD99E014A3189FD29` |
 
-**Cross-chain address reuse with different roles:** `0xee85aEfb15b9489563A6a29891ebe0750AA1A7Ae` is the 1.6.0 OnRamp on Base but the 1.6.0 OffRamp on Arbitrum and Optimism; `0xf09AFe78d3c7d359b334d7cB88995751F7eC5E13` is the 1.6.0 OffRamp on Base but the 1.6.0 OnRamp on BNB; `0xe72d25aDd538E8ef9CeF85622eA8912a6CB98Be6` is the 1.6.0 OffRamp on Avalanche but the 1.6.0 OnRamp on Robinhood Chain; `0x76a443768A5e3B8d1AED0105FC250877841Deb40` is CCIPHome on Ethereum and the 1.6.0 OnRamp on Arbitrum and Optimism. Key every ramp on `(chainId, address)`.
+**Cross-chain address reuse with different roles:** `0xee85aEfb15b9489563A6a29891ebe0750AA1A7Ae` is the 1.6.0 OnRamp on Base but the 1.6.0 OffRamp on Arbitrum and Optimism; `0xf09AFe78d3c7d359b334d7cB88995751F7eC5E13` is the 1.6.0 OffRamp on Base but the 1.6.0 OnRamp on BNB; `0xe72d25aDd538E8ef9CeF85622eA8912a6CB98Be6` is the 1.6.0 OffRamp on Avalanche but the 1.6.0 OnRamp on Robinhood Chain; `0xcDca5D374e46A6DDDab50bD2D9acB8c796eC35C3` is the 1.6.0 OffRamp on Robinhood Chain but the NonceManager 1.6.0 on Arc; `0x76a443768A5e3B8d1AED0105FC250877841Deb40` is CCIPHome on Ethereum and the 1.6.0 OnRamp on Arbitrum and Optimism. Key every ramp on `(chainId, address)`.
 
-Router wiring read live: `getOnRamp(Base)` and `getOnRamp(Robinhood Chain)` on the Ethereum Router return the Ethereum 2.0.0 OnRamp; `getOnRamp(Ethereum)` on the Robinhood Router returns the Robinhood 2.0.0 OnRamp. The 2.0.0 message fee moves in the send transaction from the OnRamp to `0x6608d995bBDE874De5292bFD289643c88D176ED3` (`typeAndVersion()` = "Proxy 2.0.0"; the same literal on Ethereum and Robinhood Chain).
+Router wiring read live: `getOnRamp(Base)` and `getOnRamp(Robinhood Chain)` on the Ethereum Router return the Ethereum 2.0.0 OnRamp; `getOnRamp(Ethereum)` on the Robinhood Router returns the Robinhood 2.0.0 OnRamp. The 2.0.0 message fee moves in the send transaction from the OnRamp to `0x6608d995bBDE874De5292bFD289643c88D176ED3` (`typeAndVersion()` = "Proxy 2.0.0"; the same literal on Ethereum, Robinhood Chain and Arc).
 
 ### 4.4 Legacy EVM2EVM ramps of the Ethereum ↔ Base lane (1.2.0 / 1.5.0)
 
@@ -267,7 +267,7 @@ From the CCIP Directory `chains.json`; each existence-checked with `eth_getCode`
 
 ### 4.6 Token pools of note (per chain)
 
-Pools that moved value in the pinned window 2026-09-28 00:00–12:00 UTC, matched to tokens through the CCIP Directory `tokens.json`; `typeAndVersion()` and `getToken()` read live on 2026-09-29. Counts = logs of the pool's source / destination event in the window; "—" = the pool was not among the 12 busiest emitters of that event on the chain (not counted). The Directory lists 208 pools on Ethereum, 150 on Base, 94 on Arbitrum, 30 on Optimism, 42 on Polygon, 100 on BNB, 46 on Avalanche and 18 on Robinhood Chain.
+Pools that moved value in the pinned window 2026-09-28 00:00–12:00 UTC, matched to tokens through the CCIP Directory `tokens.json`; `typeAndVersion()` and `getToken()` read live on 2026-09-29. Counts = logs of the pool's source / destination event in the window; "—" = the pool was not among the 12 busiest emitters of that event on the chain (not counted). The Directory lists 208 pools on Ethereum, 150 on Base, 94 on Arbitrum, 30 on Optimism, 42 on Polygon, 100 on BNB, 46 on Avalanche, 20 on Robinhood Chain (2026-10-28 data) and 4 on Arc.
 
 | Chain | Token | Pool | `typeAndVersion()` | Source / dest events in window |
 |-------|-------|------|--------------------|--------------------------------|
@@ -310,11 +310,12 @@ The CCIP Directory lists `robinhood-mainnet` (chain selector `618075305434681834
 | Role | Address |
 |------|---------|
 | **Router** (Router 1.2.0) | `0x06fC836cf9839B1cd891C440A0a45242DA6Ae1c9` |
-| **OnRamp 2.0.0** (7 lanes, among them Ethereum, Base, Arbitrum and BNB) | `0xE86CeddDAEfa1999AaE234C056B51877BFfBD73f` |
+| **OnRamp 2.0.0** (10 lanes, among them Ethereum, Base, Arbitrum, BNB, Avalanche and Polygon) | `0xE86CeddDAEfa1999AaE234C056B51877BFfBD73f` |
 | **OffRamp 2.0.0** | `0x5060De90b723a7Eb705742Ff1a22a908b1D8b626` |
-| OnRamp 1.6.0 (1 lane) | `0xe72d25aDd538E8ef9CeF85622eA8912a6CB98Be6` |
+| OnRamp 1.6.0 (1 lane: Solana) | `0xe72d25aDd538E8ef9CeF85622eA8912a6CB98Be6` |
 | OffRamp 1.6.0 | `0xcDca5D374e46A6DDDab50bD2D9acB8c796eC35C3` |
 | NonceManager 1.6.0 (word 3 of the 1.6.0 OnRamp static config) | `0xc23071a8ae83671f37bda1dadbc745a9780f632a` |
+| FeeQuoter 2.0.0 (word 1 of `getDynamicConfig()` on both OnRamps) | `0x45b95826abba0db0324d4969e94863ab1c818257` |
 | ARMProxy 1.0.0 | `0xe8464c353210Cc398A45dB2454FBc5BCd25fFf20` |
 | TokenAdminRegistry 1.5.0 | `0x1912C3cFafE8A76A32a92861d815aC2837F237Ca` |
 | RegistryModuleOwnerCustom 1.6.0 | `0x3237c0D7B58BEc8Dc17F00103B784Bd6678f789E` |
@@ -341,26 +342,36 @@ Token pools (all burn-and-mint; Directory `tokens.json`):
 | SPX | `0x8D1c258C76c87559078bb3b2B77a1f9C41f58eEB` | `0x071C19fEc04DBA83F2E4bEE77D0e38fED84E2197` | BurnMintTokenPool 1.5.1 | — |
 | VOOI | `0xB47E8ad95ca1e0bA1C76768FE0F109D82B5fDCC4` | `0xc95209823Cfc5b30DD24CFE45cd4B732DbC226cD` | BurnMintTokenPool 1.5.1 | — |
 | SDM | `0x764A7cfe40984180c55554D9A1Cfb341D1BD0CF3` | `0x5efA4982240E8cEEbffB4bdec7c9022cF42386B4` | BurnMintTokenPool 1.5.0 | — |
+| cbADA | `0x5c4b24A9c8B840399611f707bAaF1B1343054dE9` | `0x7227d723D07800700DA21Fa9e1a0107C78e76d74` | BurnMintTokenPool 2.0.0 (added 2026-10) | — |
+| cbLTC | `0xD4ad79ed3372460F1e63Feb8fC41C3b757198C6e` | `0xF9CEb359fcbd03125CB7AB839cd2D7cdA94E2A62` | BurnMintTokenPool 2.0.0 (added 2026-10) | — |
+
+The cbADA and cbLTC token literals are the TokenPoolFactory 2.0.0 on Arbitrum and the 2.0.0 OffRamp on Arbitrum. Other literals that are CCIP contracts elsewhere hold non-Directory CCIP code here: `0x02a4d69cffec00fbf7f3b60c93e3529dfc58894d` ("FeeQuoter 1.6.3", not wired to either OnRamp), `0x913814782144864e523c3fdb78e3ca25d2c2aeca` ("TokenPoolFactory 1.5.1") and `0x26d3681dfc9e4c8c79cfbf461adec8a21d5d73c5` ("FactoryBurnMintERC20 1.6.2" token). Do not key on them.
 
 Measured in the pinned window on Robinhood Chain: `CCIPMessageSent` 2.0.0 = 43 and 1.6.0 = 2; `ExecutionStateChanged` 2.0.0 = 127; `CommitReportAccepted` = 656 on the 1.6.0 OffRamp; Router `MessageExecuted` = 0 (the reason was not checked message by message; on Ethereum, too, `MessageExecuted` (107) is fewer than the 2.0.0 `ExecutionStateChanged` (209)). Sample send (tx `0xaf809818093a88079575d9cffbc5ee05e016ae6eb87c4cfbcce89e265f8357d3`): a router contract swaps into VIRTUAL, the Router wraps the native fee into WETH, the VIRTUAL pool burns (`Transfer` to `0x0`) and emits `LockedOrBurned` for Base, and the 2.0.0 OnRamp emits `CCIPMessageSent`. **Collision on Robinhood Chain:** `Released(address,address,uint256)` came 177 times from `0x37e99e88ca9a49886bf9fa2b489d90f52fba095b`, which is not a CCIP pool in the Directory.
 
 ### 4.7b Arc (chain ID 5042) — CCIP deployed
 
-The CCIP Directory lists `arc-mainnet` (selector `6370580034781731079`, `0x5868d8c9f25c5907`; `smartcontractkit/chain-selectors` agrees). Fee tokens: LINK in `chains.json`; the CCIP API also lists USDC. Every contract below has code on `https://rpc.mainnet.arc.io` and the listed `typeAndVersion()` (2026-10-05). Arc has **2.0.0 ramps only** (no 1.6.0 pair). Lanes: Ethereum, Base and Polygon among the targets, plus 0G, Solana and Tempo. `getOnRamp(Arc)` on the Ethereum Router returns the Ethereum 2.0.0 OnRamp; `getOnRamp(Ethereum)` on the Arc Router returns the Arc 2.0.0 OnRamp.
+The CCIP Directory lists `arc-mainnet` (selector `6370580034781731079`, `0x5868d8c9f25c5907`; `smartcontractkit/chain-selectors` agrees). Fee tokens: LINK in `chains.json`; the CCIP API also lists USDC. Every contract below has code on `https://rpc.mainnet.arc.io` and the listed `typeAndVersion()` (2026-10-05). Arc has the **2.0.0 ramps** for every lane except Solana, which uses a **1.6.0** pair (in the Directory since October 2026). Lanes: Ethereum, Base and Polygon among the targets, plus 0G, Solana and Tempo. `getOnRamp(Arc)` on the Ethereum Router returns the Ethereum 2.0.0 OnRamp; `getOnRamp(Ethereum)` on the Arc Router returns the Arc 2.0.0 OnRamp.
 
 | Role | Address |
 |------|---------|
 | **Router** (Router 1.2.0, 10,761 B) | `0xB79791184973589c38e114D43Eb8E4588C283A18` |
 | **OnRamp 2.0.0** | `0x7690d0F529E32A1be9FA46095221B9EF99D2224D` |
 | **OffRamp 2.0.0** | `0xe71C0473f07C288D3F96DC0E9893c33417deafc9` |
-| ARMProxy 1.0.0 | `0x9A82E768C885DEF7C4b47451Fd4Db53d8B21ed07` |
+| OnRamp 1.6.0 (1 lane: Solana) | `0x051665f2455116e929b9972c36d23070F5054Ce0` |
+| OffRamp 1.6.0 | `0x91339eb99C4c2Be9A071203DD99E014A3189FD29` |
+| NonceManager 1.6.0 (word 3 of the 1.6.0 OnRamp static config) | `0xcdca5d374e46a6dddab50bd2d9acb8c796ec35c3` |
+| FeeQuoter 2.0.0 (word 1 of `getDynamicConfig()` on both OnRamps) | `0x7c4708c0188f57f658851f0b71e54f8226c9a957` |
+| ARMProxy 1.0.0 (`getARM()` → "RMN 2.1.0" `0xd270991cae466c3060446b76f2e23e52364dade8`) | `0x9A82E768C885DEF7C4b47451Fd4Db53d8B21ed07` |
 | TokenAdminRegistry 1.5.0 | `0x51e2A24742Db77604B881d6781Ee16B5b8fcBE29` |
 | RegistryModuleOwnerCustom 1.6.0 | `0x3201a20D2a33820C0DaC8Bc93C4819755C2a8c7F` (the same literal is the LINK pool on Robinhood Chain) |
 | TokenPoolFactory 2.0.0 | `0x7CcFb2Fa43637b4858Cb1269CF0d64a99e8C668a` |
 
 Token pools (all burn-and-mint; Directory `tokens.json`): LINK `0x76a443768A5e3B8d1AED0105FC250877841Deb40` (`symbol()` = LINK; the same literal is CCIPHome on Ethereum and the 1.6.0 OnRamp on Arbitrum and Optimism) → pool `0x172C2043B66D0A498FB7d6F56d04f52bEa4cAc68` (BurnMintTokenPool 1.5.1); syrupUSDC `0x0dC6b79F3c3854E4d74514fD4d29BE6c96Beee39` → `0x6be14E674f741faa78da2fEcF00870C8B753A0BB`; VIRTUAL `0x8C4252c87081c88c6Ad57d6dD97E1cAFebF842B7` → `0x68A481D55e0f1084BCbcEaCD0b8259cfa34351a7`; PST `0xa6Db07ebF438d91Aa653746fc05523e435645525` → `0x390b350baCCF4f111cc102f05B97591290564BbA` (the last three BurnMintTokenPool 2.0.0).
 
-Measured with `eth_getLogs` over the last ~1.16 M blocks (about 7 days to 2026-10-05): `CCIPMessageSent` 2.0.0 = 18, `ExecutionStateChanged` 2.0.0 = 39, Router `MessageExecuted` = 24, Router `OnRampSet` = 5 and `OffRampAdded` = 5 (lanes still being wired).
+Measured with `eth_getLogs` over the last ~1.16 M blocks (about 7 days to 2026-10-05): `CCIPMessageSent` 2.0.0 = 18, `ExecutionStateChanged` 2.0.0 = 39, Router `MessageExecuted` = 24, Router `OnRampSet` = 5 and `OffRampAdded` = 5 (lanes still being wired). On 2026-10-30 the Router `getOffRamps()` lists the 2.0.0 OffRamp for 5 sources and the 1.6.0 OffRamp for 6.
+
+Non-Directory CCIP code on Arc (not wired to the Directory Router; do not key on it): `0xe72d25add538e8ef9cef85622ea8912a6cb98be6` ("Router 1.2.0", `getOffRamps()` empty), `0x06fc836cf9839b1cd891c440a0a45242da6ae1c9` ("TokenAdminRegistry 1.5.0"), `0x913814782144864e523c3fdb78e3ca25d2c2aeca` ("RegistryModuleOwnerCustom 1.6.0"), `0xc23071a8ae83671f37bda1dadbc745a9780f632a` ("RMNRemote 1.6.0") and `0x530ae314ec3fa038bd9a215095e37295ec76162a` ("BurnMintTokenPool 1.5.1").
 
 ### 4.8 Cross-chain summary
 
@@ -373,8 +384,8 @@ Measured with `eth_getLogs` over the last ~1.16 M blocks (about 7 days to 2026-1
 | Polygon PoS | 137 | `4051577828743386545` | `0x849c5ED5a80F5B408Dd4969b78c2C8fdf0565Bfe` | ✅ | ✅ | 42 |
 | BNB | 56 | `11344663589394136015` | `0x34B03Cb9086d7D758AC55af71584F81A598759FE` | ✅ | ✅ | 100 |
 | Avalanche | 43114 | `6433500567565415381` | `0xF4c7E640EdA248ef95972845a62bdC74237805dB` | ✅ | ✅ | 46 |
-| Robinhood Chain | 4663 | `6180753054346818345` | `0x06fC836cf9839B1cd891C440A0a45242DA6Ae1c9` | ✅ | ✅ | 18 |
-| Arc | 5042 | `6370580034781731079` | `0xB79791184973589c38e114D43Eb8E4588C283A18` | ✅ | — | 4 |
+| Robinhood Chain | 4663 | `6180753054346818345` | `0x06fC836cf9839B1cd891C440A0a45242DA6Ae1c9` | ✅ | ✅ | 20 |
+| Arc | 5042 | `6370580034781731079` | `0xB79791184973589c38e114D43Eb8E4588C283A18` | ✅ | ✅ (Solana lane) | 4 |
 
 The Router, ARMProxy and TokenAdminRegistry are chain-specific; only a few literals repeat across chains (§4.3, §4.5, §4.6), and a repeated literal can hold a different role.
 
@@ -399,7 +410,7 @@ The Router, OnRamps, OffRamps, CommitStores, TokenAdminRegistry, RegistryModuleO
 11. **Pool event names collide with unrelated contracts.** `Burned(address,uint256)`, `Minted(address,address,uint256)`, `Locked(address,uint256)` and `Released(address,address,uint256)` are common names: in the pinned window non-CCIP emitters produced most of them (for example 177 `Released` logs on Robinhood Chain from `0x37e99e88ca9a49886bf9fa2b489d90f52fba095b`, not a CCIP pool). Filter pool events by the pool addresses of the Directory or `TokenAdminRegistry.getPool`, never by topic alone. `LockedOrBurned`/`ReleasedOrMinted` carry the `remoteChainSelector` and are CCIP-specific in practice.
 12. **Large transfers and drains:** alert on pool `LockedOrBurned`/`Locked`/`Burned` above a threshold, on `LiquidityRemoved` and lockbox `Withdrawal` (liquidity leaves a lock pool without a message), on `PoolSet` and `RemotePoolAdded`/`RemotePoolSet` (a pool or its trusted remote changed), on `RootRemoved`, and on `Cursed`.
 13. **Refund and failure path:** CCIP has no automatic refund. A failed execution (`state` = 3) stays on the destination and is retried by manual execution; the tokens stay locked or burned on the source until then.
-14. **Robinhood Chain is a live CCIP chain** (§4.7): selector `6180753054346818345`, 2.0.0 lanes to Ethereum, Base, Arbitrum and BNB, 18 burn-and-mint pools. Key it on its own Router and ramps; several of its literals hold other roles on other chains (§4.3). **Arc is also live** (§4.7b): selector `6370580034781731079`, 2.0.0 ramps only, lanes to Ethereum, Base and Polygon among the targets.
+14. **Robinhood Chain is a live CCIP chain** (§4.7): selector `6180753054346818345`, 2.0.0 lanes to Ethereum, Base, Arbitrum, BNB, Avalanche and Polygon, 19 burn-and-mint pools. Key it on its own Router and ramps; several of its literals hold other roles on other chains (§4.3). **Arc is also live** (§4.7b): selector `6370580034781731079`, 2.0.0 ramps (plus a 1.6.0 pair for the Solana lane), lanes to Ethereum, Base and Polygon among the targets.
 
 ---
 
@@ -469,12 +480,16 @@ RH_CCIP_ONRAMP_V16        = '\xe72d25add538e8ef9cef85622ea8912a6cb98be6'
 RH_CCIP_OFFRAMP_V16       = '\xcdca5d374e46a6dddab50bd2d9acb8c796ec35c3'
 RH_CCIP_ARMPROXY          = '\xe8464c353210cc398a45db2454fbc5bcd25fff20'
 RH_CCIP_TOKEN_ADMIN_REGISTRY = '\x1912c3cfafe8a76a32a92861d815ac2837f237ca'
+RH_CCIP_FEE_QUOTER        = '\x45b95826abba0db0324d4969e94863ab1c818257'
 -- Arc (5042)
 ARC_CCIP_ROUTER           = '\xb79791184973589c38e114d43eb8e4588c283a18'
 ARC_CCIP_ONRAMP_V2        = '\x7690d0f529e32a1be9fa46095221b9ef99d2224d'
 ARC_CCIP_OFFRAMP_V2       = '\xe71c0473f07c288d3f96dc0e9893c33417deafc9'
 ARC_CCIP_ARMPROXY         = '\x9a82e768c885def7c4b47451fd4db53d8b21ed07'
 ARC_CCIP_TOKEN_ADMIN_REGISTRY = '\x51e2a24742db77604b881d6781ee16b5b8fcbe29'
+ARC_CCIP_ONRAMP_V16       = '\x051665f2455116e929b9972c36d23070f5054ce0'
+ARC_CCIP_OFFRAMP_V16      = '\x91339eb99c4c2be9a071203dd99e014a3189fd29'
+ARC_CCIP_FEE_QUOTER       = '\x7c4708c0188f57f658851f0b71e54f8226c9a957'
 -- 2.0.0 ramps (all lanes between target chains)
 ETH_CCIP_ONRAMP_V2        = '\xc3423f3fb30857d9c14717b119884b1b63d250b7'
 ETH_CCIP_OFFRAMP_V2       = '\x408428bca0e24a25ac8baac1b70f64af257717c3'

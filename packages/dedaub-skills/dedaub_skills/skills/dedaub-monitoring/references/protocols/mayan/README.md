@@ -2,7 +2,7 @@
 
 **Mayan** (mayan.finance) is a cross-chain swap protocol. Drivers (solvers) compete in auctions, mostly on Solana, and deliver the user's output on the destination chain. Its EVM contracts form four product lines, plus entry contracts in front of them. Every product has its own events, keys and chain set, so each has its own file.
 
-**Status:** all constants verified on 2026-09-29 against live RPC on the eight target chains, the verified sources on Blockscout, the `mayan-finance/swap-sdk` repository and docs.mayan.finance. Topic0 and selector values were recomputed as `keccak256(signature)`; addresses were existence-checked with `eth_getCode`.
+**Status:** all constants verified on 2026-09-29 against live RPC on the eight target chains, the verified sources on Blockscout, the `mayan-finance/swap-sdk` repository and docs.mayan.finance. Topic0 and selector values were recomputed as `keccak256(signature)`; addresses were existence-checked with `eth_getCode`. Re-checked on 2026-10-30: Arc (5042) added as a no-deployment chain.
 
 | File | Product | Contracts | Chains (of the 8) | Link key source → destination | Pinned window (2026-09-28 00:00–12:00 UTC) |
 |------|---------|-----------|-------------------|-------------------------------|---------------------------------------------|
@@ -12,6 +12,8 @@
 | [forwarder.md](forwarder.md) | **Entry contracts**: Forwarder, deposit addresses (MPS), Shuttle | MayanForwarder2 `0x337685fdaB40D39bd02028545a4FfA7D287cC3E2`, MPSFactory `0x28D8f4513D5d74d7c43ca7Fe111caC906dcd2e88` (+ docs factory), Shuttle `0xCbe9186a89db78714785765055E09dD6166e0833` | 7 (Shuttle: 6, not BNB) | None: markers of the entry, in the same transaction as the product's source leg | Forwarder markers: 2,315 `ForwardedERC20`, 1,712 `SwapAndForwardedERC20`, 1,774 `SwapAndForwardedEth`, 1 `ForwardedEth` |
 
 **Robinhood Chain (4663): no Mayan contract.** `eth_getCode` returns `0x` (nonce 0) at every Mayan address above, Robinhood Chain is not in Mayan's chain config (`https://sia.mayan.finance/v10/init`), and no Mayan event appeared on it in the pinned window.
+
+**Arc (5042): no Mayan contract.** `eth_getCode` returns `0x` at every Mayan address above (2026-10-30), and Arc is not in the Mayan chain config.
 
 ## Cross-cutting facts (read before indexing any file)
 
@@ -27,6 +29,7 @@
    | Optimism | 10 | 24 | 2 |
    | Base | 8453 | 30 | 6 |
    | Robinhood Chain | 4663 | none (not a Mayan chain) | — |
+   | Arc | 5042 | none (not a Mayan chain) | — |
    | Solana (counterparty) | — | 1 | 5 |
    | Sui (counterparty) | — | 21 | 8 |
 
@@ -39,21 +42,21 @@
 7. **Admin model.** Each contract has a `guardian` (two-step `changeGuardian` + `claimGuardian`), and every admin setter (`setPause`, `setFeeManager`, `setEmitters`, `setMayanProtocol`, `rescueToken`, …) emits **no event**. Watch the selectors in transactions instead (each file lists them). The exception is MPSFactory: Wormhole VAAs govern it, and it emits `GovernanceExecuted`, `RelayerAdded`, `RelayerRemoved` and `ProtocolVerifierSet`. Guardians on Ethereum: Swift v2 `0xb4cdc16e6afcca48b6fade7302b6590c664dca5a`; MCTP, Fast MCTP and the Forwarder `0x933e3922e04d47a466e60a20e486b372b64f1ea8` (an EOA on all seven chains); Swift v1 `0x95d50ebee133c14e2355c7a72b254b3b6eeed6bc`. No Mayan contract is an upgradeable proxy, except Shuttle (EIP-1967); the deposit wallets are EIP-1167 clones.
 8. **Drivers and relayers are ordinary addresses.** In the samples read, one address (`0x754dcfb2861547015b221e963b4133a71dbdc024`) filled Swift orders on Ethereum, received the unlocked escrow, and also moved funds through Fast MCTP and the Wormhole swap; another (`0x04d9634df20aa66b23f114d37c45fa6c6ab76d56`) submitted Swift refunds and cancels and MCTP / Fast MCTP fills. Neither list is official.
 
-## Presence matrix (checked with `eth_getCode` on 2026-09-29)
+## Presence matrix (checked with `eth_getCode` on 2026-09-29; Arc on 2026-10-30)
 
-| Contract | Address | ETH | Base | Arb | OP | Poly | BNB | Avax | Robinhood |
-|----------|---------|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|
-| SwiftSource (v2) | `0x40fFE85A28DC9993541449464d7529a922142960` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ |
-| SwiftDest (v2) | `0xD78D199f8C402e7B5Cc2abE278dF0412400a3BAe` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ |
-| MayanSwift (v1) | `0xC38e4e6A15593f908255214653d3D947CA1c2338` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ |
-| MayanCircle (MCTP) | `0x875d6d37EC55c8cF220B9E5080717549d8Aa8EcA` | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ | ❌ |
-| FastMCTP | `0xC1062b7C5Dc8E4b1Df9F200fe360cDc0eD6e7741` | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ | ❌ |
-| MayanSwap | `0xBF5f3f65102aE745A48BD521d10BaB5BF02A9eF4` | ✅ | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ |
-| MayanSwap (Base) | `0x11AA521C888d84f374B63823d9b873CAa3591f55` | ❌ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
-| MayanForwarder2 | `0x337685fdaB40D39bd02028545a4FfA7D287cC3E2` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ |
-| MPSFactory (SDK) | `0x28D8f4513D5d74d7c43ca7Fe111caC906dcd2e88` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ |
-| MPSFactory (docs) | `0xfa829c5E1efc9d788280a8213cb0713be5474F7d` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ |
-| Shuttle | `0xCbe9186a89db78714785765055E09dD6166e0833` | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ | ❌ |
+| Contract | Address | ETH | Base | Arb | OP | Poly | BNB | Avax | Robinhood | Arc |
+|----------|---------|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|
+| SwiftSource (v2) | `0x40fFE85A28DC9993541449464d7529a922142960` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ | ❌ |
+| SwiftDest (v2) | `0xD78D199f8C402e7B5Cc2abE278dF0412400a3BAe` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ | ❌ |
+| MayanSwift (v1) | `0xC38e4e6A15593f908255214653d3D947CA1c2338` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ | ❌ |
+| MayanCircle (MCTP) | `0x875d6d37EC55c8cF220B9E5080717549d8Aa8EcA` | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ | ❌ | ❌ |
+| FastMCTP | `0xC1062b7C5Dc8E4b1Df9F200fe360cDc0eD6e7741` | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ | ❌ | ❌ |
+| MayanSwap | `0xBF5f3f65102aE745A48BD521d10BaB5BF02A9eF4` | ✅ | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ | ❌ |
+| MayanSwap (Base) | `0x11AA521C888d84f374B63823d9b873CAa3591f55` | ❌ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| MayanForwarder2 | `0x337685fdaB40D39bd02028545a4FfA7D287cC3E2` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ | ❌ |
+| MPSFactory (SDK) | `0x28D8f4513D5d74d7c43ca7Fe111caC906dcd2e88` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ | ❌ |
+| MPSFactory (docs) | `0xfa829c5E1efc9d788280a8213cb0713be5474F7d` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ | ❌ |
+| Shuttle | `0xCbe9186a89db78714785765055E09dD6166e0833` | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ | ❌ | ❌ |
 
 ## Discrepancies between the official sources and the chain
 

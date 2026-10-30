@@ -1,6 +1,6 @@
 # Velodrome Superchain (Root/Leaf cross-chain) — Compressed Reference (Optimism + OP-Stack leaf chains)
 
-**Status:** topic0/selectors via local keccak from `velodrome-finance/superchain-contracts` interface source; addresses from `deployment-addresses/*.json` re-verified on-chain across root + 4 leaf chains (publicnode/drpc, 2026-06) — `leafXVelo.symbol()` = "XVELO" on every leaf; `rootMessageModule` emitted 60 `SentMessage` in the last ~40k OP blocks ✓.
+**Status:** topic0/selectors via local keccak from `velodrome-finance/superchain-contracts` interface source; addresses from `deployment-addresses/*.json` re-verified on-chain across root + 4 leaf chains (publicnode/drpc, 2026-06) — `leafXVelo.symbol()` = "XVELO" on every leaf; `rootMessageModule` emitted 60 `SentMessage` in the last ~40k OP blocks ✓. Re-checked on 2026-10-30: Velodrome is legacy since the Aero launch of 2026-10-21 ([`../aerodrome/aero.md`](../aerodrome/aero.md)); `VelodromeMigration` (Optimism) can kill root and leaf gauges (`killRootGauges` / `killLeafGauges`); Robinhood Chain and Arc rows added to the roster (no Velodrome leaf on either).
 **Scope:** the **cross-chain expansion** that takes Velodrome's ve(3,3) AMM beyond Optimism onto the **Optimism Superchain (OP-Stack)**. Single-chain AMM/gov/CL live in [`v2.md`](v2.md) and [`slipstream.md`](slipstream.md).
 **Key architecture:** **Root chain = Optimism** (holds the canonical Voter, VotingEscrow, emissions). **Leaf chains** host vanilla Velodrome pools + leaf gauges; votes/emissions are bridged from root. Root pushes payloads through a **Hyperlane** message module; the bridgeable token is **XVELO** (1:1 redeemable for VELO via a root Lockbox). Leaf chains run **vanilla V2 pools** (not Slipstream unless the superchain-CL stack is also deployed — see [`slipstream.md`](slipstream.md)).
 
@@ -125,6 +125,8 @@ Every leaf pool has a **RootPool** twin on Optimism. To vote/emit to a leaf gaug
 | Celo | 42220 | Full leaf AMM+gauges | 0x81c5d01Ae474040a59D0092A6973f4621e06B362 |
 | Bob | 60808 | **Standalone V2 pools only** (PoolFactory `0x3183…` + Router `0x3a63…` + StakingRewards `0x8Eb6838B…` / factory; **no ve(3,3) gauges/voter**) | — |
 | **Base** | 8453 | **Restricted-bridge only** — no Velodrome AMM (Aerodrome serves Base); only XOP `leafRestricted*` contracts | — |
+| Robinhood Chain | 4663 | **Not a Velodrome leaf.** No address in this file has code (`eth_getCode` = `0x`, 2026-10-30). | — |
+| Arc | 5042 | **Not a Velodrome leaf.** XVELO, `leafPoolFactory`, `leafVoter`, message module have no code. Four literals of this file have code on Arc but hold **other contracts** (sizes differ from Optimism): `0x00a37676…5Fb1` 8,225 B, `0xac6A6080…D214` 5,143 B, `0xf7a15F27…efeda` 11,148 B, `0x44536f76…a06B` 9,348 B. Their selectors match Slipstream CL periphery (LpMigrator, swap-fee module, quoter / lens); two return `factory()` = `0x04625b046c69577efc40e6c0bb83cdbafab5a55f` (a 5,577 B CL factory with 1 pool). Do not treat them as Velodrome. | — |
 
 > Bob extras: `tokenRegistry 0x8d9c67488c154286B9D4ccaC6c4CBF30589107a7`, `universalRouter 0xc3F14F34EA43943e6fd677A2BDceA65882e67783`, `stakingRewardsFactory 0x8Eb6838B4e998DA08aab851F3d42076f21530389`, `stakingRewardsImplementation 0x593D092BB28CCEfe33bFdD3d9457e77Bd3084271`.
 

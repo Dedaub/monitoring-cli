@@ -1,6 +1,6 @@
-# Mayan Swift (v2 and v1) — Topics, Selectors, Addresses (Ethereum + Base + Arbitrum + Optimism + Polygon + BNB + Avalanche; NOT Robinhood Chain)
+# Mayan Swift (v2 and v1) — Topics, Selectors, Addresses (Ethereum + Base + Arbitrum + Optimism + Polygon + BNB + Avalanche; NOT Robinhood Chain or Arc)
 
-**Status:** verified on 2026-09-29 against live RPC on all eight chains, the verified sources on Blockscout (`SwiftSource`, `SwiftDest`, `MayanSwift`), the `mayan-finance/swap-sdk` ABIs and docs.mayan.finance (`architecture/swift`). Topic0 and selector values were recomputed as `keccak256(signature)` from the verified ABIs and matched against live logs and transaction selectors. Addresses were existence-checked with `eth_getCode`.
+**Status:** verified on 2026-09-29 against live RPC on all eight chains, the verified sources on Blockscout (`SwiftSource`, `SwiftDest`, `MayanSwift`), the `mayan-finance/swap-sdk` ABIs and docs.mayan.finance (`architecture/swift`). Topic0 and selector values were recomputed as `keccak256(signature)` from the verified ABIs and matched against live logs and transaction selectors. Addresses were existence-checked with `eth_getCode`. Re-checked on 2026-10-30: no Mayan contract on Arc (5042) either; `eth_getCode` returns `0x` at every address of this file there, and Arc is not in the Mayan chain config.
 **Scope:** Swift, the intent route that carries most Mayan orders. Swift v2 splits each chain into a source contract (**SwiftSource**, escrow) and a destination contract (**SwiftDest**, fills and cancels). Swift v1 (**MayanSwift**) is one contract per chain and is retired. Both generations have the same address on each of the seven EVM chains where they exist. Robinhood Chain (4663) has no Swift contract. Topics and selectors are chain-agnostic; addresses are network-specific.
 
 A Swift order has two chains and four steps. (1) On the source chain the user's tokens are locked in SwiftSource: `OrderCreated(key)`. (2) On the destination chain a driver (solver) pays the user from its own funds through SwiftDest: `OrderFulfilled(key, sequence, fulfilledAmount)`. SwiftDest publishes a Wormhole message with the unlock data. (3) Back on the source chain the Wormhole VAA unlocks the escrow to the driver: `OrderUnlocked(key)`. (4) If no driver fills before the deadline, SwiftDest cancels (`OrderCanceled`) and SwiftSource refunds the trader (`OrderRefunded`).
@@ -219,6 +219,7 @@ Pinned window 2026-09-28 00:00–12:00 UTC: `OrderCreated` 48, `OrderUnlocked` 3
 | BNB Smart Chain | 56 | 4 | ✅ | ✅ | ✅ | 1,979 / 2,179 |
 | Avalanche C-Chain | 43114 | 6 | ✅ | ✅ | ✅ | 48 / 55 |
 | **Robinhood Chain** | 4663 | — | ❌ | ❌ | ❌ | — (not a Mayan chain) |
+| **Arc** | 5042 | — | ❌ | ❌ | ❌ | — (not a Mayan chain) |
 
 Swift counterparties outside the eight chains (docs "Swift", same EVM addresses; not checked here): Solana (Wormhole 1; program `mayan34VedncxdK2XobtvWFDXQASUTBXhUVzt2kKgny`, v1 `BLZRi6frs4X4DNLw56V4EXai1b6QVESN1BhHBTYM9VcY`), Linea (38), Unichain (44), HyperEVM (47), Monad (48). On Ethereum, `SwiftSource.emitters(1)` = `0xffcec24e0f2cdeade143c339b81a2e8861c0bffcb7e46dfb705e28d6dff9d8cf` (the Solana emitter) and `emitters(21)` (Sui) = 0.
 
@@ -356,6 +357,7 @@ AVAX_SWIFT_AUCTION_VERIFIER = '\x2cba4739a9703ba57d5f50476d51c3a9bcc86de8'
 AVAX_WORMHOLE_CORE          = '\x54a8e5f9c4cba08f9943965859f6c34eaf03e26c'
 AVAX_SWIFT_GUARDIAN_EOA     = '\xb4cdc16e6afcca48b6fade7302b6590c664dca5a'
 -- Robinhood Chain (4663): no Swift contract (eth_getCode = 0x at all three addresses)
+-- Arc (5042): no Swift contract (eth_getCode = 0x at all three addresses)
 ```
 
 ---

@@ -1,6 +1,6 @@
 # Granary Finance ("The Granary") — Topics, Selectors, Addresses (Ethereum, Base, BNB, Avalanche, Arbitrum, Optimism; not Polygon)
 
-**Status:** verified against live RPC on every listed chain and the canonical `The-Granary/Granary-Protocol-v1` repo + the DefiLlama `the-granary` adapter, on 2026-06-08. Every topic0/selector recomputed locally as `keccak256(signature)` and a sample cross-checked against live `eth_getLogs`; every address resolved by walking the on-chain `LendingPoolAddressesProviderRegistry → LendingPoolAddressesProvider → LendingPool` graph and existence-checked via `eth_getCode`; proxy slots read live.
+**Status:** verified against live RPC on every listed chain and the canonical `The-Granary/Granary-Protocol-v1` repo + the DefiLlama `the-granary` adapter, on 2026-06-08. Every topic0/selector recomputed locally as `keccak256(signature)` and a sample cross-checked against live `eth_getLogs`; every address resolved by walking the on-chain `LendingPoolAddressesProviderRegistry → LendingPoolAddressesProvider → LendingPool` graph and existence-checked via `eth_getCode`; proxy slots read live. Re-checked on 2026-10-30: `liquidationCall` present as `PUSH3 0xa718a9` in the live ETH LendingPool impl `0xc01a7ad7…`.
 **Scope:** the seven chains the user asked about. **Granary's lending market is deployed on six of them — Ethereum (1), Base (8453), BNB Smart Chain (56), Avalanche (43114), Arbitrum One (42161), Optimism (10) — and is NOT deployed on Polygon PoS (137)** (no registry/provider/pool; every Granary address returns empty `eth_getCode` on Polygon — see §9). **BNB carries TWO parallel "Granary Genesis Market" deployments** (its own registered cluster + the shared ETH/Base/Avax cluster — §8). Topics + selectors are chain-agnostic; addresses are network-specific. Granary also runs on **Fantom (250)** and **Metis (1088)**, and once configured a **Linea (59144)** registry — all outside the 7-chain scope, documented as off-target anchors in §10.
 
 Granary ("The Granary") is a **soft fork of Aave V2** (`aave/protocol-v2`-era, built by Byte Masons / the Ethos team). Its event topics and function selectors are **byte-for-byte identical to Aave V2** — see [aave/v2.md](../aave/v2.md). The market name on every chain is **"Granary Genesis Market"** (`LendingPoolAddressesProvider.getMarketId()`). The contract set is the V2 set: **`LendingPool`** (entrypoint, emits `Deposit`/`Borrow`/`Repay`/`Withdraw`/`LiquidationCall`/`ReserveDataUpdated`), **`LendingPoolAddressesProvider`** (per-market registry), **`LendingPoolConfigurator`** (risk admin), **`LendingPoolCollateralManager`** (delegatecall target for liquidations), per-reserve **gTokens** (the aToken equivalent, branded `grain*` e.g. `grainDAI` / "Granary DAI"), per-reserve **variableDebtToken** + **stableDebtToken** (stable rate exists in code), an **AaveOracle**-equivalent price oracle, a `LendingRateOracle`, an `AaveProtocolDataProvider`, an `AaveIncentivesController`-equivalent, and the **GRAIN** reward/governance token.
@@ -125,7 +125,7 @@ Identical to Aave V2. `borrow`/`repay`/`withdraw`/`flashLoan`/`liquidationCall` 
 | `0x94ba89a2` | `swapBorrowRateMode(address asset, uint256 rateMode)` | stable↔variable. |
 | `0xcd112382` | `rebalanceStableBorrowRate(address asset, address user)` | |
 | `0x5a3b74b9` | `setUserUseReserveAsCollateral(address asset, bool useAsCollateral)` | shared w/ V3. |
-| `0x00a718a9` | `liquidationCall(address collateralAsset, address debtAsset, address user, uint256 debtToCover, bool receiveAToken)` | Emits `LiquidationCall`. **Present in the V2 impl dispatcher** (unlike v3.4). Routes to `LendingPoolCollateralManager` via delegatecall. |
+| `0x00a718a9` | `liquidationCall(address collateralAsset, address debtAsset, address user, uint256 debtToCover, bool receiveAToken)` | Emits `LiquidationCall`. **Present in the V2 impl dispatcher** as `PUSH3 0xa718a9` (leading zero byte), the same as Aave V3. Routes to `LendingPoolCollateralManager` via delegatecall. |
 | `0xab9c4b5d` | `flashLoan(address receiverAddress, address[] assets, uint256[] amounts, uint256[] modes, address onBehalfOf, bytes params, uint16 referralCode)` | shared w/ V3. |
 
 ### 2.2 LendingPool — views
@@ -485,7 +485,7 @@ ETH token impls: gToken `0x8429d0afADE80498eAdB9919e41437a14d45A00b`, variableDe
 
 ### 12.2 The `liquidationCall` dispatcher (V2 — selector IS present)
 
-Unlike Aave v3.4 (split impl), Granary's V2 `LendingPool` impl carries the `liquidationCall` selector `0x00a718a9` directly; the actual liquidation math runs in `LendingPoolCollateralManager` via **delegatecall** (so `LiquidationCall` is emitted by the **Pool** address, not the collateral manager). You can detect liquidations by either the `LiquidationCall` event topic0 `0xe413a321…` (recommended; 50 logs on the OP pool in a recent ~600k-block window) or the selector.
+Granary's V2 `LendingPool` impl carries the `liquidationCall` selector `0x00a718a9` directly, the same as Aave V2 and V3. It appears as `PUSH3 0xa718a9`, because the selector starts with a zero byte, so a `PUSH4` scan misses it; the actual liquidation math runs in `LendingPoolCollateralManager` via **delegatecall** (so `LiquidationCall` is emitted by the **Pool** address, not the collateral manager). You can detect liquidations by either the `LiquidationCall` event topic0 `0xe413a321…` (recommended; 50 logs on the OP pool in a recent ~600k-block window) or the selector.
 
 ### 12.3 Address-collision caution
 
@@ -503,7 +503,7 @@ Every gToken's `getIncentivesController()` returns a per-chain IC address (§3�
 2. **It's an Aave V2 fork** — supply event is **`Deposit`** (`0xde685721…`), not V3's `Supply`. `getUserAccountData` returns **ETH/wei (1e18), not USD**. Reuse the [aave/v2.md](../aave/v2.md) detection set verbatim.
 3. **gToken vs debt-token `Mint`/`Burn` have different topic0s** (V2 behavior). gToken `Mint` = `0x4c209b5f` (also collides with Uniswap-V2 / Compound `Mint`), varDebt `Mint` = `0x2f00e3cd`. Match on `(topic0, emitting address)`.
 4. **Several topics/selectors are shared with Aave V2 AND V3** — `Withdraw`, `LiquidationCall`, `ReserveDataUpdated`, collateral enabled/disabled, and selectors `borrow`/`repay`/`withdraw`/`flashLoan`/`liquidationCall`. **Disambiguate by Pool address + chain, never by topic/selector alone** — Granary literally shares the `0xb702…eed3` Pool address with itself across **4 chains (ETH/Base/Avax/BNB)** and shares topics with Aave's own markets.
-5. **`liquidationCall` selector IS in the impl dispatcher** (unlike v3.4) — but still prefer detecting liquidations by the `LiquidationCall` event (§12.2). `LiquidationCall` is emitted by the Pool (collateral manager runs via delegatecall).
+5. **`liquidationCall` selector IS in the impl dispatcher** (as `PUSH3 0xa718a9`) — but still prefer detecting liquidations by the `LiquidationCall` event (§12.2). `LiquidationCall` is emitted by the Pool (collateral manager runs via delegatecall).
 6. **gTokens rebase every block.** Store `scaledBalanceOf` + reconstruct with the reserve `liquidityIndex` (ray, 27-dec). Same for debt with `variableBorrowIndex`. gTokens are 8-/6-/18-dec matching the underlying; `name()` = "Granary XXX", `symbol()` = **`grainXXX`**.
 7. **`onBehalfOf`/`user` ≠ `tx.from`.** Attribute positions to the event's `onBehalfOf`/`user`, not the sender (gateways, credit delegation, liquidation bots route via `tx.to ≠ Pool`).
 8. **Address clusters & coincidences.** ETH/Base/Avax **and BNB** share the `0xb702…`/`0xedc8…`/`0xc534…` provider/pool/configurator/gToken cluster; BNB also runs a second unique cluster (§8); some literals coincide across roles/chains (§12.3). Key everything on `(chainId, address)`.
@@ -553,7 +553,7 @@ SEL_WITHDRAW                 = '\x69328dec'   -- shared V2/V3
 SEL_BORROW                   = '\xa415bcad'   -- shared V2/V3
 SEL_REPAY                    = '\x573ade81'   -- shared V2/V3
 SEL_SWAP_BORROW_RATE_MODE    = '\x94ba89a2'
-SEL_LIQUIDATION_CALL         = '\x00a718a9'   -- present in V2 impl dispatcher
+SEL_LIQUIDATION_CALL         = '\x00a718a9'   -- present in V2 impl dispatcher as PUSH3 0xa718a9
 SEL_FLASHLOAN                = '\xab9c4b5d'   -- shared V2/V3
 SEL_SET_USE_RESERVE_AS_COLL  = '\x5a3b74b9'
 SEL_GET_USER_ACCOUNT_DATA    = '\xbf92857c'   -- returns ETH/wei, not USD

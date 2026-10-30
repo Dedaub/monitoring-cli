@@ -1,13 +1,13 @@
-# Axelar Network — Topics, Selectors, Addresses (Ethereum, Base, BNB, Avalanche, Arbitrum, Optimism, Polygon; NOT Robinhood)
+# Axelar Network — Topics, Selectors, Addresses (Ethereum, Base, BNB, Avalanche, Arbitrum, Optimism, Polygon, Arc; NOT Robinhood)
 
-**Status:** verified against live RPC on all seven listed chains and the canonical `axelarnetwork/axelar-cgp-solidity` + `axelarnetwork/interchain-token-service` repos on 2026-06-09. Topic0s/selectors recomputed locally as `keccak256(signature)` and cross-checked against live `eth_getLogs` + deployed-bytecode `PUSH32`/`PUSH4` scans; addresses existence-checked via `eth_getCode`; proxy impls read live. Extended on 2026-09-29: the Amplifier `MessageApproved` signature corrected (§1.6), the value movement of the gateway-token path measured (§9, item 16), and the Robinhood Chain (4663) check (§6).
+**Status:** verified against live RPC on all seven listed chains and the canonical `axelarnetwork/axelar-cgp-solidity` + `axelarnetwork/interchain-token-service` repos on 2026-06-09. Topic0s/selectors recomputed locally as `keccak256(signature)` and cross-checked against live `eth_getLogs` + deployed-bytecode `PUSH32`/`PUSH4` scans; addresses existence-checked via `eth_getCode`; proxy impls read live. Extended on 2026-09-29: the Amplifier `MessageApproved` signature corrected (§1.6), the value movement of the gateway-token path measured (§9, item 16), and the Robinhood Chain (4663) check (§6). Re-checked on 2026-10-30: Axelar added Arc (5042) on 2026-10-29 with an Amplifier gateway and its own ITS/GasService/Factory addresses (§4a); the ITS `owner()` moved to `AxelarServiceGovernance` `0x7acbae6cba67d78aaf69e47000884ae00f9b2525` on 2026-07-06; all impls of the seven chains are unchanged.
 **Scope:** the EVM contracts of Axelar's General Message Passing (GMP) layer — **AxelarGateway** (cross-chain call/token gateway), **AxelarGasService** (relayer gas prepayment), and the **Interchain Token Service (ITS)** stack (ITS + InterchainTokenFactory + TokenManager + InterchainToken). Topics and selectors are **chain-agnostic**; addresses are network-specific. All seven target chains carry the full stack.
 
 Axelar is a **proof-of-stake message-passing network**, not a lock/mint bridge with a single vault. Source chains emit a `ContractCall` (or `ContractCallWithToken`/`TokenSent`) event on the **AxelarGateway**; a decentralized validator set observes it, reaches consensus off-chain, and the relayer submits an `execute(bytes)` batch to the **destination** gateway that flips the call to `approved`; the destination app then calls `validateContractCall` and runs its handler, emitting `ContractCallExecuted`. **The on-chain footprint is therefore split across two chains per message** — the outbound event and the inbound `ContractCallApproved`/`ContractCallExecuted` live on different gateways. Gas for the destination execution is prepaid on the **source** chain into the AxelarGasService (`NativeGasPaidForContractCall`, etc.), keyed by the source `txHash`/`logIndex` and the payload hash.
 
-**Deterministic addressing, with one exception.** AxelarGasService, ITS, and InterchainTokenFactory are deployed via CREATE3-style constant-address tooling and share the **exact same proxy address on every EVM chain** (`0x2d5d…2712`, `0xB5FB…9e3C`, `0x83A9…0D66`) — and, on all seven, the **same implementation** address too. **The AxelarGateway proxy address is NOT constant** — it predates the constant-address tooling, so each chain has a different gateway proxy address (Ethereum `0x4F44…56A5`, Base/Optimism/Arbitrum `0xe432…8E31`, Avalanche `0x5029…8f78`, BNB `0x304a…D895`, Polygon `0x6f01…FBA8`) — but they all delegate to the **same gateway implementation** `0x99b5fa03a5ea4315725c43346e55a6a6fbd94098`. **The constant `0x4F44…56A5` is the Ethereum gateway only; on BNB and Arbitrum that literal address holds an unrelated decoy contract** (different bytecode, no Axelar interface) — never reuse the Ethereum gateway address cross-chain (see §6, §8).
+**Deterministic addressing, with one exception.** AxelarGasService, ITS, and InterchainTokenFactory are deployed via CREATE3-style constant-address tooling and share the **exact same proxy address on the seven target chains** (`0x2d5d…2712`, `0xB5FB…9e3C`, `0x83A9…0D66`) — and the **same implementation** address too. **Arc is the exception:** it has a new deployer, so its four core contracts have different addresses (§4a). **The AxelarGateway proxy address is NOT constant** — it predates the constant-address tooling, so each chain has a different gateway proxy address (Ethereum `0x4F44…56A5`, Base/Optimism/Arbitrum `0xe432…8E31`, Avalanche `0x5029…8f78`, BNB `0x304a…D895`, Polygon `0x6f01…FBA8`) — but they all delegate to the **same gateway implementation** `0x99b5fa03a5ea4315725c43346e55a6a6fbd94098`. **The constant `0x4F44…56A5` is the Ethereum gateway only; on BNB and Arbitrum that literal address holds an unrelated decoy contract** (different bytecode, no Axelar interface) — never reuse the Ethereum gateway address cross-chain (see §6, §8).
 
-This is a **single live generation** (the consensus "CGP" gateway + ITS v2), so one `core.md`. Axelar is also rolling out the next-gen **Amplifier** `AxelarAmplifierGateway` (`MessageApproved`/`MessageExecuted`/`SignersRotated` events) on newer chains; none of the seven target chains runs an Amplifier gateway as of 2026-06-09 — they all run the consensus gateway above. Amplifier topics are listed in §1.6 for completeness only.
+This is a **single live generation** (the consensus "CGP" gateway + ITS v2), so one `core.md`. Axelar is also rolling out the next-gen **Amplifier** `AxelarAmplifierGateway` (`MessageApproved`/`MessageExecuted`/`SignersRotated` events) on newer chains. None of the seven target chains runs an Amplifier gateway — they all run the consensus gateway above. **Arc (5042) runs an Amplifier gateway** (§1.6, §4a).
 
 ---
 
@@ -23,7 +23,7 @@ This is a **single live generation** (the consensus "CGP" gateway + ITS v2), so 
 | **InterchainToken** (impl) | ERC-20 mint/burn token with `interchainTransfer`. Deployed per `tokenId` by InterchainTokenDeployer. | clones of impl `0x7f9f…8819` | per-token |
 | **TokenHandler / deployers** | ITS internal helpers (`InterchainTokenDeployer` `0xb769…69a3`, `TokenManagerDeployer` `0xdfef…7d24`, `TokenHandler` `0x383d…e7da`). | plain (no proxy) | constant on all 7 |
 
-The ITS impl on all seven chains is the identical `0x1b13a9baf8d3116c56ccdf3aa9049ad532a9c03d`; GasService impl `0xcb5c784dcf8ff342625dbc53b356ed0cbb0ebb9b`; Factory impl `0xe833e9662cb0a811aa3b1746280ab43507b61946`. Wiring confirmed live: `ITS.gateway()` = the Ethereum gateway, `ITS.gasService()` = `0x2d5d…2712`, `ITS.interchainTokenFactory()` = `0x83A9…0D66`, `Factory.interchainTokenService()` = `0xB5FB…9e3C`.
+The ITS impl on all seven chains (not Arc) is the identical `0x1b13a9baf8d3116c56ccdf3aa9049ad532a9c03d`; GasService impl `0xcb5c784dcf8ff342625dbc53b356ed0cbb0ebb9b`; Factory impl `0xe833e9662cb0a811aa3b1746280ab43507b61946`. Wiring confirmed live: `ITS.gateway()` = the Ethereum gateway, `ITS.gasService()` = `0x2d5d…2712`, `ITS.interchainTokenFactory()` = `0x83A9…0D66`, `Factory.interchainTokenService()` = `0xB5FB…9e3C`.
 
 ---
 
@@ -99,9 +99,9 @@ The live deployment uses **native-gas** payment events; the ERC-20-token gas-pay
 | `0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925` | `Approval(address indexed owner, address indexed spender, uint256 value)` (ERC-20 + EIP-2612) |
 | `0xf77b8a946fdd43f9bcc59a65414e31d8ce6bff4d577ba280b22a4e0076f1fbae` | `RolesAdded(address,uint8)` (minter role) |
 
-### 1.6 Amplifier gateway (NOT deployed on any of the seven — reference only)
+### 1.6 Amplifier gateway (Arc only)
 
-Axelar's next-gen `AxelarAmplifierGateway` is **absent on all seven target chains** (they run the §1.1 consensus gateway) and on Robinhood Chain. If/when it lands, watch these (signatures from `axelar-gmp-sdk-solidity` `contracts/interfaces/IBaseAmplifierGateway.sol` and `IBaseWeightedMultisig.sol`):
+Axelar's next-gen `AxelarAmplifierGateway` is **absent on all seven target chains** (they run the §1.1 consensus gateway) and on Robinhood Chain. It is **live on Arc** (§4a; all four topics below confirmed by a `PUSH32` scan of the Arc gateway impl). Watch these (signatures from `axelar-gmp-sdk-solidity` `contracts/interfaces/IBaseAmplifierGateway.sol` and `IBaseWeightedMultisig.sol`):
 
 | topic0 | Event |
 |--------|-------|
@@ -237,14 +237,14 @@ All verified via `eth_getCode` returning non-empty bytecode on `https://ethereum
 |------|---------|------|-----------|
 | **AxelarGateway** (proxy) | `0x4F4495243837681061C4743b74B3eEdf548D56A5` | `0x99b5fa03a5ea4315725c43346e55a6a6fbd94098` | GMP gateway. **This literal is the Ethereum gateway ONLY.** |
 | **AxelarGasService** (proxy) | `0x2d5d7d31F671F86C782533cc367F14109a082712` | `0xcb5c784dcf8ff342625dbc53b356ed0cbb0ebb9b` | Relayer gas escrow. `owner()`=`0x7216…b1af`, `gasCollector()`=`0x7ddb…efbc`. |
-| **InterchainTokenService** (proxy) | `0xB5FB4BE02232B1bBA4dC8f81dc24C26980dE9e3C` | `0x1b13a9baf8d3116c56ccdf3aa9049ad532a9c03d` | ITS hub. `owner()`=`0x5f93…0c10`, `paused()`=false. |
-| **InterchainTokenFactory** (proxy) | `0x83a93500d23Fbc3e82B410aD07A6a9F7A0670D66` | `0xe833e9662cb0a811aa3b1746280ab43507b61946` | Token factory over ITS. |
+| **InterchainTokenService** (proxy) | `0xB5FB4BE02232B1bBA4dC8f81dc24C26980dE9e3C` | `0x1b13a9baf8d3116c56ccdf3aa9049ad532a9c03d` | ITS hub. `owner()`=`0x7acb…2525` (`AxelarServiceGovernance`), `paused()`=false. |
+| **InterchainTokenFactory** (proxy) | `0x83a93500d23Fbc3e82B410aD07A6a9F7A0670D66` | `0xe833e9662cb0a811aa3b1746280ab43507b61946` | Token factory over ITS. `owner()`=`0x6f24…3F05` (Axelar deployer EOA). |
 | TokenManager (impl) | `0x8832f0381707bb29756edecf42580800207f2a9e` | — | Clone target for per-token managers. |
 | InterchainToken (impl) | `0x7f9f70da4af54671a6abac58e705b5634cac8819` | — | Clone target for interchain ERC-20s. |
 | InterchainTokenDeployer | `0xb769ce7dc3d642b082a55f0c12622c6e516969a3` | — | `implementationAddress()`=`0x7f9f…8819`. |
 | TokenManagerDeployer | `0xdfef5b38c1c080a4a82431b687989759cb207d24` | — | |
 | TokenHandler | `0x383df8e8f96b3df53f9bdc607811c7e96239e7da` | — | ITS token mint/burn/lock router. |
-| Gateway owner / governance | (see §8) | — | ITS owner `0x5f939a751eaee302c85bf8bebb83483adecc0c10` (same on all 7). |
+| Gateway owner / governance | (see §8) | — | ITS owner `AxelarServiceGovernance` `0x7acbae6cba67d78aaf69e47000884ae00f9b2525` (same on all 7; `governanceChain()` = `axelar`). It replaced the Safe `0x5f939a751eaee302c85bf8bebb83483adecc0c10` on 2026-07-06 (Ethereum block 25,473,697). |
 
 ---
 
@@ -277,6 +277,25 @@ All four core contracts are **present on every one of the seven chains** (verifi
 
 ---
 
+## 4a. Addresses — Arc (chain ID 5042)
+
+Axelar connected Arc on 2026-10-29 (registry `axelar-chains-config/info/mainnet.json`, key `arc`). Arc runs the **Amplifier** gateway, not the consensus gateway of §1.1. A new deployer (`0xB1209B087e544785138784A50933d163A9087a7D`) made the contracts, so **none of the constant addresses of §4 apply on Arc**. Verified on 2026-10-30 with `eth_getCode`, the EIP-1967 impl slot and `owner()` on `https://arc-rpc.publicnode.com`. `owner()` of all four proxies is `0x72164d4448fe6cfa472946fedc71e83b4628b1af` (the GasService owner of the seven chains).
+
+| Role | Address | Impl | One-liner |
+|------|---------|------|-----------|
+| **AxelarAmplifierGateway** (proxy, 499 B) | `0xD8346AEAaE536e2A98A7B2992CE32E58bd76EC3c` | `0xc33ef28c61d87eac941951bcca317b03c8e8ec99` | Emits `ContractCall` (outbound, same topic0 as §1.1), `MessageApproved`, `MessageExecuted`, `SignersRotated` (§1.6). Standard EIP-1967 slot (unlike the §1.1 gateway). |
+| **AxelarGasService** (proxy) | `0x4A86ab8c9b0b5C17587F6a243a8f2E5DE3067BD8` | `0xf3f1361059b6482c0e3532c6b5cf0480aaad92f9` | Same native-gas events as §1.2. Collector = `Operators` below. |
+| **InterchainTokenService** (proxy, `ITS v2.2.0`) | `0x48d39Cc5F03f572E4cc2813E846cd0D3a63c0a4a` | `0x7a644b5c56036ee10b39c7b2580b8f7faa18793f` | `chainName()` = `arc`; `gateway()`/`gasService()`/`interchainTokenFactory()` = the Arc addresses here. `InterchainTransfer`/`InterchainTransferReceived` topic0s and `interchainTransfer` selector match §1.3/§2.3. |
+| **InterchainTokenFactory** (proxy) | `0x1Dd54AC94e2CF2050527cA167D70Cec803aC81C7` | `0xbe114c602e897b349cf2945c0a1a42351929cab2` | |
+| Operators (gas collector) | `0x147BA6406c76C087dd6c62208b14d96898986b49` | — | Not a proxy. |
+| TokenManager (impl) | `0x4f0B759169A766a89f79Fb88F884b87a88ebE8e3` | — | Clone target. |
+| InterchainToken (impl) | `0xb401014577FFC205c881e8Df12BD4164b65d0B12` | — | Clone target. |
+| InterchainTokenDeployer / TokenManagerDeployer / TokenHandler | `0xc2d97Ce73A4c4106fb9d522ba4C0cF273aFD7360` / `0xD2Ce1fE7Ad4d26279214257B518Baa735EBaBd89` / `0x8c3f27c0b315c9Aa736eD9Da8600456A57BB73d6` | — | |
+
+Amplifier gateway selectors (recomputed, and found in the Arc impl by `PUSH4` scan): `callContract(string,string,bytes)` `0x1c92115f` (same as §2.1), `approveMessages((string,string,string,address,bytes32)[],(((address,uint128)[],uint128,bytes32),bytes[]))` `0x64f1d85a`, `rotateSigners(((address,uint128)[],uint128,bytes32),(((address,uint128)[],uint128,bytes32),bytes[]))` `0x1d92c0bf`, `validateMessage(string,string,string,bytes32)` `0xf10bfaa1`, `isMessageApproved(string,string,string,address,bytes32)` `0x8f686dc4`, `isMessageExecuted(string,string)` `0xcba5be6a`, `upgrade(address,bytes32,bytes)` `0xa3499c73`.
+
+---
+
 ## 5. Counterparty chains outside the seven (findings, not omissions)
 
 Axelar connects ~60+ chains; the GMP `destinationChain`/`sourceChain` string in every event routinely names chains **outside** the seven requested. A monitor decoding `ContractCall`/`InterchainTransfer` events will see destination strings such as:
@@ -299,12 +318,13 @@ These are recorded findings: the gateway/ITS contracts on the seven target chain
 | Arbitrum | 42161 | `0xe432150cce91c13a887f7D836923d5597adD8E31` ✓ | same ✓ | same ✓ | same ✓ |
 | Optimism | 10 | `0xe432150cce91c13a887f7D836923d5597adD8E31` ✓ | same ✓ | same ✓ | same ✓ |
 | Polygon | 137 | `0x6f015F16De9fC8791b234eF68D486d2bF203FBA8` ✓ | same ✓ | same ✓ | same ✓ |
+| **Arc** | 5042 | `0xD8346AEAaE536e2A98A7B2992CE32E58bd76EC3c` ✓ (Amplifier) | `0x4A86ab8c9b0b5C17587F6a243a8f2E5DE3067BD8` ✓ | `0x48d39Cc5F03f572E4cc2813E846cd0D3a63c0a4a` ✓ | `0x1Dd54AC94e2CF2050527cA167D70Cec803aC81C7` ✓ |
 | **Robinhood** | 4663 | ✗ none | ✗ `0x` | ✗ `0x` | ✗ `0x` |
 
 **Robinhood Chain (4663): no Axelar deployment.** On 2026-09-29 `eth_getCode` returned `0x` (nonce 0) on `https://rpc.mainnet.chain.robinhood.com` at the constant GasService, ITS and Factory addresses above, at both gateway literals (`0x4F4495243837681061C4743b74B3eEdf548D56A5`, `0xe432150cce91c13a887f7D836923d5597adD8E31`) and at the gateway implementation `0x99b5fa03a5ea4315725c43346e55a6a6fbd94098`. Axelar's registry `axelarnetwork/axelar-contract-deployments` `axelar-chains-config/info/mainnet.json` lists 30 chains and no chain with id 4663. The eleven measured transfer and message events (`ContractCall`, `ContractCallWithToken`, `TokenSent`, `ContractCallApproved`, `ContractCallApprovedWithMint`, `Executed`, `ContractCallExecuted`, `MessageApproved`, `MessageExecuted`, `InterchainTransfer`, `InterchainTransferReceived`) had 0 logs from any emitter on Robinhood Chain in the pinned 12-hour window of 2026-09-28.
 
 **Vanity / decoy tells:**
-- GasService `0x2d5d…2712`, ITS `0xB5FB…9e3C`, Factory `0x83A9…0D66` are **identical on all 7** (CREATE3 constant-address). Key on the address alone is safe for these three, but **always key gateways on `(chainId, address)`**.
+- GasService `0x2d5d…2712`, ITS `0xB5FB…9e3C`, Factory `0x83A9…0D66` are **identical on all 7** (CREATE3 constant-address), but **not on Arc** (§4a). **Always key every Axelar contract on `(chainId, address)`**.
 - **DECOY:** the Ethereum gateway literal `0x4F4495243837681061C4743b74B3eEdf548D56A5` is occupied by an **unrelated contract** on BNB (23,932 B) and Arbitrum (3,874 B) — different bytecode, `implementation()` returns 0 / reverts, no Axelar interface. Do **not** treat that address as the gateway anywhere except Ethereum.
 
 ---
@@ -322,10 +342,11 @@ These are recorded findings: the gateway/ITS contracts on the seven target chain
 
 | Contract | Pattern | Detection | Upgrade auth |
 |----------|---------|-----------|--------------|
+| **AxelarAmplifierGateway** (Arc) | **EIP-1967** proxy (499 B) | EIP-1967 impl slot = `0xc33ef28c61d87eac941951bcca317b03c8e8ec99` (live); `contractId()` = `keccak256("axelar-amplifier-gateway")` `0xd10cce6f…4bfd`. | `owner()` = `0x72164d4448fe6cfa472946fedc71e83b4628b1af`; `upgrade(address,bytes32,bytes)`. |
 | **AxelarGateway** | **Custom `AxelarGatewayProxy`** (EternalStorage-style). **The standard EIP-1967 impl slot `0x3608…2bbc` is EMPTY** (returns `0x000…0` — verified on Ethereum); the impl is exposed only via the `implementation()` getter (`0x5c60da1b`). | `eth_getStorageAt(slot 0x3608…2bbc)` = `0x0`; `eth_call implementation()` = `0x99b5fa03…`; admin slot `0xb531…6103` also empty. | `upgrade(address,bytes32,bytes)` (`0xa3499c73`), governance multisig. |
 | **AxelarGasService** | **EIP-1967** proxy + Ownable2Step | EIP-1967 impl slot `0x3608…2bbc` = `0xcb5c784dcf8ff342625dbc53b356ed0cbb0ebb9b` (verified live); admin slot empty. | `owner()` = `0x72164d4448fe6cfa472946fedc71e83b4628b1af`; `upgrade()`. |
-| **InterchainTokenService** | **EIP-1967** proxy + Ownable2Step + Pausable | EIP-1967 impl slot = `0x1b13a9baf8d3116c56ccdf3aa9049ad532a9c03d` (live); admin slot empty. | `owner()` = `0x5f939a751eaee302c85bf8bebb83483adecc0c10` (same all 7 chains). |
-| **InterchainTokenFactory** | **EIP-1967** proxy | EIP-1967 impl slot = `0xe833e9662cb0a811aa3b1746280ab43507b61946` (live). | ITS owner. |
+| **InterchainTokenService** | **EIP-1967** proxy + Ownable2Step + Pausable | EIP-1967 impl slot = `0x1b13a9baf8d3116c56ccdf3aa9049ad532a9c03d` (live); admin slot empty. | `owner()` = `AxelarServiceGovernance` `0x7acbae6cba67d78aaf69e47000884ae00f9b2525` (same all 7 chains, since 2026-07-06). |
+| **InterchainTokenFactory** | **EIP-1967** proxy | EIP-1967 impl slot = `0xe833e9662cb0a811aa3b1746280ab43507b61946` (live). | `owner()` = `0x6f24a47fc8ae5441eb47effc3665e70e69ac3f05` (Axelar deployer EOA). |
 | **TokenManager / InterchainToken** | **Minimal-proxy clones** of the ITS impls (`0x8832…2a9e` / `0x7f9f…8819`) | Deployed per `tokenId`; address derivable via `tokenManagerAddress(tokenId)` / `interchainTokenAddress(tokenId)`. | ITS / token operator roles. |
 | Deployers / TokenHandler | **Plain (no proxy)** | EIP-1967 impl slot empty; fixed bytecode. | n/a. |
 
@@ -348,7 +369,7 @@ These are recorded findings: the gateway/ITS contracts on the seven target chain
 11. **TokenManager/InterchainToken are clones, one per `tokenId`** — there is no global registry event listing them. Derive addresses with `ITS.tokenManagerAddress(tokenId)` / `interchainTokenAddress(tokenId)`, or index `TokenManagerDeployed`/`InterchainTokenDeployed`. Their `FlowLimitSet`/`Transfer`/`Mint` events fire on the **clone address**, not on ITS.
 12. **`Transfer` and `Approval` topic0s are generic ERC-20** — only meaningful when filtered to a known InterchainToken clone address.
 13. **Express execution is a separate flow.** `expressExecute` lets a liquidity provider front the funds before consensus; watch `ExpressExecuted`/`ExpressExecutionFulfilled` — the user receives funds at express time, but the gateway `ContractCallApproved` lands later. Attributing the "real" settlement to the gateway approval will miss express fills.
-14. **No Amplifier gateway on any of the seven.** They run the consensus gateway (§1.1). The `MessageApproved`/`MessageExecuted` topics (§1.6) will not appear on these chains; don't scan for them here. If you index the Amplifier `MessageApproved`, use the six-parameter topic0 `0xcda53a2698efcca41b57faaddeb19bcb237bb1c71b479721fcc3a6fd41ba8097`, not the five-parameter `0x6d338c7b274d71c344e745d8639ee21c8dff7afea59173f79375f4b25de06e7e` of earlier versions of this doc (§1.6).
+14. **No Amplifier gateway on any of the seven; Arc has one.** The seven run the consensus gateway (§1.1). The `MessageApproved`/`MessageExecuted` topics (§1.6) appear only on the Arc gateway `0xD834…EC3c`, which emits no `ContractCallApproved`/`ContractCallExecuted`/`Executed` and has no gateway-token path (`callContractWithToken`/`sendToken`). If you index the Amplifier `MessageApproved`, use the six-parameter topic0 `0xcda53a2698efcca41b57faaddeb19bcb237bb1c71b479721fcc3a6fd41ba8097`, not the five-parameter `0x6d338c7b274d71c344e745d8639ee21c8dff7afea59173f79375f4b25de06e7e` of earlier versions of this doc (§1.6).
 15. **Same `Upgraded` impl across chains.** Because the gateway/GasService/ITS/Factory impls are byte-identical and shared across all 7, an upgrade is typically rolled out as separate `Upgraded` events per chain pointing at the same new impl address — correlate by impl address, not by chain.
 16. **Where the tokens move on the gateway-token path (measured).** Source: the app's `callContractWithToken` makes the gateway pull the token; for a token native to the chain the gateway **locks** it (Ethereum sample `0xf1fa0012d68f0a5f36eb348369a9e1f9ae32531b6bcf56b56d611525c3dd0033`: USDC `Transfer` app → gateway `0x4F4495243837681061C4743b74B3eEdf548D56A5`, then `ContractCallWithToken`; the GasService logged `NativeGasPaidForExpressCallWithToken` in the same transaction). Destination, transaction 1: the relayer's `execute(bytes)` emits `ContractCallApprovedWithMint` + `Executed` and **moves no token** (Base sample `0x6330c44078ba8860841d3d1852a384d6f33bd3f8750b3f7273728cd4b6bc8278`). Destination, transaction 2: the app's `executeWithToken` calls `validateContractCallAndMint`; the gateway emits `ContractCallExecuted(commandId)` and **mints** the gateway token to the app in the same transaction (Base sample `0x317bdcc8d5dabe8085a3d1e068f7c6f82c10e58250dc45ee4e96c2123210bca4`: axlUSDC `0xEB466342C4d449BC9f53A865D5Cb90586f405215` `Transfer` `0x0` → app, same `commandId` as the approval). Key payouts on `ContractCallExecuted` joined to `ContractCallApprovedWithMint` by `commandId`. The reverse direction (burn of a wrapped token on its non-home chain, release from the gateway on its home chain) was not sampled.
 17. **Robinhood Chain (4663) has no Axelar contract** (§6): no gateway, no GasService, no ITS, and no entry in the official chain registry. A `destinationChain` string never names it today.
@@ -465,7 +486,7 @@ FACTORY                             = '\x83a93500d23fbc3e82b410ad07a6a9f7a0670d6
 FACTORY_IMPL                        = '\xe833e9662cb0a811aa3b1746280ab43507b61946'
 TOKEN_MANAGER_IMPL                  = '\x8832f0381707bb29756edecf42580800207f2a9e'
 INTERCHAIN_TOKEN_IMPL               = '\x7f9f70da4af54671a6abac58e705b5634cac8819'
-ITS_OWNER                           = '\x5f939a751eaee302c85bf8bebb83483adecc0c10'
+ITS_OWNER                           = '\x7acbae6cba67d78aaf69e47000884ae00f9b2525'   -- AxelarServiceGovernance (since 2026-07-06)
 GASSERVICE_OWNER                    = '\x72164d4448fe6cfa472946fedc71e83b4628b1af'
 GASSERVICE_COLLECTOR                = '\x7ddb2d76b80b0aa19bdea48eb1301182f4ceefbc'
 
@@ -480,6 +501,25 @@ BNB_GATEWAY                         = '\x304acf330bbe08d1e512eefaa92f6a57871fd89
 POLY_GATEWAY                        = '\x6f015f16de9fc8791b234ef68d486d2bf203fba8'
 -- NOTE: 0x4f4495243837681061c4743b74b3eedf548d56a5 is a NON-Axelar decoy on BNB and Arbitrum — Ethereum gateway only.
 -- Robinhood Chain (4663): no Axelar contract; every address of this block returns 0x there.
+
+-- ===== Arc (chain ID 5042) — Amplifier stack, own addresses (NOT the constants above) =====
+ARC_GATEWAY                         = '\xd8346aeaae536e2a98a7b2992ce32e58bd76ec3c'   -- AxelarAmplifierGateway
+ARC_GATEWAY_IMPL                    = '\xc33ef28c61d87eac941951bcca317b03c8e8ec99'
+ARC_GASSERVICE                      = '\x4a86ab8c9b0b5c17587f6a243a8f2e5de3067bd8'
+ARC_GASSERVICE_IMPL                 = '\xf3f1361059b6482c0e3532c6b5cf0480aaad92f9'
+ARC_ITS                             = '\x48d39cc5f03f572e4cc2813e846cd0d3a63c0a4a'
+ARC_ITS_IMPL                        = '\x7a644b5c56036ee10b39c7b2580b8f7faa18793f'
+ARC_FACTORY                         = '\x1dd54ac94e2cf2050527ca167d70cec803ac81c7'
+ARC_FACTORY_IMPL                    = '\xbe114c602e897b349cf2945c0a1a42351929cab2'
+ARC_OPERATORS                       = '\x147ba6406c76c087dd6c62208b14d96898986b49'   -- gas collector
+ARC_TOKEN_MANAGER_IMPL              = '\x4f0b759169a766a89f79fb88f884b87a88ebe8e3'
+ARC_INTERCHAIN_TOKEN_IMPL           = '\xb401014577ffc205c881e8df12bd4164b65d0b12'
+ARC_OWNER                           = '\x72164d4448fe6cfa472946fedc71e83b4628b1af'   -- owner() of all four proxies
+SEL_AMP_APPROVE_MESSAGES            = '\x64f1d85a'
+SEL_AMP_ROTATE_SIGNERS              = '\x1d92c0bf'
+SEL_AMP_VALIDATE_MESSAGE            = '\xf10bfaa1'
+SEL_AMP_IS_MESSAGE_APPROVED         = '\x8f686dc4'
+SEL_AMP_IS_MESSAGE_EXECUTED         = '\xcba5be6a'
 ```
 
 ---
@@ -489,7 +529,7 @@ POLY_GATEWAY                        = '\x6f015f16de9fc8791b234ef68d486d2bf203fba
 How every constant was verified (2026-06-09):
 
 - **Topic0 / selectors:** recomputed locally as `keccak256(canonical signature)` / `[0:4]` (pycryptodome). Cross-checked two ways: (a) live `eth_getLogs` on the Ethereum gateway (`ContractCall`/`ContractCallWithToken`/`ContractCallApproved`/`ContractCallApprovedWithMint`/`Executed`/`ContractCallExecuted` all observed in a ~2k-block window), the GasService (`NativeGasPaidForContractCall`/`…WithToken`/express + `NativeGasAdded` + `Refunded` observed; log structure decoded slot-by-slot to fix the exact param order of the `…WithToken` and `NativeGasAdded` signatures), and the ITS (`InterchainTransfer`/`InterchainTransferReceived`/`InterchainTokenDeployed`/`TokenManagerDeployed` observed); and (b) a `PUSH32`/`PUSH4` constant scan of each deployed implementation's bytecode to confirm presence/absence (which is how the legacy ERC-20 gas-pay functions and the older ITS `deployTokenManager`/`callContractWithInterchainToken` selectors were confirmed **absent**).
-- **Addresses:** the four core proxies existence-checked via `eth_getCode` (non-empty) on every one of the seven chains' publicnode RPCs. Per-chain gateway proxy addresses confirmed and their `implementation()` getter read live (all return the shared `0x99b5fa03…`). Constant-address claim for GasService/ITS/Factory verified by reading identical impl addresses on all seven chains and identical `owner()` (ITS `0x5f93…0c10`). Wiring cross-checked live: `ITS.gateway()/gasService()/interchainTokenFactory()`, `Factory.interchainTokenService()`, `ITS.tokenManagerImplementation(0)`, `InterchainTokenDeployer.implementationAddress()`.
+- **Addresses:** the four core proxies existence-checked via `eth_getCode` (non-empty) on every one of the seven chains' publicnode RPCs. Per-chain gateway proxy addresses confirmed and their `implementation()` getter read live (all return the shared `0x99b5fa03…`). Constant-address claim for GasService/ITS/Factory verified by reading identical impl addresses on all seven chains and identical `owner()` (ITS `0x7acb…2525` since 2026-07-06). Wiring cross-checked live: `ITS.gateway()/gasService()/interchainTokenFactory()`, `Factory.interchainTokenService()`, `ITS.tokenManagerImplementation(0)`, `InterchainTokenDeployer.implementationAddress()`.
 - **Proxy classification:** EIP-1967 impl slot `0x3608…2bbc` read via `eth_getStorageAt` on each proxy — populated for GasService/ITS/Factory (impl matches the `implementation()` getter), **empty** for the gateway (custom `AxelarGatewayProxy` — impl exposed only by the getter) and for the deployers/handlers (not proxies). Admin slot `0xb531…6103` empty on all (Ownable-governed, not transparent-admin).
 - **Decoy finding:** `eth_getCode` at the Ethereum gateway literal `0x4F44…56A5` on BNB returns a 23,932-byte non-Axelar contract (impl getter returns 0) and on Arbitrum a 3,874-byte contract (impl getter reverts); recorded as a look-alike, not the gateway.
 
@@ -508,6 +548,11 @@ Additions of 2026-09-29:
 - **Samples** (read with `eth_getTransactionReceipt`): the three transactions of §9, item 16.
 - **Robinhood Chain:** §6 lists the addresses read with `eth_getCode` on 2026-09-29 (all `0x`, nonce 0) and the registry checked. The same registry confirms the gateway, GasService, ITS and Factory addresses of §4 for the seven chains.
 - **Checksum fix:** the Factory address was written with an invalid EIP-55 case; it is now `0x83a93500d23Fbc3e82B410aD07A6a9F7A0670D66` (same hex).
+
+Additions of 2026-10-30:
+
+- **Arc:** the registry commit `4100fa8b0f` (2026-10-29, "add arc amplifier and evm contracts") lists the §4a addresses. Each was confirmed with `eth_getCode` on Arc, the EIP-1967 impl slot, `owner()`, `contractId()` (recomputed as `keccak256` of `axelar-amplifier-gateway`, `axelar-gas-service`, `interchain-token-service`, `interchain-token-factory`), and the ITS wiring views (`gateway()`, `gasService()`, `interchainTokenFactory()`, `chainName()` = `arc`). The Amplifier selectors and the §1.6 topics were found by `PUSH4`/`PUSH32` scan of the Arc gateway impl.
+- **ITS owner:** `OwnershipTransferred(address)` log on the Ethereum ITS at block 25,473,697 (2026-07-06); the new owner is the address that the registry names `AxelarServiceGovernance`.
 
 Additional sources (2026-09-29): [`axelar-gmp-sdk-solidity` `IBaseAmplifierGateway.sol`](https://github.com/axelarnetwork/axelar-gmp-sdk-solidity/blob/main/contracts/interfaces/IBaseAmplifierGateway.sol) · [`axelar-contract-deployments` `axelar-chains-config/info/mainnet.json`](https://github.com/axelarnetwork/axelar-contract-deployments/blob/main/axelar-chains-config/info/mainnet.json).
 

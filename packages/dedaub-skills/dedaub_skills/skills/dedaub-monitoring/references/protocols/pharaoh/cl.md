@@ -1,6 +1,6 @@
 # Pharaoh CL (Concentrated Liquidity + DLMM) — Topics, Selectors, Addresses (Avalanche C-Chain)
 
-**Status:** Verified — all addresses confirmed via `eth_getCode` on Avalanche C-Chain (43114); absent (0x) on all other target chains (Ethereum 1, Base 8453, BNB 56, Arbitrum 42161, Optimism 10, Polygon 137).
+**Status:** Verified — all addresses confirmed via `eth_getCode` on Avalanche C-Chain (43114); absent (0x) on all other target chains (Ethereum 1, Base 8453, BNB 56, Arbitrum 42161, Optimism 10, Polygon 137). Re-checked on 2026-10-30: the AccessHub impl rotated to `0x0339fc80…` (EIP-1967 slot read live).
 **Sources:** [Pharaoh docs](https://docs.phar.gg/pages/contract-addresses) · [GitHub: PharaohExchange/pharaoh-contracts](https://github.com/PharaohExchange/pharaoh-contracts) · live `eth_getLogs` cross-checks on Avalanche C-Chain block ~87,487,235.
 **Last verified:** 2026-06-08
 
@@ -198,7 +198,7 @@ All addresses verified via `eth_getCode` returning non-empty bytecode.
 
 | Contract | Address | Notes |
 |----------|---------|-------|
-| AccessHub | `0x3176f6E4Be2448C53EDD59C27651EDFaA74bf483` | EIP-1967 transparent proxy; impl `0xe5be021d769b3d51655ea972e5d80ee942a17508` (2026-10; was `0x97301276…` at 2026-06); admin = ProxyAdmin `0x3B91972c…` |
+| AccessHub | `0x3176f6E4Be2448C53EDD59C27651EDFaA74bf483` | EIP-1967 transparent proxy; impl `0x0339fc8096fb55b8b1b4867efd0447793e62fc90` (read 2026-10-30; was `0xe5be021d…` earlier in 2026-10 and `0x97301276…` at 2026-06); admin = ProxyAdmin `0x3B91972c…` |
 | ProxyAdmin | `0x3B91972c1Ff63296cb824a30997C7e4a982B7ee6` | Owner = Pharaoh Team Multisig |
 | Pharaoh Team Multisig | `0xd1b27ccAF2A4dDcA0Ac32181374C70282492d843` | Governance |
 | Pharaoh Timelock | `0x12d54ad6daf65d55b029df1b34b260c68fc0ddcf` | Governance timelock |
@@ -245,7 +245,7 @@ Pharaoh Exchange is **Avalanche C-Chain only**. Every address in §3 returns `0x
 
 | Contract | Pattern | Proxy address | Implementation |
 |----------|---------|---------------|----------------|
-| AccessHub | **EIP-1967 transparent** | `0x3176f6E4Be2448C53EDD59C27651EDFaA74bf483` | `0xe5be021d769b3d51655ea972e5d80ee942a17508` (24 525-byte impl, read 2026-10; previous impl `0x97301276a873207d34ccdf0eb6584c8189d0dd44`) |
+| AccessHub | **EIP-1967 transparent** | `0x3176f6E4Be2448C53EDD59C27651EDFaA74bf483` | `0x0339fc8096fb55b8b1b4867efd0447793e62fc90` (24 545-byte impl, read 2026-10-30; previous impls `0xe5be021d769b3d51655ea972e5d80ee942a17508`, `0x97301276a873207d34ccdf0eb6584c8189d0dd44`) |
 | DLMMPair (×14) | **EIP-1167 minimal proxy** (clone) | each pair address | `0xF41253C1258A7A3c291E695158267b173c26d710` |
 | RamsesV3Factory | Not a proxy | `0xAE6E5c62328ade73ceefD42228528b70c8157D0d` | N/A — EIP-1967 impl slot = 0x0 |
 | NFPM | Not a proxy | `0x0B4478e810D48B5882D4019D435A2f864Bab4F39` | N/A — EIP-1967 impl slot = 0x0 |
@@ -253,7 +253,7 @@ Pharaoh Exchange is **Avalanche C-Chain only**. Every address in §3 returns `0x
 | DLMMFactory | Not a proxy | `0xEb480050b016f6c6d45203D2346B68bDDDa23D4D` | N/A |
 
 **AccessHub proxy notes:**
-- EIP-1967 impl slot (`0x3608...bbc`) = `0xe5be021d769b3d51655ea972e5d80ee942a17508` (read 2026-10; upgraded from `0x97301276…` since 2026-06 — watch `Upgraded(address)` `0xbc7cd75a…` on the proxy)
+- EIP-1967 impl slot (`0x3608...bbc`) = `0x0339fc8096fb55b8b1b4867efd0447793e62fc90` (read 2026-10-30; upgraded from `0x97301276…` and then `0xe5be021d…` since 2026-06 — watch `Upgraded(address)` `0xbc7cd75a…` on the proxy)
 - EIP-1967 admin slot = `0x3B91972c1Ff63296cb824a30997C7e4a982B7ee6` (OZ ProxyAdmin → transparent proxy, not UUPS)
 - EIP-1967 beacon slot = `0x0` (not a beacon proxy)
 - `ProxyAdmin` (`0x3B91972c...`) owner = Pharaoh Team Multisig (`0xd1b27cc...`)
@@ -371,7 +371,7 @@ PHARAOH_DLMM_COLLECT_PROTO  = b"\x3f\x41\xa5\xdd\xc5\x37\x01\xcc\x7d\xb5\x77\xad
 | `eth_getLogs` — Swap topic0 on WAVAX/USDC pool `0xf01449...`, blocks 87485235–87487235 | 239 Swap logs with topic0 `0xc42079f9...` ✓ |
 | `eth_getLogs` — NFPM `0x0B4478...`, blocks 87482317–87487317 | IncreaseLiquidity, DecreaseLiquidity, Collect, ERC-721 Transfer all confirmed ✓ |
 | `eth_getLogs` — DLMM pairs, blocks 87482317–87487317 | Swap (`0xad7d6f97...`) and CollectedProtocolFees (`0x3f41a5dd...`) confirmed ✓ |
-| EIP-1967 impl / admin slot on AccessHub | impl `0xe5be021d769b3d51655ea972e5d80ee942a17508`, admin `0x3B91972c…` (transparent; read 2026-10) |
+| EIP-1967 impl / admin slot on AccessHub | impl `0x0339fc8096fb55b8b1b4867efd0447793e62fc90`, admin `0x3B91972c…` (transparent; read 2026-10-30) |
 | `factory.accessHub()` | Returns `0x3176f6E4...` (AccessHub proxy) ✓ |
 | `DLMMFactory.getNumberOfLBPairs()` | 14 ✓ |
 | NFPM `totalSupply()` | 101,857 positions minted |

@@ -1,7 +1,7 @@
 # Topaz v3 / Slipstream (Concentrated Liquidity) — Compressed Reference (BNB Chain, id 56)
 
-**Status:** topic0/selectors keccak'd from `topazdex/topaz-slipstream` source; addresses + wiring re-verified on-chain vs `bsc-rpc.publicnode.com` on 2026-06-05.
-**Scope:** the **Uniswap-V3-style concentrated-liquidity** product (an **Aerodrome Slipstream fork**): CLFactory, CLPool, CLGauge, NonfungiblePositionManager, SwapRouter, quoters, fee modules. The **ve(3,3) governance is shared** with v2 and documented in [`amm.md`](amm.md) (one `Voter`/`VotingEscrow`/`Minter` back both products). Topaz is BNB-only.
+**Status:** topic0/selectors keccak'd from `topazdex/topaz-slipstream` source; addresses + wiring re-verified on-chain vs `bsc-rpc.publicnode.com` on 2026-06-05. Re-checked on 2026-10-30: BNB addresses unchanged; `NPM.tokenDescriptor()` moved to `0x239B…498A`; `allPoolsLength()` = 122. The same CL code now also runs on Robinhood Chain, Base, Ethereum and Arc at different addresses — see [`multichain.md`](multichain.md).
+**Scope:** the **Uniswap-V3-style concentrated-liquidity** product (an **Aerodrome Slipstream fork**): CLFactory, CLPool, CLGauge, NonfungiblePositionManager, SwapRouter, quoters, fee modules. The **ve(3,3) governance is shared** with v2 and documented in [`amm.md`](amm.md) (one `Voter`/`VotingEscrow`/`Minter` back both products). This file lists the BNB hub addresses; the spoke CL deployments (Robinhood, Base, Ethereum, Arc) are in [`multichain.md`](multichain.md).
 **Key facts:** CL **events are byte-identical to Uniswap V3** — disambiguate Topaz by pool provenance, not topic0. CL keys pools by **`tickSpacing`** (default fee derived), so `PoolCreated` and the struct-bearing selectors (`mint`, `exactInputSingle`, …) **differ from Uniswap V3**. CL pools **and** CLGauges are **EIP-1167 clones**.
 
 ---
@@ -143,10 +143,13 @@
 0x9B63CA87919617d042A89663492dB3c8686e0CaE -> SwapRouter                exactInput[Single]/exactOutput[Single]; factory()→CLFactory ✓
 0x7CCB89bB9BdEF68688F39a2c22d249fD1D9759f1 -> QuoterV2                  quote v3 swaps (revert-and-decode, non-view) ✓
 0x47c3570b90e7234FE695Ad5F1bE69E21fe1a9ee2 -> MixedRouteQuoterV1        quote routes mixing v2 (stable/volatile) + v3 hops ✓
-0x81aCc35240D19948a56b8b68BcC8706F90baBAb5 -> NFTPositionDescriptor (V1)  LIVE — NPM.tokenDescriptor() returns THIS ✓
-0xBa4C4f5Ca809C21286ff1a872b3c0CFb57AfE904 -> NFTPositionDescriptor (new) deployed (updated art) but NPM not (yet) repointed to it ✓
-0x50f9756f631266686b9A7EBDF55998dB3dA5ca0a -> NFTDescriptor (library) ✓
-0x21C9257dFCdf04154D34dF5A2204B9402Ef31d9a -> NFTSVG (library) ✓
+0x239BD25E86e4A3B931B1C6Cf7849C27cA9f0498A -> NonfungibleTokenPositionDescriptor  LIVE — NPM.tokenDescriptor() returns THIS (10,369 B; read 2026-10-30) ✓
+0xdE9A5d34A9fe0177544E8a70C691c3f1F9c9c63a -> NFTDescriptor (library of the live descriptor) ✓
+0x2427C741f45E7e232e06fd2b60279A771d634Fb0 -> NFTSVG (library of the live descriptor) ✓
+0x81aCc35240D19948a56b8b68BcC8706F90baBAb5 -> NFTPositionDescriptor (V1)  archived — no longer the NPM descriptor ✓
+0xBa4C4f5Ca809C21286ff1a872b3c0CFb57AfE904 -> NFTPositionDescriptor (interim) deployed, never wired ✓
+0x50f9756f631266686b9A7EBDF55998dB3dA5ca0a -> NFTDescriptor (library, V1 era) ✓
+0x21C9257dFCdf04154D34dF5A2204B9402Ef31d9a -> NFTSVG (library, V1 era) ✓
 0xA0462a52af4f8cbF7766Efbba75355B30b6BCCe2 -> CustomSwapFeeModule       per-pool flat swap-fee override (MAX_FEE 30000 pips = 3%) ✓
 0x3bad7F96cd1b51CE86e12C42541Ac7d559A78582 -> CustomUnstakedFeeModule   unstaked-position fee override (MAX 500000 pips=50%; default 100000=10%) ✓
 0x656cf5d2f1A70177E011e2c27DeafBeE4C7B0541 -> DynamicSwapFeeModule      TWAP-volatility-scaled swap fees ✓
@@ -170,7 +173,7 @@ Per-pool overrides via the fee modules; read live with `CLFactory.getSwapFee(poo
 - **CLGauges: EIP-1167 clones** of `CLGauge (impl) 0xc2f7…8b97`, created by `Voter` via `CLGaugeFactory` (verified: live CL gauge `0x66f9…9cd3` is the 45-byte stub embedding the impl). *(Contrast v2 Gauges, which are full deploys — see [`amm.md`](amm.md) §4.)*
 - **CLFactory, NPM, SwapRouter, quoters, fee modules, descriptor libs: plain immutable deploys** — no EIP-1967/UUPS/beacon proxy.
 - **Upgrade path = `FactoryRegistry` (shared with v2):** `CLFactory` is registered in `FactoryRegistry`; a new CL factory generation can be approved by the admin without migrating existing CL pools — so "old vs new" appears as coexisting factory generations, not impl-slot upgrades. See [`amm.md`](amm.md) §4.
-- **"Old vs new" descriptor nuance:** `NPM.tokenDescriptor()` currently returns the **V1** descriptor `0x81aCc…bAb5`; an updated descriptor `0xBa4C…E904` is deployed but the owner has not repointed NPM to it via `setTokenDescriptor` (would emit `TokenDescriptorChanged 0x9a72f609…`). Cosmetic only (affects `tokenURI` art, not accounting).
+- **"Old vs new" descriptor nuance:** `NPM.tokenDescriptor()` now returns `0x239B…498A` (read 2026-10-30). The owner repointed it from the V1 descriptor `0x81aCc…bAb5` with `setTokenDescriptor` (emits `TokenDescriptorChanged 0x9a72f609…`). The interim descriptor `0xBa4C…E904` was never wired. Cosmetic only (affects `tokenURI` art, not accounting).
 
 See `references/proxies.md` for EIP-1167 detection.
 
@@ -205,6 +208,6 @@ swaprouter= '\x9b63ca87919617d042a89663492db3c8686e0cae'
 
 ## 7. Verification & sources
 - topic0/selectors: keccak (pycryptodome) over canonical signatures parsed from [`topazdex/topaz-slipstream`](https://github.com/topazdex/topaz-slipstream); cross-validated against `uniswap/v3.md` (identical CL core: `swap 0x128acb08`, `decreaseLiquidity 0x0c49ccbe`, `collect 0xfc6f7865`) and `aerodrome/slipstream.md`.
-- on-chain (BSC, 2026-06-05): all §3 addresses have bytecode; `CLFactory.poolImplementation→CLPool impl`, `voter→Voter`, `allPoolsLength=50`, `tickSpacingToFee` map; `NPM.factory→CLFactory`, `name="Topaz CL Position"`, `symbol="TOPAZ-CL-POS"`, `WETH9→WBNB`, `tokenDescriptor→V1 0x81aCc…`; `SwapRouter.factory→CLFactory`; CL pool & CL gauge clone bytecode embed their impls; live `eth_getLogs` saw `Swap`/`Mint`/`Burn`/`Collect` (pool) and `Deposit`/`Withdraw`/`ClaimRewards` (CL gauge). `PoolCreated` rare → verified by canonical-source keccak (node prunes old logs).
+- on-chain (BSC, 2026-06-05): all §3 addresses have bytecode; `CLFactory.poolImplementation→CLPool impl`, `voter→Voter`, `allPoolsLength=50`, `tickSpacingToFee` map; `NPM.factory→CLFactory`, `name="Topaz CL Position"`, `symbol="TOPAZ-CL-POS"`, `WETH9→WBNB`, `tokenDescriptor→0x239B…498A` (2026-10-30; was V1 `0x81aCc…` on 2026-06-05); `SwapRouter.factory→CLFactory`; CL pool & CL gauge clone bytecode embed their impls; live `eth_getLogs` saw `Swap`/`Mint`/`Burn`/`Collect` (pool) and `Deposit`/`Withdraw`/`ClaimRewards` (CL gauge). `PoolCreated` rare → verified by canonical-source keccak (node prunes old logs).
 - Addresses cross-checked vs [`agent-skill/references/addresses.md`](https://github.com/topazdex/agent-skill) + [docs.topazdex.com/docs/contracts](https://topazdex.com/docs/contracts).
 - Audit: [Shieldify Security — Topaz DEX Security Review](https://github.com/shieldify-security/audits-portfolio/blob/main/reports/Topaz-Dex-Security-Review.pdf) (incl. the Slipstream CL modules). No known Topaz exploit/incident as of 2026-06-05.

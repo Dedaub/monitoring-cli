@@ -1,6 +1,6 @@
 # Wormhole Native Token Transfers (NTT) — Topics, Selectors, Addresses (Ethereum, Base, Arbitrum, Optimism, Polygon, BNB, Avalanche, Robinhood Chain; Arc helpers only)
 
-**Status:** verified on 2026-09-29 against live RPC on all eight chains, `wormhole-foundation/native-token-transfers` (`evm/src/` on `main` and the tags `v1.0.0+evm`, `v1.2.0+evm`, `v2.0.0+evm`), `wormholelabs-xyz/example-ntt-with-executor-evm`, the Executor deployment registry and the Wormholescan NTT API (`api.wormholescan.io/api/v1/native-token-transfer/token-list` and `/ntt/token/{chain}/{token}`). Topics and selectors recomputed as `keccak256(signature)`; manager addresses existence-checked with `eth_getCode`; `token()`, `getMode()` and `owner()` read live.
+**Status:** verified on 2026-09-29 against live RPC on all eight chains, `wormhole-foundation/native-token-transfers` (`evm/src/` on `main` and the tags `v1.0.0+evm`, `v1.2.0+evm`, `v2.0.0+evm`), `wormholelabs-xyz/example-ntt-with-executor-evm`, the Executor deployment registry and the Wormholescan NTT API (`api.wormholescan.io/api/v1/native-token-transfer/token-list` and `/ntt/token/{chain}/{token}`). Topics and selectors recomputed as `keccak256(signature)`; manager addresses existence-checked with `eth_getCode`; `token()`, `getMode()` and `owner()` read live. Re-checked on 2026-10-30: four Robinhood Chain NTT managers added from the Wormholescan token list (SPY, WETH, ONE, SHERWOOD; §4.1), checked live.
 **Scope:** the events and functions that **every NTT token emits** (the `NttManager` and the `WormholeTransceiver`), the NTT-with-Executor helpers, and a list of major NTT tokens with their managers per chain. NTT is live on **all eight target chains, Robinhood Chain (4663) included**. Topics and selectors are chain-agnostic; there is **no single NTT address list**: each token deploys its own manager and transceiver on each chain.
 
 NTT moves a token natively. Each token has one `NttManager` per chain, in **LOCKING** mode (escrow on the token's home chain) or **BURNING** mode (burn on send, mint on receive). The manager sends through one or more **transceivers** (almost always one `WormholeTransceiver`; wstETH also uses an Axelar transceiver with a 2-of-2 threshold).
@@ -204,8 +204,12 @@ Managers from the Wormholescan NTT API, confirmed on chain with `token()` (token
 | `0x0b6836942755df095721e0aee40145b36be09b55` | `0x1f8be8355dcce39e390bb74b70d70bba514fdeb9` (𝕏) | B | 3 / 1 | `getPeer(2)` = Ethereum manager `0x076a2fdfff9c45479c9ca7ae2ae063d2a3795d1c`; transceiver `0x352874cd039bd2f8e23ed203941c684912009d43` (`getTransceiverType()` = `"wormhole"`); owner `0x1edd9019087a09251bea85d9245712585f14b1fd` |
 | `0x45f55b46689402583073ff227b6ac20520052a24` | `0x39dbed3a2bd333467115de45665cc57f813c4571` (PONS) | L | 1 / 0 | sent through the Executor (`RequestForExecution` in the same transaction) |
 | `0x72e4fcaffff5b64811a7a49fe67cfb30d64c798f` | `0x51a5853ba953f092c9466516d768ecf056dbc62e` (MOS) | B | 0 / 1 | |
+| `0x963835c20884de59e6988030eb49d4d0ea24a26d` | `0x117cc2133c37b721f49de2a7a74833232b3b4c0c` (SPY, Robinhood stock token) | L | not in window | Listed 2026-10-30; v2.0.0; peer on Hydration (Wormhole id 73); transceiver `0x283b14b5dd352e32154df014ea96834f395e04b6`; owner `0xd557aeaf1e0cb3d226bff3b7a10c2cda9da081e7` |
+| `0xb1a2abcbc1fa276212f6ed239645161deea9861a` | `0x0bd7d308f8e1639fab988df18a8011f41eacad73` (WETH) | L | not in window | Listed 2026-10-30; v2.0.0; peers on Ethereum and Hydration; transceiver `0x1352881a04cb9f9f5fb8442bc925e99ec15d3642`; owner `0xd557aeaf1e0cb3d226bff3b7a10c2cda9da081e7` |
+| `0xb6394987ae24800bf714570cd4128b7b9a1289b8` | `0x0336cd0ab1bba42369b98934c4972dd7c501c682` (ONE) | B | not in window | Listed 2026-10-30; v2.0.1; the token list also names Sui for this token; no peer in the API record; transceiver `0x9bf599c14bed5629a95d23e8ec2f2aaea1649da3` |
+| `0x463bebf2c3d0b83e6e8f2fa2f52df9c10143e3f4` | `0xd4dc6b48ad73ec51e71d9b8f65568f88609b92c1` (SHERWOOD) | L | not in window | Listed 2026-10-30; v2.0.0; peer on Solana; transceiver `0xcea1fbe294af1691517cf1211d5d98f2ede4c7be` |
 
-These three are measured, not listed: the Wormholescan token list has no `robinhood` platform for any of the tokens checked. The Core on Robinhood carried 4 messages in the window, all from NTT transceivers.
+The first three rows were measured in the pinned window. On 2026-10-30 the Wormholescan token list has a `robinhood` platform for SPY, PONS, MOS, WETH, DEGEN, ONE and SHERWOOD; `ntt/token/72/{token}` gives the managers of the last four rows (DEGEN returns no record). Each new manager was checked live: 209-byte EIP-1967 proxy, `token()` and `getMode()` (`0x4b4fd03b`; 0 = LOCKING, 1 = BURNING) as listed. The Core on Robinhood carried 4 messages in the window, all from NTT transceivers. Arc: the token list has no Arc NTT manager on 2026-10-30.
 
 ### 4.2 NTT-with-Executor and receive helpers (Executor registry)
 
@@ -236,7 +240,7 @@ All have code (v1 3,559 B, v2 4,163 B, receive helpers 862 B). The Ethereum v1 h
 | Polygon PoS | 137 | 5 | 7 | 24 / 46 | ✅ |
 | BNB Smart Chain | 56 | 4 | 14 | 56 / 113 | ✅ |
 | Avalanche C-Chain | 43114 | 6 | 2 | 24 / 21 | ✅ |
-| **Robinhood Chain** | 4663 | 72 | 3 | 4 / 2 | ✅ |
+| **Robinhood Chain** | 4663 | 72 | 3 (7 managers listed on 2026-10-30, §4.1) | 4 / 2 | ✅ |
 | **Arc** | 5042 | 71 | not measured (no Core message in the ~7 days to 2026-10-05) | — | ✅ |
 
 ---
@@ -341,6 +345,10 @@ BNB_NTT_WITH_EXECUTOR_V2      = '\x83f5c7b03bbbe20fe2e39312b957d86dc7c3dee2'
 AVAX_NTT_WITH_EXECUTOR_V2     = '\xf1aa9693265e0ba892c4a7ae77591424eeed5ce9'
 RH_NTT_WITH_EXECUTOR_V2       = '\x0ada5f1289ee5ec07e397ee86db6bc861ce0a728'
 ARC_NTT_WITH_EXECUTOR_V2      = '\xbd9e400d4a64dfef7b51666d751a29ccbff4e97c'
+RH_NTT_MANAGER_SPY            = '\x963835c20884de59e6988030eb49d4d0ea24a26d'
+RH_NTT_MANAGER_WETH           = '\xb1a2abcbc1fa276212f6ed239645161deea9861a'
+RH_NTT_MANAGER_ONE            = '\xb6394987ae24800bf714570cd4128b7b9a1289b8'
+RH_NTT_MANAGER_SHERWOOD       = '\x463bebf2c3d0b83e6e8f2fa2f52df9c10143e3f4'
 ```
 
 ---

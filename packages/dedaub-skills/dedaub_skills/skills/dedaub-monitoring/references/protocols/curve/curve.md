@@ -1,6 +1,6 @@
 # Curve Finance — Topics, Selectors, Addresses (Ethereum, Arbitrum, Optimism, Base, BSC, Polygon, Gnosis, Avalanche)
 
-**Status:** verified against live RPC on all eight listed chains and the canonical `curvefi` Vyper source repos on **2026-06-02**. Event topic0 hashes and function selectors were recomputed locally as `keccak256(canonical signature)` (deterministic; 69/69 topics and 56/56 selectors re-checked, cross-checked against live `eth_getLogs`). **Every address was existence-checked with `eth_getCode`** on each chain it is claimed on (all resolve), every listed proxy slot was read live, and the `AddressProvider` id-map was read on-chain. The companion stablecoin/lending file is [crvusd.md](crvusd.md) (crvUSD mint markets + LlamaLend + scrvUSD); see [README.md](README.md). Full method and sources are in §14.
+**Status:** verified against live RPC on all eight listed chains and the canonical `curvefi` Vyper source repos on **2026-06-02**. Event topic0 hashes and function selectors were recomputed locally as `keccak256(canonical signature)` (deterministic; 69/69 topics and 56/56 selectors re-checked, cross-checked against live `eth_getLogs`). **Every address was existence-checked with `eth_getCode`** on each chain it is claimed on (all resolve), every listed proxy slot was read live, and the `AddressProvider` id-map was read on-chain. The companion stablecoin/lending file is [crvusd.md](crvusd.md) (crvUSD mint markets + LlamaLend + scrvUSD); see [README.md](README.md). Full method and sources are in §14. Re-checked on 2026-10-30: Curve now also has the three NG factories on **Robinhood Chain (4663)** and **Arc (5042)** (§9d); the Robinhood/Arc Stableswap-NG factory is a newer build with new pool-deploy topics (§1.6).
 **Scope:** the Curve AMM exchange protocol across seven EVM chains, its factories/registries, the Curve DAO/tokenomics stack (Ethereum), and an adjacent crvUSD pointer. Topics + selectors are chain-agnostic; addresses are network-specific.
 
 Curve is **not one ABI** — it is a family of pool implementations deployed over six years, each with its own event and function signatures. The single most important fact for monitoring Curve: **StableSwap pools use `int128` coin indices, CryptoSwap pools (tricrypto/twocrypto) use `uint256` indices**, and the "NG" (new-generation) rewrites changed event field layouts again. The *same* logical event name (`TokenExchange`, `AddLiquidity`, …) therefore hashes to *different* `topic0` values across families — you must match on `(topic0, pool-family)`, never on event name alone.
@@ -109,6 +109,8 @@ NG pools are ERC-20 themselves, so they also emit standard `Transfer`/`Approval`
 | `0x656bb34c20491970a8c163f3bd62ead82022b379c3924960ec60f6dbfc5aab3b` | `LiquidityGaugeDeployed(address pool, address gauge)` | most factories |
 | `0x1d6247eae69b5feb96b30be78552f35de45f61fdb6d6d7e1b08aae159b6226af` | `LiquidityGaugeDeployed(address pool, address token, address gauge)` | old crypto factory (3-arg) |
 | `0xcc6afdfec79da6be08142ecee25cf14b665961e25d30d8eba45959be9547635f` | `BasePoolAdded(address base_pool)` | stableswap factories |
+| `0x872140766e2e4bb137f652bf2cef8c88d39567afd463381c21ec9600f853d46e` | `PlainPoolDeployed(address pool, address[] coins, uint256 A, uint256 fee, address deployer)` | **newer** Stableswap-NG factory (Robinhood / Arc `0x8271…E8aD`) — adds the pool address; replaces `0xd1d60d46…` there |
+| `0x6ace1f9dc96f8bcd51376ae8365deae6d1dce68d563d7ba623493cdddc0a0580` | `MetaPoolDeployed(address pool, address coin, address base_pool, uint256 A, uint256 fee, address deployer)` | **newer** Stableswap-NG factory (Robinhood / Arc) — replaces `0x01f31cd2…` there |
 
 ### 1.7 AddressProvider / MetaRegistry, ERC-20, DAO events
 
@@ -399,6 +401,24 @@ On-chain verified via `bsc-rpc.publicnode.com`. The classic `AddressProvider` ex
 
 **CRV: none** — curve-js lists `0x8Ee73c…0415` (a Base address) which has no code on BSC; treat as unset. No MetaRegistry / classic registry on BSC.
 
+### 9d. Robinhood Chain (chain ID 4663) & Arc (chain ID 5042) — NG factories only
+
+Verified 2026-10-30 via `eth_getCode` and factory views (`pool_count()`, `admin()`, `fee_receiver()`). Addresses from the DefiLlama Curve config; Curve's own front-end SDK does not list these chains yet. Same address and same code hash on both chains.
+
+| Role | Address | Size | Robinhood | Arc |
+|------|---------|------|-----------|-----|
+| Stableswap-NG factory (newer build, version string "1.0.0") | `0x8271e06E5887FE5ba05234f5315c19f3Ec90E8aD` | 13,996 B | `pool_count` 73 | `pool_count` 0 |
+| Twocrypto-NG factory (version "2.0.0") | `0xe7FBd704B938cB8fe26313C3464D4b7B7348c88C` | 5,311 B | 6 | 0 |
+| Tricrypto-NG factory (version "2.0.0") | `0x6E28493348446503db04A49621d8e6C9A40015FB` | 5,019 B | 6 | 0 |
+| Factory `admin()` | `0xabc336d4c71ad275695744d32ddb1d8266db1cbf` | **EOA** (no code) | same | same |
+| Factory `fee_receiver()` | `0x193110ce1542d7371e1515bd6a2e470fdefc310d` | 862 B | same | same |
+| SSNG `pool_implementations(0)` / `math_implementation()` / `views_implementation()` | `0xfc687efafed297b765edecf8179c32195597c2df` / `0xe460dec242bc0a1a364c250a9d2f731d8d923650` / `0xc9459a955a885467f01ccc531c51dbcc957993c0` | 24,031 / 3,034 / 12,408 B | ✓ | ✓ |
+| Wrapped native | Robinhood WETH `0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73`; Arc `0x128cC466B61f542da60c70e3aA11c10e19B84EDB` | | | |
+
+**Not deployed on Robinhood or Arc:** AddressProvider, AddressProvider-NG, MetaRegistry, the gauge factory `0xabC000…`, CurveRouterNG (`0x0DCD…`, `0x16c6…`, `0x4531…`), Deposit & Stake, CRV, crvUSD (no code at those addresses). These chains are factory-only, like BSC.
+
+**Event differences.** The Robinhood/Arc Stableswap-NG factory emits the newer `PlainPoolDeployed` `0x87214076…` (72 logs seen on Robinhood) and `MetaPoolDeployed` `0x6ace1f9d…` (§1.6), not `0xd1d60d46…` / `0x01f31cd2…`. Pools still emit the NG pool topics (`TokenExchange` `0x8b3e96f2…`, `AddLiquidity` `0x189c623b…`, `RemoveLiquidity` `0x347ad828…`; seen live). The Tricrypto-NG factory build has no gauge-deploy path (`LiquidityGaugeDeployed` is absent from its bytecode).
+
 ---
 
 ## 9c. Cross-chain summary (presence matrix)
@@ -415,8 +435,10 @@ On-chain verified via `bsc-rpc.publicnode.com`. The classic `AddressProvider` ex
 | Gnosis (100) | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | — | Child | `0DCD…` |
 | Avalanche (43114) | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | — | Child | `0DCD…` |
 | BSC (56) | ✓ ² | ✓ | ✓ | ✓ | ✓ | ✓ ³ | ✓ | Child | `A72C…` |
+| Robinhood (4663) | — | — | `8271…` ⁴ | `6E28…` | `e7FB…` | — | — | — | — |
+| Arc (5042) | — | — | `8271…` ⁴ | `6E28…` | `e7FB…` | — | — | — | — |
 
-¹ Base TwoCrypto-NG factory is the chain-specific `0xc9Fe…b665F`, **not** the shared `0x98EE…AF7F`. ² BSC AddressProvider exists but its classic registry ids are unpopulated (factory-only chain). ³ BSC OldMeta factory is deployed but `pool_count` 0.
+¹ Base TwoCrypto-NG factory is the chain-specific `0xc9Fe…b665F`, **not** the shared `0x98EE…AF7F`. ² BSC AddressProvider exists but its classic registry ids are unpopulated (factory-only chain). ³ BSC OldMeta factory is deployed but `pool_count` 0. ⁴ Newer SSNG factory build with different pool-deploy topics; see §9d.
 
 ### 9c.1 Per-chain fee receiver (PoolProxy / fee-burn destination)
 
@@ -432,6 +454,7 @@ Each chain routes pool admin fees to a fee receiver (read from the SSNG factory 
 | Gnosis | `0xbb7404f9965487a9dde721b3a5f0f3ccfa9aa4c5` |
 | Avalanche | `0x06534b0bf7ff378f162d4f348390bda53b15fa35` |
 | BSC | `0x98b4029cabef7fd525a36b0bf8555ec1d42ec0b6` |
+| Robinhood, Arc | `0x193110ce1542d7371e1515bd6a2e470fdefc310d` (same on both) |
 
 ---
 
@@ -529,6 +552,8 @@ TOPIC_SSNG_APPLY_NEW_FEE             = '\x750d10a7f37466ce785ee6bcb604aac543358d
 -- Factory pool-creation events
 TOPIC_NG_PLAIN_POOL_DEPLOYED         = '\xd1d60d4611e4091bb2e5f699eeb79136c21ac2305ad609f3de569afc3471eecc'
 TOPIC_OLD_PLAIN_POOL_DEPLOYED        = '\x5b4a28c940282b5bf183df6a046b8119cf6edeb62859f75e835eb7ba834cce8d'
+TOPIC_NG2_PLAIN_POOL_DEPLOYED        = '\x872140766e2e4bb137f652bf2cef8c88d39567afd463381c21ec9600f853d46e'  -- newer SSNG factory (Robinhood/Arc)
+TOPIC_NG2_META_POOL_DEPLOYED         = '\x6ace1f9dc96f8bcd51376ae8365deae6d1dce68d563d7ba623493cdddc0a0580'  -- newer SSNG factory (Robinhood/Arc)
 TOPIC_META_POOL_DEPLOYED             = '\x01f31cd2abdeb4e5e10ba500f2db0f937d9e8c735ab04681925441b4ea37eda5'
 TOPIC_TRICRYPTO_POOL_DEPLOYED        = '\xa307f5d0802489baddec443058a63ce115756de9020e2b07d3e2cd2f21269e2a'
 TOPIC_TWOCRYPTO_POOL_DEPLOYED        = '\x1bfca87cdf324c1e496fa70ab97c7d3413172ca3497c3f5cb2098e31f0686bf7'
@@ -652,6 +677,14 @@ BSC_TRICRYPTO_NG_FACTORY            = '\xc55837710bc500f1e3c7bb9dd1d51f7c5647e65
 BSC_OLD_CRYPTO_FACTORY              = '\xbd5fbd2fa58cb15228a9abdac9ec994f79e3483c'
 BSC_OLD_METAPOOL_FACTORY            = '\xefde221f306152971d8e9f181bfe998447975810'
 BSC_ROUTER                          = '\xa72c85c258a81761433b4e8da60505fe3dd551cc'
+
+-- ===== Robinhood Chain (4663) and Arc (5042) — same addresses, factory-only =====
+ROBIN_STABLESWAP_NG_FACTORY         = '\x8271e06e5887fe5ba05234f5315c19f3ec90e8ad'
+ROBIN_TWOCRYPTO_NG_FACTORY          = '\xe7fbd704b938cb8fe26313c3464d4b7b7348c88c'
+ROBIN_TRICRYPTO_NG_FACTORY          = '\x6e28493348446503db04a49621d8e6c9a40015fb'
+ARC_STABLESWAP_NG_FACTORY           = '\x8271e06e5887fe5ba05234f5315c19f3ec90e8ad'
+ARC_TWOCRYPTO_NG_FACTORY            = '\xe7fbd704b938cb8fe26313c3464d4b7b7348c88c'
+ARC_TRICRYPTO_NG_FACTORY            = '\x6e28493348446503db04a49621d8e6c9a40015fb'
 ```
 
 ---
@@ -662,6 +695,7 @@ How the constants in this doc were produced:
 
 - **Event topic0 hashes and function selectors:** computed locally with Foundry `cast keccak` (full keccak256 of the canonical event signature) and `cast sig` (`keccak256(sig)[0:4]`). Canonical signatures were read directly from the `curvefi` Vyper source (see file list below). Every hash/selector in §1, §2, and §13 was machine-computed, not transcribed — these are ground truth.
 - **The `int128` vs `uint256` index distinction, NG field layouts, and per-family event differences** were taken from the actual Vyper `event` declarations in source, then confirmed by the hash differing across families.
+- **Robinhood Chain / Arc (§9d, 2026-10-30):** factory addresses from the DefiLlama Curve config ([`projects/curve/contracts.json`](https://github.com/DefiLlama/DefiLlama-Adapters/blob/main/projects/curve/contracts.json)); `eth_getCode` on both chains (same sizes and hashes); `pool_count()`, `admin()`, `fee_receiver()`, implementation views read live; new pool-deploy topics found in the factory bytecode, recomputed locally, and seen in 72 `eth_getLogs` results on `https://rpc.mainnet.chain.robinhood.com`. `curvefi/curve-js` `network_constants.ts` has no entry for chain 4663 or 5042.
 - **Addresses (§3–§10, §13):** sourced from `curvefi/curve-js` `src/constants/network_constants.ts` (per-chain factories, router, CRV, crvUSD), the Curve readthedocs deployment page, and Etherscan labels — then **independently re-verified on-chain** via `cast` against `publicnode` RPCs on all eight chains incl BSC (originally 2026-05; **fully re-verified 2026-06-02** — every address resolves). Verified: Ethereum `AddressProvider.get_address(7)` = MetaRegistry `0xF98B…79fC` (`pool_count()` = 2272 as of 2026-06-02); CRV `symbol()` = `"CRV"` on every chain that has it; crvUSD `symbol()` = `"crvUSD"`; StableSwap-NG and Tricrypto-NG factories return live `pool_count()` (2026-06-02: Ethereum 906 / 122; Arbitrum 267 / 55; BSC 174 / 28); 3pool `coins(0)` = DAI. **Corrections surfaced by this check:** the `id 7 = MetaRegistry` rule holds **only on Ethereum** — on Arbitrum/Optimism/Base/Gnosis/Avalanche `get_address(7)` = `0x0` and on Polygon it maps elsewhere (§3); **BSC is factory-only** (AddressProvider present but registries unpopulated, and curve-js's BSC `crv` is a Base address with no code on BSC — §9b). Flagship pool addresses (§4.3) are `eth_getCode`-confirmed; the full crvUSD/LlamaLend/scrvUSD address set moved to [crvusd.md](crvusd.md).
 
 - **Re-evaluation pass (2026-06-02) — this revision.** Every address in the doc was `eth_getCode`-checked on each chain it is claimed on (**all resolve**); all 69 topic0 + 56 selectors recomputed (**all match**); proxy slots re-read (**all `0x0` — immutable confirmed**). Corrections folded in: (1) the header Status line (previously "addresses NOT RPC-verified") reconciled — they are verified; (2) the classic AddressProvider id-map read live and **ids 3/5/6 corrected** (3 = Metapool Factory, 5 = CryptoSwap Registry, 6 = Cryptopool Factory; the prior draft inverted 3/5); (3) added **AddressProvider-NG** `0x5ffe7FB8…` (8 chains), the **Root/Child gauge factory** `0xabC000…55bf5` (8 chains), per-chain **PoolProxy fee receivers** (§9c.1), the **NG math/views/gauge impls** + FeeCollector (§4.4), a cross-chain presence matrix (§9c), and a 2nd Ethereum **Exchange Router** `0x16c6521d…`; (4) **corrected the crvUSD lending factory** — the real OneWayLendingFactory is `0xeA6876DD…` (`market_count` 48), while the previously-listed `0x4F8846Ae…` is the crvUSD Stableswap pool factory (`pool_count` 29, AP id8); (5) split the crvUSD/LlamaLend/scrvUSD product line into the sibling [crvusd.md](crvusd.md).

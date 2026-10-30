@@ -1,14 +1,15 @@
 # Morpho — Protocol Reference Index
 
-Monitoring-grade references for Morpho across **Ethereum (1), Base (8453), BNB Smart Chain (56), Avalanche C-Chain (43114), Arbitrum One (42161), Optimism (10), Polygon PoS (137), Robinhood Chain (4663), Arc (5042)**. Verified against live RPC + canonical `morpho-org/*` repos + `@morpho-org/blue-sdk` on 2026-05-29; Robinhood Chain, Arc and the Midnight deployment added on 2026-10-05 from the `morpho-org/sdks` registry.
+Monitoring-grade references for Morpho across **Ethereum (1), Base (8453), BNB Smart Chain (56), Avalanche C-Chain (43114), Arbitrum One (42161), Optimism (10), Polygon PoS (137), Robinhood Chain (4663), Arc (5042)**. Verified against live RPC + canonical `morpho-org/*` repos + `@morpho-org/blue-sdk` on 2026-05-29; Robinhood Chain, Arc and the Midnight deployment added on 2026-10-05 from the `morpho-org/sdks` registry. Re-checked on 2026-10-30: Midnight topics/selectors added from `morpho-org/midnight` ([midnight.md](midnight.md)).
 
-Morpho is **three generations** of protocol, not a single linear `v1→v2→v3`. One file per generation (each covers its sub-components and follows the same section layout):
+Morpho is **three generations** of protocol, not a single linear `v1→v2→v3`. One file per generation (Gen 3 has two files: vaults and markets) (each covers its sub-components and follows the same section layout):
 
 | File | Generation | Components | Status |
 |------|-----------|------------|--------|
 | [optimizers.md](optimizers.md) | **Gen 1 — Optimizers** | Morpho-AaveV3 (ETH Optimizer), Morpho-Compound, Morpho-AaveV2 — P2P overlay on Aave/Compound | **Deprecated** (MIP-120). Ethereum only. Upgradeable proxies. |
 | [v1.md](v1.md) | **Gen 2 — Morpho V1** | **Morpho Blue** (immutable singleton lending primitive, "Markets V1") + **MetaMorpho** V1.0/V1.1 (ERC-4626 curated vaults, "Vaults V1") + periphery (AdaptiveCurveIRM, PublicAllocator, oracle factory, pre-liquidation, Bundler3, URD, MORPHO token) | **Live, dominant.** All 9 chains (Robinhood Chain and Arc: Blue + IRM + oracle/pre-liquidation factories, no MetaMorpho factory). Immutable. |
-| [v2.md](v2.md) | **Gen 3 — Morpho V2** | **Vaults V2** (new protocol-agnostic vault standard + adapters + registry) — *live*; **Markets V2 / "Midnight"** (intent-based fixed-rate/fixed-term primitive) — *deployed on Ethereum, Base, Robinhood Chain and Arc (re-checked 2026-10-05)* | Vaults V2 live on 8/9 chains (not BNB). Midnight addresses in v2.md §5; its topics are not documented yet (Morpho frames it as a new paradigm, not literally "Blue V2"). |
+| [v2.md](v2.md) | **Gen 3 — Morpho V2 (vaults)** | **Vaults V2** (protocol-agnostic vault standard + adapters + registry) | **Live** on 8/9 chains (not BNB). Immutable. §5 summarizes the Midnight addresses. |
+| [midnight.md](midnight.md) | **Gen 3 — Morpho V2 (markets)** | **Markets V2 / "Midnight"** — intent-based fixed-rate / fixed-maturity markets + mempool, ratifiers, authorizer, `BlueBuyCallbackFactory`, `MidnightBundlesV2` | **Live** on Ethereum, Base, Robinhood Chain, Arc. Immutable singleton per chain (24557 B, same code hash). Full topics/selectors (2026-10-30). |
 
 Each file follows the same section layout: **Topics** (chain-agnostic `topic0 = keccak256(event sig)`) → **Function signatures** (chain-agnostic 4-byte selectors) → **Addresses** (network-specific, one section per chain) → **Cross-chain summary** → **Proxies** → **Detection invariants & gotchas** → **Quick-copy bytea constants** → **Verification & sources**.
 
@@ -33,5 +34,5 @@ Each file follows the same section layout: **Topics** (chain-agnostic `topic0 = 
 - **Per-market / per-vault addresses are not enumerated** — Morpho is permissionless; markets and vaults number in the thousands. Discover them via factory events: `CreateMarket` (Morpho Blue), `CreateMetaMorpho` (MetaMorpho factories), `CreateVaultV2` (VaultV2Factory), `CreatePreLiquidation`, `UrdCreated`. The docs list per-component singletons/factories, not instances.
 - **MORPHO token OFT addresses** vary per chain (LayerZero OFT, MIP-113) and are governance-side, not lending-critical; [v1.md](v1.md) lists Ethereum's full set (legacy/transferable/wrapper/OFT adapter) + Base/Arbitrum, and notes the model.
 - **Avalanche** is a newer/partial deployment (not in the SDK snapshot): Blue + IRM + oracle/pre-liquidation factories + Vaults V2 confirmed on-chain; a MetaMorpho V1.1 factory / PublicAllocator / Bundler3 were not confirmed there — verify against live docs before relying on V1-vault tooling on Avalanche.
-- **Markets V2 / "Midnight"** is deployed (Ethereum, Base, Robinhood Chain, Arc); [v2.md §5](v2.md) lists the verified contract addresses, but its topics/selectors are not documented yet.
+- **Markets V2 / "Midnight"** is deployed (Ethereum, Base, Robinhood Chain, Arc); [midnight.md](midnight.md) has its topics, selectors and addresses. It has no `AccrueInterest`: the fixed rate is set per `Take`.
 - **Optimizers** are deprecated (MIP-120) with ~zero new activity; kept for historical position/event decoding only.

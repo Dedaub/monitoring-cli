@@ -2,12 +2,12 @@
 
 **Hyperlane** is a permissionless interchain messaging protocol. A **Mailbox** on each chain dispatches and delivers messages; **warp routes** are the token bridges built on it (lock and release, burn and mint, or USDC through CCTP). Index both layers: the Mailbox carries the link key, the warp route carries the token movement.
 
-**Status:** verified on 2026-09-29 against live RPC on all eight target chains, `hyperlane-xyz/hyperlane-registry` (commit `09aa8356`) and `hyperlane-xyz/hyperlane-monorepo` (commit `c52b7280`). Arc (5042) added 2026-10-05 (registry commit `fe66faf5`, live RPC).
+**Status:** verified on 2026-09-29 against live RPC on all eight target chains, `hyperlane-xyz/hyperlane-registry` (commit `09aa8356`) and `hyperlane-xyz/hyperlane-monorepo` (commit `c52b7280`). Arc (5042) added 2026-10-05 (registry commit `fe66faf5`, live RPC). Re-checked on 2026-10-30 (registry commit `853a5e60`): Robinhood Chain and Arc warp routes and the InterchainAccountRouter V3 added.
 
 | File | Layer | Contracts | Proxy pattern | Chains (of the 8) | Status |
 |------|-------|-----------|---------------|-------------------|--------|
 | [core.md](core.md) | Messaging core | Mailbox, MerkleTreeHook, InterchainGasPaymaster, ProtocolFee, default hooks and ISMs, PausableHook / PausableIsm, ValidatorAnnounce, ProxyAdmin, InterchainAccountRouter | Mailbox and IGP = TransparentUpgradeableProxy; the rest are plain contracts or clones | **All eight**, including Robinhood Chain (registry `robinhood`, domain 4663), plus Arc (registry `arc`, domain 5042) | Live (Avalanche: 0 dispatches in the pinned window) |
-| [warp_routes.md](warp_routes.md) | Token bridges | Collateral, Synthetic, Native, xERC20, xERC20 lockbox, CrossCollateralRouter, CCTP routes | EIP-1967 proxies per route (a few plain contracts) | Registry routes on the seven chains other than Robinhood Chain; Robinhood Chain has no registry route (one unlisted route observed); no registry route names Arc | Live (Avalanche routes idle in the pinned window) |
+| [warp_routes.md](warp_routes.md) | Token bridges | Collateral, Synthetic, Native, xERC20, xERC20 lockbox, CrossCollateralRouter, CCTP routes | EIP-1967 proxies per route (a few plain contracts) | Registry routes on all nine chains; Robinhood Chain (USDG/moonpay, two native ETH routes) and Arc (USDC/moonpay, CCTP v2 routes, USDC/eclipsemainnet) since October 2026 | Live (Avalanche routes idle in the pinned window) |
 
 ## Cross-cutting facts (read before indexing either file)
 

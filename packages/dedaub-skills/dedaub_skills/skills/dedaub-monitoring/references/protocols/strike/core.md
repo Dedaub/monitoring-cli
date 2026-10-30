@@ -1,6 +1,6 @@
 # Strike (Strike Price) — Topics, Selectors, Addresses (Ethereum only)
 
-**Status:** verified against Ethereum mainnet (1) RPC and the canonical `StrikeFinance/strike-protocol` source + `docs.strike.org` on 2026-06-08. Every topic0/selector recomputed locally as `keccak256(signature)`; every address `eth_getCode`-checked; proxy wiring + accrual model read live from storage, getters, and deployed bytecode.
+**Status:** verified against Ethereum mainnet (1) RPC and the canonical `StrikeFinance/strike-protocol` source + `docs.strike.org` on 2026-06-08. Every topic0/selector recomputed locally as `keccak256(signature)`; every address `eth_getCode`-checked; proxy wiring + accrual model read live from storage, getters, and deployed bytecode. Re-checked on 2026-10-30: the Comptroller implementation is unchanged, and Robinhood Chain (4663) and Arc (5042) have no Strike contract (§4, §5).
 
 **Scope:** the entire Strike lending protocol — a **Compound V2 fork** with the cToken→sToken rename: `CErc20Delegator`→**SErc20Delegator** (per-market proxy), `CErc20Delegate`→**SErc20Delegate** (shared logic), `CEther`→**SEther** (native-gas market), `Comptroller` behind a **Unitroller**, the **STRK** governance token + GovernorAlpha + Timelock, per-market JumpRate/WhitePaper interest-rate models, a Chainlink-backed PriceOracle, and Maximillion. **Strike lending is deployed on ONLY ONE of the seven requested chains: Ethereum mainnet (1).** It is NOT on Base, BNB Smart Chain, Avalanche, Arbitrum, Optimism, or Polygon (see §5). Topics/selectors are chain-agnostic; addresses are Ethereum-specific.
 
@@ -311,8 +311,10 @@ All `eth_getCode`-verified non-empty on `https://ethereum-rpc.publicnode.com` on
 | Arbitrum One | 42161 | ❌ not deployed | — | — | — | — | 0 |
 | Optimism | 10 | ❌ not deployed | — | — | — | — | 0 |
 | Polygon PoS | 137 | ❌ not deployed | — | — | — | — | 0 |
+| Robinhood Chain | 4663 | ❌ not deployed | — | — | — | — | 0 |
+| Arc | 5042 | ❌ not deployed | — | — | — | — | 0 |
 
-**Strike is a single-chain (Ethereum) protocol.** Every distinctive contract — Unitroller `0xe2e17b2C…`, Comptroller impl `0xd01ce4a7…`, SErc20Delegate `0x20db276e…`, PriceOracle `0x4386c6d6…`, STRK `0x74232704…`, sETH `0xbEe9Cf65…` — returns empty `eth_getCode` (`0x`) on all six other chains.
+**Strike is a single-chain (Ethereum) protocol.** Every distinctive contract — Unitroller `0xe2e17b2C…`, Comptroller impl `0xd01ce4a7…`, SErc20Delegate `0x20db276e…`, PriceOracle `0x4386c6d6…`, STRK `0x74232704…`, sETH `0xbEe9Cf65…` — returns empty `eth_getCode` (`0x`) on all eight other chains (Robinhood Chain and Arc: all 48 addresses of this file checked on 2026-10-30).
 
 ### Name-collision / decoy warning (BNB Smart Chain)
 - **BSC `0x9f8c1b7831fa308949dd0bbd2251161110a11252`** is a **decoy** "Strike Protocol (STRK)" token — **9 decimals**, Solidity 0.6.12, Uniswap-V2 fee logic, ~21 holders. It is NOT the real Strike STRK (which is 18-decimal on Ethereum) and there is no Strike lending market behind it.
@@ -322,7 +324,7 @@ All `eth_getCode`-verified non-empty on `https://ethereum-rpc.publicnode.com` on
 
 ## 5. Chains with NO Strike deployment
 
-**Base (8453), BNB Smart Chain (56), Avalanche (43114), Arbitrum (42161), Optimism (10), Polygon PoS (137): Strike is NOT deployed.** Confirmed by `eth_getCode` returning `0x` for all distinctive Strike contracts on each chain, and by the absence of any Strike address registry / docs entry for these chains (`docs.strike.org/getting-started/networks` lists only a single "Mainnet" tab = Ethereum). Do not author Strike monitors for these chains; any "Strike" contract claimed there is a different protocol or a fork/decoy.
+**Base (8453), BNB Smart Chain (56), Avalanche (43114), Arbitrum (42161), Optimism (10), Polygon PoS (137), Robinhood Chain (4663), Arc (5042): Strike is NOT deployed.** Confirmed by `eth_getCode` returning `0x` for all distinctive Strike contracts on each chain, and by the absence of any Strike address registry / docs entry for these chains (`docs.strike.org/getting-started/networks` lists only a single "Mainnet" tab = Ethereum). Do not author Strike monitors for these chains; any "Strike" contract claimed there is a different protocol or a fork/decoy. One underlying-token literal has code on the two new chains: the UNI address `0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984` (underlying of sUNI) holds 1,456 B on Robinhood Chain and 2,747 B on Arc (12,567 B on Ethereum), and `symbol()` returns empty data there. It is not UNI and not a Strike contract.
 
 > Historical note: Strike's GitHub `networks/mainnet.json` is an **unmodified Compound V2 fork artifact** — it contains Compound's addresses (e.g. `STRK=0xc00e94Cb…`=COMP token, `Unitroller=0x3d98…`=Compound Comptroller, `Maximillion=0xf859A1AD…`="Compound: Contract 1"). **Do not use the repo's `networks/` JSON for Strike addresses** — use `docs.strike.org` + live on-chain reads (as done here).
 
@@ -488,6 +490,7 @@ EIP1967_IMPL_SLOT            = '\x360894a13ba1a3210667c828492db98dca3e2076cc3735
 EIP1967_ADMIN_SLOT           = '\xb53127684a568b3173ae13b9f8a6016e243e63b6e8ee1178d6a717850b5d6103'
 
 -- DECOY (NOT Strike): BSC 0x9f8c1b7831fa308949dd0bbd2251161110a11252 (9-dec fee token)
+-- Robinhood Chain (4663) and Arc (5042): no Strike contract
 ```
 
 ---

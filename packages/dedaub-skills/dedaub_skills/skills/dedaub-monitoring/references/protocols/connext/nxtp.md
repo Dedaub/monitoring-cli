@@ -1,6 +1,6 @@
-# Connext NXTP v1 — Topics, Selectors, Addresses (Ethereum, Arbitrum, Optimism, Polygon, BNB, Avalanche; not Base or Robinhood)
+# Connext NXTP v1 — Topics, Selectors, Addresses (Ethereum, Arbitrum, Optimism, Polygon, BNB, Avalanche; not Base, Robinhood or Arc)
 
-**Status:** verified on 2026-09-29 against live RPC on all eight target chains and against the canonical Connext source: the `legacy` branch of `connext/monorepo` (the former `connext/nxtp` repository), with `packages/contracts/contracts/*.sol`, `packages/contracts/deployments.json` and the subgraph configs `packages/subgraph/config/{v0,v1-runtime,prod}.json`.
+**Status:** verified on 2026-09-29 against live RPC on all eight target chains and against the canonical Connext source: the `legacy` branch of `connext/monorepo` (the former `connext/nxtp` repository), with `packages/contracts/contracts/*.sol`, `packages/contracts/deployments.json` and the subgraph configs `packages/subgraph/config/{v0,v1-runtime,prod}.json`. Re-checked on 2026-10-30: no NXTP contract on Arc (5042) (§9).
 **Scope:** NXTP, the first Connext transfer system (2021 to 2023). This file covers the **TransactionManager** of each chain, the **FulfillInterpreter** that each TransactionManager creates, the **RouterFactory** and its per-router **Router** contracts, and the older **v0 TransactionManager** that ran before v1 on Polygon, BNB and Arbitrum. Six of the eight target chains have NXTP: Ethereum (1), Arbitrum One (42161), Optimism (10), Polygon PoS (137), BNB Smart Chain (56) and Avalanche C-Chain (43114). Base (8453) and Robinhood Chain (4663) have no deployment. Topics and selectors are chain-agnostic; addresses are network-specific. The later generations are in [amarok.md](amarok.md) (Amarok Diamond) and [core.md](core.md) (Everclear).
 
 NXTP is a two-phase lock between a user and a router, not a lock-and-mint bridge. The user locks funds in the sending chain's TransactionManager. A router locks the same amount (less its fee) from its own liquidity in the receiving chain's TransactionManager. The user's signature unlocks the router's funds to the user on the receiving chain. The router then submits the same signature on the sending chain and takes the user's locked funds into its liquidity balance. No token is minted or burned, and no message bridge is used.
@@ -253,9 +253,9 @@ No v0 on Optimism.
 | ConnextPriceOracle | `0xE43Ee0700698F1d64491eA2AeBFBFC18Df18590E` | 4,109 B. |
 | Owner (EOA) | `0x155b15a7e9ff0e34ceaf2439589d5c661adc9493` | No code on Avalanche. |
 
-## 9. Base (chain ID 8453) and Robinhood Chain (chain ID 4663) — no deployment
+## 9. Base (chain ID 8453), Robinhood Chain (chain ID 4663) and Arc (chain ID 5042) — no deployment
 
-`eth_getCode` returns `0x` (nonce 0) on both chains for every NXTP address in this file: the three TransactionManager literals, `0xF293D5d599c046681AB28c1Bc7927Fff859c67A7`, the RouterFactory, and the interpreters. `deployments.json` has no entry for 8453 or 4663. Base launched in 2023 and Robinhood Chain in 2026, after the end of NXTP.
+`eth_getCode` returns `0x` (nonce 0) on the three chains for every NXTP contract in this file: the three TransactionManager literals, `0xF293D5d599c046681AB28c1Bc7927Fff859c67A7`, the RouterFactory, and the interpreters (Arc checked 2026-10-30). `deployments.json` has no entry for 8453, 4663 or 5042. Base launched in 2023, and Robinhood Chain and Arc in 2026, after the end of NXTP. On Robinhood Chain the BNB owner EOA `0xf8cfd0344cc5552203be99c82474fda3ea0ea0f8` returns 23 bytes of code: an EIP-7702 designator (`0xef0100` + `0x63c0c19a282a1b52b07dd5a65b58948a07dae32b`). It is still an EOA, not an NXTP contract.
 
 ---
 
@@ -271,6 +271,7 @@ No v0 on Optimism.
 | BNB Smart Chain | 56 | `0x2A9EA5e8cDDf40730f4f4F839F673a51600C314e` | `0x31eFc4AeAA7c39e54A33FDc3C46ee2Bd70ae0A09` | `0x3940a0a4cb508da64cb11b13cdba7e3b04fb9b34` | `0x73a37b3EB030cC3f9739CA5C16b7E6802F294122` | `0xf8cfd0344cc5552203be99c82474fda3ea0ea0f8` |
 | Avalanche C-Chain | 43114 | `0x31eFc4AeAA7c39e54A33FDc3C46ee2Bd70ae0A09` | — | `0x5b9e4d0dd21f4e071729a9eb522a2366abed149a` | `0x73a37b3EB030cC3f9739CA5C16b7E6802F294122` | `0x155b15a7e9ff0e34ceaf2439589d5c661adc9493` |
 | Robinhood Chain | 4663 | — (no code) | — | — | — | — |
+| Arc | 5042 | — (no code) | — | — | — | — |
 
 Counterparty chains outside the eight, from `deployments.json`: Gnosis (100), Fantom (250), Moonriver (1285), Moonbeam (1284), Cronos (25), Boba (288), Fuse (122), Harmony (1666600000), Evmos (9001), Milkomeda Cardano (2001), Arbitrum Nova (42170) and Gather (192837465). The literal `0x31eFc4AeAA7c39e54A33FDc3C46ee2Bd70ae0A09` is the v1 TransactionManager on most of them too.
 
@@ -305,7 +306,7 @@ To move NXTP to new code, Connext deployed a new TransactionManager (v0 to v1) a
 12. **Residual activity after the end of transfers.** On the Ethereum TransactionManager, block 23,563,791 (2025) has `RouterAdded` and `OwnershipProposed` in one transaction from the previous owner. Blocks 23,563,825 to 23,563,828 have three `LiquidityRemoved` events from Router `0x95ce8b1c273af612cd895e6b0c633039c3572827` to `0x4d96f2d2143dd74a96d015a70953a5686fa6ed55`: 987.368511 USDC, 529.823539 USDT and 49.277774115166331680 DAI. Block 23,621,167 (2025-10-20) has `OwnershipTransferred`. Watch `LiquidityRemoved` and the ownership events on every TransactionManager, even when no transfer happens.
 13. **The previous owner `0x155b15a7e9ff0e34ceaf2439589d5c661adc9493` has code** on Ethereum and Arbitrum: 23 bytes that start with `0xef0100` (an EIP-7702 delegation). It is an EOA. Do not classify it as a contract.
 14. **`routerBalances(address,address)` has the selector `0x41258b5c` on both NXTP and the Amarok Diamond.** Disambiguate by the address.
-15. **Not on Base or Robinhood Chain.** No code at any NXTP literal and no entry in the official deployment list.
+15. **Not on Base, Robinhood Chain or Arc.** No code at any NXTP literal and no entry in the official deployment list.
 
 ---
 
@@ -402,7 +403,7 @@ OP_OWNER_EOA                      = '\x25dc768d5dad1972220058ea0d27259df7e00c2e'
 POLY_OWNER_EOA                    = '\xabcf9220fd6186c2fdcf47f8914dc6db3249efb4'
 BNB_OWNER_EOA                     = '\xf8cfd0344cc5552203be99c82474fda3ea0ea0f8'
 AVAX_OWNER_EOA                    = '\x155b15a7e9ff0e34ceaf2439589d5c661adc9493'
--- Base (8453) and Robinhood Chain (4663): no NXTP contract (eth_getCode = 0x at every literal above)
+-- Base (8453), Robinhood Chain (4663) and Arc (5042): no NXTP contract (eth_getCode = 0x at every literal above)
 ```
 
 ---
@@ -417,7 +418,7 @@ How the constants were verified (2026-09-29):
 - **Sample transactions read with `eth_getTransactionReceipt`:** Ethereum `0x0f26a0704fd785b51d1b109777ca998ab819a24477a88b2f5fda0b6630309c12` (receiving-chain `TransactionPrepared`, Evmos to Ethereum, 207.303652 USDC, Router `Prepare` in the same transaction, no token movement); Ethereum `0xa317163baa2e1acfec92287de20375af91602f7defdedb7b483abc4ebaba2937` (receiving-chain `TransactionFulfilled`: USDC `Transfer` of 200.803211 to the receiver and 6.500441 to the relayer); Ethereum `0x903f3353984c45daf63f36ca56b2e4205908f967a8a5c34e972d2eb039a9c3cc` (sending-chain `TransactionCancelled` of 1 ETH to Arbitrum, Router `Cancel`); Polygon `0x0c67429fd9ddd7e6f20b57e4c4ed44b03eb9c5489819195705d9d8e7b13d7140` (sending-chain `TransactionPrepared`, Polygon to Moonbeam, WETH `Transfer` of 4.566898 from the user to the TransactionManager, `tx.to` = TransactionManager); Polygon `0x6f91a1dd1190585f95efc8a880f5364b9a54c468658e2a6ea21fc14177a7d904` (sending-chain `TransactionFulfilled`, the router's claim through Router `0x3df415d9e0539de5e746ff36ff98b54cf6570722`, no token `Transfer`); Ethereum `0xb2df510a76b9a9fe9f0636442c105f225ed05f46b36536d4dd4b485c5eb78bbf` (`createRouter`, `RouterCreated`); Ethereum `0x3a2d3d1eb5d11eb8d14069640d15ecb1774544c57f65d089fcd33943c1631dd3`, `0xeb0b226e311d665a2269aef390cdc3fb3fd8d9e4a40ce526ebc91b9ad4eb7d98`, `0xaecdaebf524e067e289bbfb6e6176f5473d89e56912fe7a994760451d46181e0`, `0xd858632ef6c667fbb98f3e4c30b40ffffbd510ced420e6b99278269e7958832a` and `0x99a44f0a67e947eef4a691dc43c3800645ecd18bdb521dd5e10a547644196f9f` (the 2025 admin and liquidity sequence of §12, item 12).
 - **Pinned 12-hour window 2026-09-28 00:00 to 12:00 UTC:** `TransactionPrepared` (v1) and `TransactionFulfilled` (v1) from any emitter: Ethereum 0, Base 0, Arbitrum 0, Optimism 0, Polygon 0, BNB 0, Avalanche 0, Robinhood 0. v0 events at the v0 TransactionManagers: Arbitrum 0 and 0, BNB 0 and 0, Polygon 0 (`TransactionPrepared`) and 0 (`TransactionFulfilled`).
 - **Addresses:** `deployments.json` (`TransactionManager`, `RouterFactory`, `ConnextPriceOracle` per chain id) and the subgraph configs (`v0.json`, `v1-runtime.json`, `prod.json`: address and start block per network). Every address was checked with `eth_getCode` on its chain; the EIP-1967 implementation slot is empty on every TransactionManager. `interpreter()`, `owner()`, `getChainId()`, `isRouterOwnershipRenounced()` (false) and `isAssetOwnershipRenounced()` (false) were read with `eth_call`. Owners were classified by `eth_getCode` and nonce.
-- **Chain coverage:** all eight chains probed at the literals of every chain. Base and Robinhood Chain: no code at any literal and no entry in `deployments.json`.
+- **Chain coverage:** all eight chains probed at the literals of every chain. Base, Robinhood Chain and Arc: no contract code at any literal and no entry in `deployments.json`.
 
 Sources:
 - [connext/monorepo, `legacy` branch: `packages/contracts`](https://github.com/connext/monorepo/tree/legacy/packages/contracts) (`contracts/TransactionManager.sol`, `contracts/interfaces/ITransactionManager.sol`, `contracts/interpreters/FulfillInterpreter.sol`, `contracts/Router.sol`, `contracts/RouterFactory.sol`, `contracts/ProposedOwnable.sol`, `deployments.json`)

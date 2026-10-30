@@ -1,12 +1,13 @@
 # Ramses Exchange — Protocol Reference Index
 
-Monitoring-grade references for Ramses, the ve(3,3) + concentrated-liquidity DEX on **Arbitrum One (42161)**. Verified on-chain 2026-06.
+Monitoring-grade references for Ramses, the ve(3,3) + concentrated-liquidity DEX on **Arbitrum One (42161)**, **Polygon PoS (137)** and **Robinhood Chain (4663)**. Verified on-chain 2026-06. Re-checked on 2026-10-30: added [`v3.md`](v3.md) for the 2026 redeploy (tickSpacing-keyed `RamsesV3Factory` on Arbitrum, Polygon and Robinhood; DLMM and Voter on Robinhood).
 
-**Ramses is Arbitrum-only** — `eth_getCode = 0x` on all other six target chains. All core contracts use a consistent `AAA`/`AA2c` vanity-address prefix.
+**The 2023 generation (`legacy.md`, `cl.md`) is Arbitrum-only** — `eth_getCode = 0x` on all other target chains; its core contracts use an `AAA`/`AA2c` vanity prefix. **The 2026 generation (`v3.md`) is on Arbitrum, Polygon and Robinhood Chain**, uses plain `CREATE` addresses (no vanity prefix), and the same address holds a different contract on each chain. Nothing is on Ethereum, Base, BNB, Avalanche, Optimism or Arc.
 
 | File | Component | What it covers | Key contracts |
 |------|-----------|----------------|---------------|
 | [legacy.md](legacy.md) | **Legacy AMM + Governance** | Solidly volatile+stable pairs + ve(3,3) governance (RAM token, veRAM NFT, Voter, Minter, Gauges, Bribes, RewardDistributor) | `PairFactory` `0xAAA20D08…`, `Router` `0xAAA87963…`, `Voter` `0xAAA2564D…`, `VotingEscrow` `0xAAA34303…`, `RAM` `0xAAA6C1E3…` |
+| [v3.md](v3.md) | **2026 redeploy: CL (RamsesV3) + DLMM + new legacy factory** | tickSpacing-keyed CL (Pharaoh-style `Mint` with `index`), new 4-arg `PairCreated` PairFactory, AccessHub; DLMM and Voter/RAM/r33 on Robinhood only | `RamsesV3Factory` Arb `0xd0019e86…`, Poly `0x2Bef16A0…`, Robin `0xE0c4ceb9…` |
 | [cl.md](cl.md) | **CL AMM (RamsesV3 / UniV3-style)** | Concentrated liquidity with fee-tier pools (NOT tickSpacing-keyed), NFPM, SwapRouter, gauges | `RamsesV3Factory` `0xAA2cd747…`, `NFPM` (find via factory), `SwapRouter` |
 
 Each file follows the house shape: **Topics** → **Function signatures** → **Addresses** → **Proxies** → **Detection invariants & gotchas** → **Quick-copy constants** → **Verification & sources**.

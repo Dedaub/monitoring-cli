@@ -1,6 +1,6 @@
 # Velodrome Slipstream (Concentrated Liquidity) — Compressed Reference (Optimism + Superchain)
 
-**Status:** topic0/selectors via local keccak from `velodrome-finance/slipstream` + `superchain-slipstream` source; addresses from each repo's `deployment-addresses/`/`script/constants/output/` re-verified on-chain (publicnode/drpc, 2026-06) — NFPM `symbol()` = "VELO-CL-POS".
+**Status:** topic0/selectors via local keccak from `velodrome-finance/slipstream` + `superchain-slipstream` source; addresses from each repo's `deployment-addresses/`/`script/constants/output/` re-verified on-chain (publicnode/drpc, 2026-06) — NFPM `symbol()` = "VELO-CL-POS". Re-checked on 2026-10-30: legacy since the Aero launch of 2026-10-21 (Velodrome gauges killed, pools still trade; successor in [`../aerodrome/aero.md`](../aerodrome/aero.md)); Arc / Robinhood Chain absence note added.
 **Scope:** **Slipstream** — Velodrome's concentrated-liquidity AMM (a **Uniswap-V3 fork** with ve(3,3) gauge integration). Classic AMM + shared ve(3,3) governance (Voter, VotingEscrow, VELO, gauges) are in [`v2.md`](v2.md) — Slipstream pools plug into that same governance.
 **Key fact:** Slipstream CL pool events are a Uniswap-V3 fork → **core pool event topic0s are IDENTICAL to Uniswap V3** ([`uniswap/v3.md`](../uniswap/v3.md)); the differences are a Slipstream-specific **`CollectFees`** (gauge fee withdrawal), a **tickSpacing-based `PoolCreated`** (no fee tiers), and pools indexed by **tickSpacing** not fee.
 
@@ -79,6 +79,7 @@
 0x01D40099fCD87C018969B0e8D4aB1633Fb34763C -> UniversalRouter
 0x494bbD8A3302AcA833D307D11838f18DbAdA9C25 -> Permit2
 ```
+> **Arc (5042) / Robinhood Chain (4663): no Velodrome Slipstream.** On Arc, `0x494bbD8A…9C25` has 8,454 B of code, but it is not this Permit2 (8,694 B on Optimism). No other address in this file has code on Arc or Robinhood Chain (`eth_getCode`, 2026-10-30). The Aero CL stack is on both chains with its own addresses: see [`../aerodrome/aero.md`](../aerodrome/aero.md).
 
 ### Superchain Slipstream CL — root (Optimism) + ALL leaf chains (deterministic, shared addresses)
 

@@ -207,24 +207,24 @@ All ApeSwap contracts are **fully immutable**. EIP-1967 logic slot (`0x3608...bb
 '\xbb757047c2b5f3974fe26b7c10f732e7bce710b0952a71082702781e62ae0595'  -- EmergencyWithdraw
 
 -- BNB addresses
-'\x0841BD0B734E4F5853f0dD8d7Ea041c241fb0Da6'  -- Factory (BNB)
-'\xcF0feBd3f17CEf5b47b0cD257aCf6025c5BFf3b7'  -- Router (BNB)
-'\x603c7f932ED1fc6575303D8Fb018fDCBb0f39a95'  -- BANANA token (BNB)
-'\xdDb3Bd8645775F59496c821E4F55A7eA6A6dc299'  -- GNANA token (BNB)
-'\x5c8D727b265DBAfaba67E050f2f739cAeEB4A6F9'  -- MasterApe V1 (BNB)
-'\x71354AC3c695dfB1d3f595AfA5D4364e9e06339B'  -- MasterApe V2 (BNB)
-'\x86Ef5e73EDB2Fea111909Fe35aFcC564572AcC06'  -- BananaSplit (BNB)
+'\x0841bd0b734e4f5853f0dd8d7ea041c241fb0da6'  -- Factory (BNB)
+'\xcf0febd3f17cef5b47b0cd257acf6025c5bff3b7'  -- Router (BNB)
+'\x603c7f932ed1fc6575303d8fb018fdcbb0f39a95'  -- BANANA token (BNB)
+'\xddb3bd8645775f59496c821e4f55a7ea6a6dc299'  -- GNANA token (BNB)
+'\x5c8d727b265dbafaba67e050f2f739caeeb4a6f9'  -- MasterApe V1 (BNB)
+'\x71354ac3c695dfb1d3f595afa5d4364e9e06339b'  -- MasterApe V2 (BNB)
+'\x86ef5e73edb2fea111909fe35afcc564572acc06'  -- BananaSplit (BNB)
 
 -- ETH addresses
-'\xBAe5dc9B19004883d0377419FeF3c2C8832d7d7B'  -- Factory (ETH)
-'\x5f509a3C3F16dF2Fba7bF84dEE1eFbce6BB85587'  -- Router (ETH)
+'\xbae5dc9b19004883d0377419fef3c2c8832d7d7b'  -- Factory (ETH)
+'\x5f509a3c3f16df2fba7bf84dee1efbce6bb85587'  -- Router (ETH)
 
 -- Arbitrum addresses
-'\xCf083Be4164828f00cAE704EC15a36D711491284'  -- Factory (Arb + Polygon, same address)
-'\x7d13268144adcdbEBDf94F654085CC15502849Ff'  -- Router (Arb)
+'\xcf083be4164828f00cae704ec15a36d711491284'  -- Factory (Arb + Polygon, same address)
+'\x7d13268144adcdbebdf94f654085cc15502849ff'  -- Router (Arb)
 
 -- Polygon addresses
-'\xC0788A3aD43d79aa53B09c2EaCc313A787d1d607'  -- Router (Polygon)
+'\xc0788a3ad43d79aa53b09c2eacc313a787d1d607'  -- Router (Polygon)
 
 -- INIT_CODE_PAIR_HASHes (chain-specific — use for CREATE2 pair derivation)
 '\xf4ccce374816856d11f00e4069e7cada164065686fbef53c6167a63ec2fd8c5b'  -- BNB

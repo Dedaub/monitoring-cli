@@ -1,6 +1,6 @@
 # LI.FI Bridge Facets — Selectors, Data Structs, Facet Addresses (Ethereum + Base + Arbitrum + Optimism + Polygon + BNB + Avalanche + Robinhood Chain + Arc)
 
-**Status:** verified on 2026-09-29 (Arc added 2026-10-05). The facet table of every LiFiDiamond was read live with `facets()` (`0x7a0ed627`). Every selector below is registered in at least one of the nine diamonds, unless marked otherwise, and was recomputed as `keccak256(signature)[0:4]` from the explorer-verified ABI of the deployed facet. Facet names and versions come from `lifinance/contracts` `deployments/<network>.json` and `deployments/<network>.diamond.json`, and from the verified sources.
+**Status:** verified on 2026-09-29 (Arc added 2026-10-05). Re-checked on 2026-10-30: `facets()` re-read on all nine diamonds. Between 2026-10-07 and 2026-10-21 LI.FI replaced CalldataVerificationFacet (2.0.0), GenericSwapFacetV3 (2.0.0), LiFiIntentEscrowFacetV2 (2.0.0), WhitelistManagerFacet (1.1.0) and PaxosTransitFacet (2.0.0, now also on Arbitrum), and added the new **M0Facet** on Ethereum, Base and Arbitrum. Entry selectors of the replaced facets are unchanged. The facet table of every LiFiDiamond was read live with `facets()` (`0x7a0ed627`). Every selector below is registered in at least one of the nine diamonds, unless marked otherwise, and was recomputed as `keccak256(signature)[0:4]` from the explorer-verified ABI of the deployed facet. Facet names and versions come from `lifinance/contracts` `deployments/<network>.json` and `deployments/<network>.diamond.json`, and from the verified sources.
 **Scope:** the bridge facets of the LiFiDiamond: their entry selectors, the data struct of each entry point, the key configuration functions, and the facet address on each of the nine chains. Facets are logic contracts: they run through `DELEGATECALL`, so their events come from the diamond ([diamond.md](diamond.md)). Topics and selectors are chain-agnostic; addresses are network-specific.
 
 A monitor rarely needs a facet address. It needs the **entry selector** (the first 4 bytes of a call to the diamond), which names the bridge, and the facet table, which changes only by `DiamondCut`. Read the live table with `facets()`, or resolve one selector with `facetAddress(bytes4)` (`0xcdffacc6`).
@@ -31,7 +31,7 @@ The `bridge` string is set by the LI.FI API; the contract does not check it agai
 
 ## 1. Entry and key functions per facet (chain-agnostic)
 
-The third column names the facet and the chains whose diamond has the selector registered (loupe read of 2026-09-29; Arc read on 2026-10-05).
+The third column names the facet and the chains whose diamond has the selector registered (loupe read of 2026-09-29; Arc read on 2026-10-05; all nine re-read on 2026-10-30).
 
 | Selector | Signature | Facet: live on |
 |----------|-----------|----------------|
@@ -94,6 +94,9 @@ The third column names the facet and the chains whose diamond has the selector r
 | `0x7dbcf1d9` | `startBridgeTokensViaLiFiIntentEscrowV2((bytes32,string,string,address,address,address,uint256,uint256,bool,bool),(bytes32,bytes32,address,uint256,uint32,uint32,address,bytes32,bytes32,bytes32,uint128,(address,address,address,address,uint256,bytes,bool)[],bytes))` | LiFiIntentEscrowFacetV2: ETH·Base·Arb·OP·Poly·BNB·Avax·RH·Arc |
 | `0x6d21c5df` | `swapAndStartBridgeTokensViaLiFiIntentEscrowV2((bytes32,string,string,address,address,address,uint256,uint256,bool,bool),(address,address,address,address,uint256,bytes,bool)[],(bytes32,bytes32,address,uint256,uint32,uint32,address,bytes32,bytes32,bytes32,uint128,(address,address,address,address,uint256,bytes,bool)[],bytes))` | LiFiIntentEscrowFacetV2: ETH·Base·Arb·OP·Poly·BNB·Avax·RH·Arc |
 | `0x6577661f` | `LIFI_INTENT_ESCROW_SETTLER_V2()` | LiFiIntentEscrowFacetV2: ETH·Base·Arb·OP·Poly·BNB·Avax·RH·Arc |
+| `0x65782c4b` | `startBridgeTokensViaM0((bytes32,string,string,address,address,address,uint256,uint256,bool,bool),(bytes32,address,address,bytes32,bytes32,uint128,uint32))` | M0Facet: ETH·Base·Arb |
+| `0xb9eaf86d` | `swapAndStartBridgeTokensViaM0((bytes32,string,string,address,address,address,uint256,uint256,bool,bool),(address,address,address,address,uint256,bytes,bool)[],(bytes32,address,address,bytes32,bytes32,uint128,uint32))` | M0Facet: ETH·Base·Arb |
+| `0xca72c341` | `M0_ORDER_BOOK()` | M0Facet: ETH·Base·Arb. Returns the M0 OrderBook `0xe39b012ab3b20e94a9beea557eb0de4171d4d3e4` on all three. |
 | `0xb4875292` | `startBridgeTokensViaMayan((bytes32,string,string,address,address,address,uint256,uint256,bool,bool),(bytes32,address,bytes,address,bytes,address,uint256,address,uint256))` | MayanFacet: ETH·Base·Arb·OP·Poly·BNB·Avax |
 | `0x80c65808` | `swapAndStartBridgeTokensViaMayan((bytes32,string,string,address,address,address,uint256,uint256,bool,bool),(address,address,address,address,uint256,bytes,bool)[],(bytes32,address,bytes,address,bytes,address,uint256,address,uint256))` | MayanFacet: ETH·Base·Arb·OP·Poly·BNB·Avax |
 | `0xce90a721` | `MAYAN()` | MayanFacet: ETH·Base·Arb·OP·Poly·BNB·Avax |
@@ -108,9 +111,9 @@ The third column names the facet and the chains whose diamond has the selector r
 | `0xce8a97a5` | `startBridgeTokensViaOptimismBridge((bytes32,string,string,address,address,address,uint256,uint256,bool,bool),(address,uint32,bool))` | OptimismBridgeFacet: ETH |
 | `0x5bb5d448` | `swapAndStartBridgeTokensViaOptimismBridge((bytes32,string,string,address,address,address,uint256,uint256,bool,bool),(address,address,address,address,uint256,bytes,bool)[],(address,uint32,bool))` | OptimismBridgeFacet: ETH |
 | `0xdecb09d7` | `registerOptimismBridge(address,address)` | OptimismBridgeFacet: ETH |
-| `0x5080ffe2` | `startBridgeTokensViaPaxosTransit((bytes32,string,string,address,address,address,uint256,uint256,bool,bool),(((uint32,address,address),uint256,address,uint256,uint256,address,bytes32,uint256,bytes32),bytes,uint256,address))` | PaxosTransitFacet: ETH·RH |
-| `0x637f1d04` | `swapAndStartBridgeTokensViaPaxosTransit((bytes32,string,string,address,address,address,uint256,uint256,bool,bool),(address,address,address,address,uint256,bytes,bool)[],(((uint32,address,address),uint256,address,uint256,uint256,address,bytes32,uint256,bytes32),bytes,uint256,address))` | PaxosTransitFacet: ETH·RH |
-| `0xc3c7a5be` | `TRANSIT_STATION()` | PaxosTransitFacet: ETH·RH |
+| `0x5080ffe2` | `startBridgeTokensViaPaxosTransit((bytes32,string,string,address,address,address,uint256,uint256,bool,bool),(((uint32,address,address),uint256,address,uint256,uint256,address,bytes32,uint256,bytes32),bytes,uint256,address))` | PaxosTransitFacet: ETH·Arb·RH |
+| `0x637f1d04` | `swapAndStartBridgeTokensViaPaxosTransit((bytes32,string,string,address,address,address,uint256,uint256,bool,bool),(address,address,address,address,uint256,bytes,bool)[],(((uint32,address,address),uint256,address,uint256,uint256,address,bytes32,uint256,bytes32),bytes,uint256,address))` | PaxosTransitFacet: ETH·Arb·RH |
+| `0xc3c7a5be` | `TRANSIT_STATION()` | PaxosTransitFacet: ETH·Arb·RH. Returns `0x49aaa987b1a7e9e4ae091dcd8332c39f322d7d28` on Ethereum and Arbitrum. Version 2.0.0 also has the views `PAXOS_TRANSIT_THIS_CHAIN_EID()` `0x88ade879` and `LIFI_DISTRIBUTOR_CODE()` `0x0ad0587c`. |
 | `0xaf62c7d6` | `startBridgeTokensViaPolygonBridge((bytes32,string,string,address,address,address,uint256,uint256,bool,bool))` | PolygonBridgeFacet: ETH |
 | `0xb4f37581` | `swapAndStartBridgeTokensViaPolygonBridge((bytes32,string,string,address,address,address,uint256,uint256,bool,bool),(address,address,address,address,uint256,bytes,bool)[])` | PolygonBridgeFacet: ETH |
 | `0xf434d6ca` | `startBridgeTokensViaPolymerCCTP((bytes32,string,string,address,address,address,uint256,uint256,bool,bool),(uint256,uint256,bytes32,bytes32,uint32,address,bytes))` | PolymerCCTPFacet: ETH·Base·Arb·OP·Poly·Avax·Arc |
@@ -162,6 +165,7 @@ Selectors of retired facet versions are no longer in any of the eight diamonds a
 | GlacisFacet | `(bytes32 receiverAddress, address refundAddress, uint256 nativeFee, bytes32 outputToken) _glacisData` |
 | LayerSwapFacet | `(bytes32 requestId, address depositoryReceiver, address refundRecipient, bytes32 nonEVMReceiver, bytes signature, uint256 deadline) _layerSwapData` |
 | LiFiIntentEscrowFacetV2 | `(bytes32 dstCallReceiver, bytes32 recipient, address depositAndRefundAddress, uint256 nonce, uint32 expires, uint32 fillDeadline, address inputOracle, bytes32 outputOracle, bytes32 outputSettler, bytes32 outputToken, uint128 outputAmountMultiplier, (address callTo, address approveTo, address sendingAssetId, address receivingAssetId, uint256 fromAmount, bytes callData, bool requiresDeposit)[] dstCallSwapData, bytes outputContext) _lifiIntentData` |
+| M0Facet | `(bytes32 receiverAddress, address refundRecipient, address orderOwner, bytes32 tokenOut, bytes32 solver, uint128 amountOut, uint32 fillDeadline) _m0Data` (from `src/Facets/M0Facet.sol`, version 1.0.0). The facet opens an escrowed order on the M0 OrderBook; a solver fills it later on the destination chain. |
 | MayanFacet | `(bytes32 nonEVMReceiver, address mayanProtocol, bytes protocolData, address swapProtocol, bytes swapData, address middleToken, uint256 minMiddleAmount, address refundRecipient, uint256 mayanAmountIn) _mayanData` |
 | MegaETHBridgeFacet | `(address assetIdOnL2, uint32 l2Gas, bool requiresDepositTo) _megaETHData` |
 | NEARIntentsFacet | `(bytes32 nonEVMReceiver, bytes32 destinationAsset, address depositAddress, bytes32 quoteId, uint256 deadline, uint256 minAmountOut, address refundRecipient, bytes signature) _nearData` |
@@ -180,7 +184,7 @@ Fields that name the destination or the refund: `receiverAddress` / `recipient` 
 
 ---
 
-## 3. Facet addresses per chain (live table of 2026-09-29)
+## 3. Facet addresses per chain (live table of 2026-09-29, re-read on 2026-10-30)
 
 The "Version" column is the facet version recorded in `deployments/<network>.diamond.json`. The core facets are listed too, because a `DiamondCut` can replace them.
 
@@ -199,9 +203,12 @@ The "Version" column is the facet version recorded in `deployments/<network>.dia
 | AcrossV4SwapFacet | `0x2beEf67989a236e9CA97E8F731050bf7E8039e90` | 1.0.0 | ETH·Base·Arb·OP·Poly·BNB |
 | AllBridgeFacet | `0x317D089BBe46AaE816b27Eeb1ac26cFB7AB1850D` | 2.2.0 | ETH·Base·Arb·OP·Poly·BNB·Avax |
 | ArbitrumBridgeFacet | `0xac82fA2D953Ee5C61d87686ADE620b0728F484E6` | 1.0.0 | ETH |
-| CalldataVerificationFacet | `0x7A5c119ec5dDbF9631cf40f6e5DB28f31d4332a0` | 1.1.1 | ETH·Base·Arb·OP·Poly·BNB·Avax |
-| CalldataVerificationFacet | `0xa5498A7a05A0C71b05e27B8558ccE13120B01387` | 1.3.1 | RH |
-| CalldataVerificationFacet | `0x2aAf442EF000Cf62519FE379D945D89A594523de` | 1.3.1 | Arc |
+| CalldataVerificationFacet | `0x4B0eC145D216101844072bCEe574a0E8873770b6` | 2.0.0 | ETH·Base·Arb·OP·Poly·BNB·Avax (since 2026-10-20) |
+| CalldataVerificationFacet | `0xc6910Cd9066cFd0b5f237b1447bA064Ca07f76C2` | 2.0.0 | RH (since 2026-10-20) |
+| CalldataVerificationFacet | `0x723f6773959e8872D6718D3E2296025BC01c07a3` | 2.0.0 | Arc (since 2026-10-20) |
+| CalldataVerificationFacet (replaced) | `0x7A5c119ec5dDbF9631cf40f6e5DB28f31d4332a0` | 1.1.1 | none now (was ETH·Base·Arb·OP·Poly·BNB·Avax) |
+| CalldataVerificationFacet (replaced) | `0xa5498A7a05A0C71b05e27B8558ccE13120B01387` | 1.3.1 | none now (was RH) |
+| CalldataVerificationFacet (replaced) | `0x2aAf442EF000Cf62519FE379D945D89A594523de` | 1.3.1 | none now (was Arc) |
 | CelerCircleBridgeFacet | `0xB815B47ad429436892Fc3C6ed1D401F515C7F763` | 2.0.0 | ETH·Base·Arb·OP·Poly·Avax |
 | CentrifugeFacet | `0x6275c64C1DA8919D1F7F5D558D36A6D750C74838` | 1.0.0 | ETH·Base |
 | ChainflipFacet | `0xFa93141130a11FdaB7C6c800dfB93a5d19Da6aA4` | 1.0.0 | ETH·Arb |
@@ -232,9 +239,10 @@ The "Version" column is the facet version recorded in `deployments/<network>.dia
 | GasZipFacet | `0xB391B85Fcdecf94eA5f0EE96F64fFf7D9303B5bb` | 2.0.4 | Poly·BNB·Avax |
 | GasZipFacet | `0x7FFE27a83a95bF814188C3244E06C8d497589287` | 2.0.5 | RH |
 | GasZipFacet | `0x8d80bcbD33b2570d5233f5d5D051A90eCfefc7f0` | 2.0.5 | Arc |
-| GenericSwapFacetV3 | `0x31a9b1835864706Af10103b31Ea2b79bdb995F5F` | 1.0.0 | Base·Arb·Poly·BNB·Avax |
-| GenericSwapFacetV3 | `0x8C9dBA771220Ed09580b77F0765e7153fbDE7790` | 1.0.2 | ETH |
-| GenericSwapFacetV3 | `0x8dFDaeBB42655a4A4e2b89687dd117074AE8c665` | 1.0.2 | OP |
+| GenericSwapFacetV3 | `0x02DB8a1C2170aee6CD17715ecD1C567c9b296e2C` | 2.0.0 | ETH·Base·Arb·OP·Poly·BNB·Avax (since about 2026-10-21) |
+| GenericSwapFacetV3 (replaced) | `0x31a9b1835864706Af10103b31Ea2b79bdb995F5F` | 1.0.0 | none now (was Base·Arb·Poly·BNB·Avax) |
+| GenericSwapFacetV3 (replaced) | `0x8C9dBA771220Ed09580b77F0765e7153fbDE7790` | 1.0.2 | none now (was ETH) |
+| GenericSwapFacetV3 (replaced) | `0x8dFDaeBB42655a4A4e2b89687dd117074AE8c665` | 1.0.2 | none now (was OP) |
 | GenericSwapFacetV3 | `0xB129ce9C3fCD55726Ff314a2764d3937FA496071` | 2.0.0 | RH |
 | GenericSwapFacetV3 | `0x0E60f12E2CE6b4EA51bde7A2aD61A22B12605c9C` | 2.0.0 | Arc |
 | GlacisFacet | `0xd69e5eA7458aBFF098e9240f81F733898535c7A0` | 1.2.0 | ETH·OP·Poly·BNB |
@@ -245,10 +253,13 @@ The "Version" column is the facet version recorded in `deployments/<network>.dia
 | LayerSwapFacet | `0x7Babf9c78e5c040B1bBd8981189ea4d6E3Fc8344` | 1.0.0 | Arb |
 | LayerSwapFacet | `0x88545564793A470B511CC3E7e225a459bA29D291` | 1.0.0 | RH |
 | LayerSwapFacet | `0x2af47e3266a5120b0C07658447aaD001680Fbb77` | 1.0.0 | Arc |
-| LiFiIntentEscrowFacetV2 | `0x1B5c543CFe993ec1c89ad399E5433562A8CF4e05` | 1.0.0 | ETH·Base·Arb·OP·Poly·BNB |
-| LiFiIntentEscrowFacetV2 | `0xf18E7d025BdB3e0DD952Cc9b20A977f6E296DF45` | 1.0.0 | Avax |
-| LiFiIntentEscrowFacetV2 | `0xF824feC6aCdD168C9Db95B1Eaed18bf3E8Aae0FF` | 1.0.0 | RH |
+| LiFiIntentEscrowFacetV2 | `0x0Fc3045A569F55233bA26D92DB2e7dbb47C30D76` | 2.0.0 | ETH·Base·Arb·OP·Poly·BNB·Avax |
+| LiFiIntentEscrowFacetV2 | `0x623A52a6f2e47370B230BEf20EEcc5029957e58D` | 2.0.0 | RH |
+| LiFiIntentEscrowFacetV2 (replaced) | `0x1B5c543CFe993ec1c89ad399E5433562A8CF4e05` | 1.0.0 | none now (was ETH·Base·Arb·OP·Poly·BNB) |
+| LiFiIntentEscrowFacetV2 (replaced) | `0xf18E7d025BdB3e0DD952Cc9b20A977f6E296DF45` | 1.0.0 | none now (was Avax) |
+| LiFiIntentEscrowFacetV2 (replaced) | `0xF824feC6aCdD168C9Db95B1Eaed18bf3E8Aae0FF` | 1.0.0 | none now (was RH) |
 | LiFiIntentEscrowFacetV2 | `0x821ABffbB6C0924B80454D8C73d98B9FB0471877` | 2.0.0 | Arc |
+| M0Facet | `0x879D83eAe7D13fcF7FfD931f211EF29f167d9d5C` | 1.0.0 | ETH·Base·Arb (since 2026-10-13) |
 | MayanFacet | `0x124Aa9169E6c0851a4A54D0ebb9158f2313d9Dd8` | 2.0.0 | ETH·Base·Arb·OP·Poly·BNB·Avax |
 | MegaETHBridgeFacet | `0xE46E9a5Ae71f1Fb3Ac59D09469830d6Ecc1D21f2` | 1.0.0 | ETH |
 | NEARIntentsFacet | `0x8f00E690a45e75D7A1A765163829Ad33244a1C33` | 3.0.0 (verified source; not yet in the repository files) | ETH·Base·Arb·OP·Poly·BNB·Avax |
@@ -259,8 +270,10 @@ The "Version" column is the facet version recorded in `deployments/<network>.dia
 | OwnershipFacet | `0x03106740Ec9558c8D1cb1076255E9a5c76bB1745` | 1.0.0 | Base |
 | OwnershipFacet | `0xe1A910021eDf98F692c9fa08dC699e77e57bd794` | 1.0.0 | RH |
 | OwnershipFacet | `0xefD77f2301a1AB2ca464f44025d17877B7930037` | 1.0.0 | Arc |
-| PaxosTransitFacet | `0x5C47966EAAa5dbf30E20C1a01ED0acFCBCcF1349` | 1.0.0 | ETH |
-| PaxosTransitFacet | `0x12A395526Dc6b257ddb6953b1a0e8Ae91Ac5Fd9b` | 1.0.0 | RH |
+| PaxosTransitFacet | `0x94a3EdcA65424775651e6FBCE63c89C8cB69a66f` | 2.0.0 | ETH·Arb (since 2026-10-07) |
+| PaxosTransitFacet | `0x42Ad379281ba62f15365f13A677096a2efA1b27d` | 2.0.0 | RH (since 2026-10-07) |
+| PaxosTransitFacet (replaced) | `0x5C47966EAAa5dbf30E20C1a01ED0acFCBCcF1349` | 1.0.0 | none now (was ETH) |
+| PaxosTransitFacet (replaced) | `0x12A395526Dc6b257ddb6953b1a0e8Ae91Ac5Fd9b` | 1.0.0 | none now (was RH) |
 | PeripheryRegistryFacet | `0x69cb467EfD8044ac9eDB88F363309ab1cbFA0A15` | 1.0.0 | ETH·Arb·OP·Poly·BNB·Avax |
 | PeripheryRegistryFacet | `0xf1269030deB739edB0b7dABA9b701E102116d86c` | 1.0.0 | Base |
 | PeripheryRegistryFacet | `0x5C3C6cE45449d1d4A8B69Cb07Cf025147295c9d7` | 1.0.0 | RH |
@@ -286,7 +299,8 @@ The "Version" column is the facet version recorded in `deployments/<network>.dia
 | ThorSwapFacet | `0xcAefaC1Ea4DeC8fd866CBc5B6Dd3054f80d49B80` | 1.2.1 | ETH |
 | ThorSwapFacet | `0x4BE836589E666fEA7D3E75a786b39E10E59a83ac` | 1.2.1 | Base |
 | UnitFacet | `0x989a7eFaBb9bE76ac3424B940862d9cf55334873` | 1.0.1 | ETH |
-| WhitelistManagerFacet | `0xb28Dd740D27853A91639795223AB409088A73E23` | 1.0.0 | ETH·Base·Arb·OP·Poly·BNB·Avax |
+| WhitelistManagerFacet | `0x1841044080E6872c90aC5048F0d1954CC546E9b7` | 1.1.0 | ETH·Base·Arb·OP·Poly·BNB·Avax (since about 2026-10-21) |
+| WhitelistManagerFacet (replaced) | `0xb28Dd740D27853A91639795223AB409088A73E23` | 1.0.0 | none now (was ETH·Base·Arb·OP·Poly·BNB·Avax) |
 | WhitelistManagerFacet | `0x1dbaa8086B650a2b8B1ACD6993DF16b05896F6FA` | 1.1.0 | RH |
 | WhitelistManagerFacet | `0x74971eEF6058f2AEBe87EF2759e996E5e4A8811D` | 1.1.0 | Arc |
 | WithdrawFacet | `0x711e80A9c1eB906d9Ae9d37E5432E6E7aCeEdA0B` | 1.0.0 | Arb·Poly·BNB·Avax |
@@ -295,7 +309,7 @@ The "Version" column is the facet version recorded in `deployments/<network>.dia
 | WithdrawFacet | `0x68ff3e074F27F33DaDC45bAaCeE0fDd073dA987d` | 1.0.0 | RH |
 | WithdrawFacet | `0x571AE718406d869400357cc5ae0ef94ED6065C73` | 1.0.0 | Arc |
 
-Chain totals (facets / selectors): Ethereum 41 / 150, Base 34 / 134, Arbitrum 33 / 133, Optimism 29 / 121, Polygon 30 / 122, BNB 30 / 115, Avalanche 26 / 105, Robinhood Chain 19 / 68, Arc 19 / 71 (2026-10-05).
+Chain totals (facets / selectors) on 2026-10-30: Ethereum 42 / 150, Base 35 / 134, Arbitrum 35 / 138, Optimism 29 / 117, Polygon 30 / 119, BNB 30 / 112, Avalanche 26 / 102, Robinhood Chain 19 / 69, Arc 19 / 71. On 2026-09-29: Ethereum 41 / 150, Base 34 / 134, Arbitrum 33 / 133, Optimism 29 / 121, Polygon 30 / 122, BNB 30 / 115, Avalanche 26 / 105, Robinhood Chain 19 / 68.
 
 ---
 
@@ -303,15 +317,15 @@ Chain totals (facets / selectors): Ethereum 41 / 150, Base 34 / 134, Arbitrum 33
 
 | Chain | ID | Diamond | Bridge facets live | Missing compared with Ethereum |
 |-------|----|---------|--------------------|--------------------------------|
-| Ethereum | 1 | `0x1231DEB6f5749EF6cE6943a275A1D3E7486F4EaE` | 31 | none |
-| Base | 8453 | `0x1231DEB6f5749EF6cE6943a275A1D3E7486F4EaE` | 24 | ArbitrumBridgeFacet, ChainflipFacet, GnosisBridgeFacet, MegaETHBridgeFacet, OmniBridgeFacet, OptimismBridgeFacet, PaxosTransitFacet, PolygonBridgeFacet, UnitFacet; extra: AcrossFacet, SupersetFacet |
-| Arbitrum One | 42161 | `0x1231DEB6f5749EF6cE6943a275A1D3E7486F4EaE` | 23 | ArbitrumBridgeFacet, CentrifugeFacet, GnosisBridgeFacet, MegaETHBridgeFacet, OmniBridgeFacet, OptimismBridgeFacet, PaxosTransitFacet, PolygonBridgeFacet, ThorSwapFacet, UnitFacet; extra: AcrossFacet, SupersetFacet |
-| Optimism | 10 | `0x1231DEB6f5749EF6cE6943a275A1D3E7486F4EaE` | 19 | ArbitrumBridgeFacet, CentrifugeFacet, ChainflipFacet, GardenFacet, GnosisBridgeFacet, MegaETHBridgeFacet, OmniBridgeFacet, OptimismBridgeFacet, PaxosTransitFacet, PolygonBridgeFacet, ThorSwapFacet, UnitFacet |
-| Polygon PoS | 137 | `0x1231DEB6f5749EF6cE6943a275A1D3E7486F4EaE` | 20 | ArbitrumBridgeFacet, CentrifugeFacet, ChainflipFacet, GardenFacet, GnosisBridgeFacet, MegaETHBridgeFacet, OmniBridgeFacet, OptimismBridgeFacet, PaxosTransitFacet, PolygonBridgeFacet, ThorSwapFacet, UnitFacet; extra: AcrossFacet |
-| BNB Smart Chain | 56 | `0x1231DEB6f5749EF6cE6943a275A1D3E7486F4EaE` | 20 | ArbitrumBridgeFacet, CelerCircleBridgeFacet, CentrifugeFacet, ChainflipFacet, GnosisBridgeFacet, MegaETHBridgeFacet, OptimismBridgeFacet, PaxosTransitFacet, PolygonBridgeFacet, PolymerCCTPFacet, UnitFacet |
-| Avalanche C-Chain | 43114 | `0x1231DEB6f5749EF6cE6943a275A1D3E7486F4EaE` | 16 | AcrossFacetPackedV4, AcrossFacetV4, AcrossV4SwapFacet, ArbitrumBridgeFacet, CentrifugeFacet, ChainflipFacet, EcoFacet, GardenFacet, GnosisBridgeFacet, MegaETHBridgeFacet, OmniBridgeFacet, OptimismBridgeFacet, PaxosTransitFacet, PolygonBridgeFacet, UnitFacet |
-| Robinhood Chain | 4663 | `0xB477751B76CF82d00a686A1232f5fCD772414Af3` | 9 | AcrossFacetPackedV4, AcrossV4SwapFacet, AllBridgeFacet, ArbitrumBridgeFacet, CelerCircleBridgeFacet, CentrifugeFacet, ChainflipFacet, DeBridgeDlnFacet, EcoFacet, FraxFacet, GnosisBridgeFacet, MayanFacet, MegaETHBridgeFacet, NEARIntentsFacet, OmniBridgeFacet, OptimismBridgeFacet, PolygonBridgeFacet, PolymerCCTPFacet, SquidFacet, StargateFacetV2, ThorSwapFacet, UnitFacet |
-| Arc | 5042 | `0xA4072583658Fae592A3506A42431cb6316a8d40b` | 9 | AcrossFacetPackedV4, AcrossV4SwapFacet, AllBridgeFacet, ArbitrumBridgeFacet, CelerCircleBridgeFacet, CentrifugeFacet, ChainflipFacet, DeBridgeDlnFacet, FraxFacet, GlacisFacet, GnosisBridgeFacet, MayanFacet, MegaETHBridgeFacet, NEARIntentsFacet, OmniBridgeFacet, OptimismBridgeFacet, PaxosTransitFacet, PolygonBridgeFacet, SquidFacet, StargateFacetV2, ThorSwapFacet, UnitFacet |
+| Ethereum | 1 | `0x1231DEB6f5749EF6cE6943a275A1D3E7486F4EaE` | 32 | none |
+| Base | 8453 | `0x1231DEB6f5749EF6cE6943a275A1D3E7486F4EaE` | 25 | ArbitrumBridgeFacet, ChainflipFacet, GnosisBridgeFacet, MegaETHBridgeFacet, OmniBridgeFacet, OptimismBridgeFacet, PaxosTransitFacet, PolygonBridgeFacet, UnitFacet; extra: AcrossFacet, SupersetFacet |
+| Arbitrum One | 42161 | `0x1231DEB6f5749EF6cE6943a275A1D3E7486F4EaE` | 25 | ArbitrumBridgeFacet, CentrifugeFacet, GnosisBridgeFacet, MegaETHBridgeFacet, OmniBridgeFacet, OptimismBridgeFacet, PolygonBridgeFacet, ThorSwapFacet, UnitFacet; extra: AcrossFacet, SupersetFacet |
+| Optimism | 10 | `0x1231DEB6f5749EF6cE6943a275A1D3E7486F4EaE` | 19 | ArbitrumBridgeFacet, CentrifugeFacet, ChainflipFacet, GardenFacet, GnosisBridgeFacet, MegaETHBridgeFacet, M0Facet, OmniBridgeFacet, OptimismBridgeFacet, PaxosTransitFacet, PolygonBridgeFacet, ThorSwapFacet, UnitFacet |
+| Polygon PoS | 137 | `0x1231DEB6f5749EF6cE6943a275A1D3E7486F4EaE` | 20 | ArbitrumBridgeFacet, CentrifugeFacet, ChainflipFacet, GardenFacet, GnosisBridgeFacet, MegaETHBridgeFacet, M0Facet, OmniBridgeFacet, OptimismBridgeFacet, PaxosTransitFacet, PolygonBridgeFacet, ThorSwapFacet, UnitFacet; extra: AcrossFacet |
+| BNB Smart Chain | 56 | `0x1231DEB6f5749EF6cE6943a275A1D3E7486F4EaE` | 20 | ArbitrumBridgeFacet, CelerCircleBridgeFacet, CentrifugeFacet, ChainflipFacet, GnosisBridgeFacet, MegaETHBridgeFacet, M0Facet, OptimismBridgeFacet, PaxosTransitFacet, PolygonBridgeFacet, PolymerCCTPFacet, UnitFacet |
+| Avalanche C-Chain | 43114 | `0x1231DEB6f5749EF6cE6943a275A1D3E7486F4EaE` | 16 | AcrossFacetPackedV4, AcrossFacetV4, AcrossV4SwapFacet, ArbitrumBridgeFacet, CentrifugeFacet, ChainflipFacet, EcoFacet, GardenFacet, GnosisBridgeFacet, MegaETHBridgeFacet, M0Facet, OmniBridgeFacet, OptimismBridgeFacet, PaxosTransitFacet, PolygonBridgeFacet, UnitFacet |
+| Robinhood Chain | 4663 | `0xB477751B76CF82d00a686A1232f5fCD772414Af3` | 9 | AcrossFacetPackedV4, AcrossV4SwapFacet, AllBridgeFacet, ArbitrumBridgeFacet, CelerCircleBridgeFacet, CentrifugeFacet, ChainflipFacet, DeBridgeDlnFacet, EcoFacet, FraxFacet, GnosisBridgeFacet, MayanFacet, MegaETHBridgeFacet, M0Facet, NEARIntentsFacet, OmniBridgeFacet, OptimismBridgeFacet, PolygonBridgeFacet, PolymerCCTPFacet, SquidFacet, StargateFacetV2, ThorSwapFacet, UnitFacet |
+| Arc | 5042 | `0xA4072583658Fae592A3506A42431cb6316a8d40b` | 9 | AcrossFacetPackedV4, AcrossV4SwapFacet, AllBridgeFacet, ArbitrumBridgeFacet, CelerCircleBridgeFacet, CentrifugeFacet, ChainflipFacet, DeBridgeDlnFacet, FraxFacet, GlacisFacet, GnosisBridgeFacet, MayanFacet, MegaETHBridgeFacet, M0Facet, NEARIntentsFacet, OmniBridgeFacet, OptimismBridgeFacet, PaxosTransitFacet, PolygonBridgeFacet, SquidFacet, StargateFacetV2, ThorSwapFacet, UnitFacet |
 
 ---
 
@@ -350,6 +364,8 @@ SEL_START_RELAY_DEPOSITORY             = '\x092e8fa4'
 SEL_SWAP_START_RELAY_DEPOSITORY        = '\xa3443faa'
 SEL_START_MAYAN                        = '\xb4875292'
 SEL_SWAP_START_MAYAN                   = '\x80c65808'
+SEL_START_M0                           = '\x65782c4b'
+SEL_SWAP_START_M0                      = '\xb9eaf86d'
 SEL_START_NEAR_INTENTS                 = '\x4698f032'
 SEL_SWAP_START_NEAR_INTENTS            = '\x02631b09'
 SEL_START_LAYERSWAP                    = '\xee9e98e0'

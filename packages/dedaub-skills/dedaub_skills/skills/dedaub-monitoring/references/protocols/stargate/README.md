@@ -2,12 +2,12 @@
 
 Stargate is a liquidity-pool bridge built on LayerZero. Each chain holds pools of the bridged asset; a transfer takes tokens into the source pool and pays them out of the destination pool. Two generations exist on the same chains with different contracts, events and chain ids. Index both; v2 carries the live traffic.
 
-**Status:** all constants verified on 2026-10-01 against live RPC on the eight target chains, the Stargate v1 and v2 contract pages, and the `stargate-protocol/stargate` and `stargate-protocol/stargate-v2` repositories.
+**Status:** all constants verified on 2026-10-01 against live RPC on the eight target chains, the Stargate v1 and v2 contract pages, and the `stargate-protocol/stargate` and `stargate-protocol/stargate-v2` repositories. Re-checked on 2026-10-30: the Ethereum METIS pool is unwired; no Stargate on Robinhood Chain or Arc (the Robinhood "Stargate" bridge route is an OFT route).
 
 | File | Generation | Contracts | Proxy pattern | Chains (of the 8) | Status |
 |------|-----------|-----------|---------------|-------------------|--------|
-| [v2.md](v2.md) | **Stargate v2** (LayerZero V2, taxi and bus) | StargatePoolNative / USDC / USDT / EURC / METIS / mETH, TokenMessaging, CreditMessaging, FeeLibV1*, Treasurer, OFTWrapper | **None** (immutable); owner = OneSig per chain | ETH, Base, Arb, OP, Poly, BNB, Avax — **not Robinhood** | Live |
-| [v1.md](v1.md) | **Stargate v1** (LayerZero V1) | Router, RouterETH, Bridge, Factory, Pool (per asset), STG, StargateComposer | **None** (immutable) | ETH, Base, Arb, OP, Poly, BNB, Avax — **not Robinhood** | Winding down: no swaps in the pinned window |
+| [v2.md](v2.md) | **Stargate v2** (LayerZero V2, taxi and bus) | StargatePoolNative / USDC / USDT / EURC / METIS / mETH, TokenMessaging, CreditMessaging, FeeLibV1*, Treasurer, OFTWrapper | **None** (immutable); owner = OneSig per chain | ETH, Base, Arb, OP, Poly, BNB, Avax — **not Robinhood, not Arc** | Live (Ethereum METIS pool unwired 2026-10-27) |
+| [v1.md](v1.md) | **Stargate v1** (LayerZero V1) | Router, RouterETH, Bridge, Factory, Pool (per asset), STG, StargateComposer | **None** (immutable) | ETH, Base, Arb, OP, Poly, BNB, Avax — **not Robinhood, not Arc** | Winding down: no swaps in the pinned window |
 
 ## Chain identifiers
 
@@ -21,8 +21,9 @@ Stargate is a liquidity-pool bridge built on LayerZero. Each chain holds pools o
 | Optimism | 10 | 30111 | 111 | v1, v2 |
 | Base | 8453 | 30184 | 184 | v1, v2 |
 | Robinhood Chain | 4663 | 30416 | 416 | **none** |
+| Arc | 5042 | 30417 | 417 | **none** |
 
-The LayerZero endpoints, libraries and the generic OFT events are documented in [../layerzero/README.md](../layerzero/README.md); these files do not repeat them. On Robinhood Chain, LayerZero is deployed (eid 30416, `EndpointV2` `0x6f475642a6e85809b1c36fa62763669b1b48dd5b`) but Stargate is not: `eth_getCode` returns `0x` for all 151 Stargate literals of the other chains, and the v2 repository has no Robinhood deployment.
+The LayerZero endpoints, libraries and the generic OFT events are documented in [../layerzero/README.md](../layerzero/README.md); these files do not repeat them. On Robinhood Chain, LayerZero is deployed (eid 30416, `EndpointV2` `0x6f475642a6e85809b1c36fa62763669b1b48dd5b`) but Stargate is not: `eth_getCode` returns `0x` for all 151 Stargate literals of the other chains, and the v2 repository has no Robinhood deployment. Robinhood Chain's bridging page names a "LayerZero OFT / Stargate" route: it moves LayerZero OFT tokens, not Stargate pool assets, and the Stargate API lists no Robinhood Chain. Arc is the same: LayerZero is deployed (eid 30417, the same `EndpointV2` literal), Stargate is not.
 
 ## Cross-cutting facts
 

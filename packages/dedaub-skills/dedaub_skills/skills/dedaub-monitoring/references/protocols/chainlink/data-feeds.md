@@ -1,7 +1,7 @@
-# Chainlink Data Feeds — Topics, Selectors, Addresses (Ethereum, Base, BSC, Avalanche, Arbitrum, Optimism, Polygon)
+# Chainlink Data Feeds — Topics, Selectors, Addresses (Ethereum, Base, BSC, Avalanche, Arbitrum, Optimism, Polygon, Robinhood Chain, Arc)
 
-**Status:** verified on 2026-05-29. Topic0/selectors computed locally (keccak) and the well-known ones cross-checked against canonical Chainlink interfaces; addresses verified via `eth_getCode` (non-empty) + `description()`/`symbol()` on each chain's publicnode RPC.
-**Scope:** Chainlink Data Feeds (a.k.a. Price Feeds) + Proof-of-Reserve feeds + L2 Sequencer Uptime feeds on Ethereum (1), Base (8453), BNB Smart Chain (56), Avalanche C-Chain (43114), Arbitrum One (42161), Optimism (10), Polygon PoS (137). The LINK token lives in [link-token.md](link-token.md).
+**Status:** verified on 2026-05-29. Re-checked on 2026-10-30: Robinhood Chain (58 feeds) and Arc (34 feeds) added from Chainlink's feed directory (`reference-data-directory.vercel.app/feeds-robinhood-mainnet.json`, `feeds-arc-mainnet.json`); the §6 anchors checked live with `description()` and `aggregator()`. Topic0/selectors computed locally (keccak) and the well-known ones cross-checked against canonical Chainlink interfaces; addresses verified via `eth_getCode` (non-empty) + `description()`/`symbol()` on each chain's publicnode RPC.
+**Scope:** Chainlink Data Feeds (a.k.a. Price Feeds) + Proof-of-Reserve feeds + L2 Sequencer Uptime feeds on Ethereum (1), Base (8453), BNB Smart Chain (56), Avalanche C-Chain (43114), Arbitrum One (42161), Optimism (10), Polygon PoS (137), Robinhood Chain (4663) and Arc (5042) (§6). The LINK token lives in [link-token.md](link-token.md).
 
 Data Feeds use a **proxy → aggregator** split. Consumers always read a stable **`EACAggregatorProxy`** address; the proxy forwards `latestRoundData()`/etc. to the current underlying **aggregator** (`AccessControlledOffchainAggregator`, OCR) and bridges round IDs across "phases" — each aggregator swap increments `phaseId` and the high 16 bits of every `roundId` so historical reads stay monotonic. There are **thousands** of feed proxies across these chains; this doc gives the architecture, the chain-agnostic event/function constants, the discovery method, and a verified set of canonical/example addresses — not an exhaustive per-asset list (that's the [docs feed-address page](https://docs.chain.link/data-feeds/price-feeds/addresses) / the on-chain Feed Registry).
 
@@ -113,7 +113,7 @@ Before trusting any price on an optimistic rollup, read the uptime feed and requ
 | Optimism (10) | `0x371EAD81c9102C9BF4874A9075FFFf170F2Ee389` | ✅ |
 | Base (8453) | `0xBCF85224fc0756B9Fa45aA7892530B47e10b6433` | ✅ |
 
-BNB, Avalanche, and Polygon PoS are not optimistic rollups and have **no** sequencer uptime feed.
+BNB, Avalanche, and Polygon PoS are not optimistic rollups and have **no** sequencer uptime feed. Robinhood Chain (an Arbitrum Nitro chain) has **no** sequencer uptime feed in Chainlink's directory (2026-10-30); Arc has none either.
 
 ---
 
@@ -130,6 +130,10 @@ All are `EACAggregatorProxy` addresses, verified via `eth_getCode` + `descriptio
 | Arbitrum One (42161) | `0x639Fe6ab55C921f74e7fac1ee960C0B6293ba612` | `0x6ce185860a4963106506C203335A2910413708e9` |
 | Optimism (10) | `0x13e3Ee699D1909E989722E753853AE30b17e08c5` | `0xD702DD976Fb76Fffc2D3963D037dfDae5b04E593` |
 | Polygon PoS (137) | `0xF9680D99D6C9589e2a93a78A04A279e509205945` | `0xc907E116054Ad103354f2D350FD2514433D57F6f` |
+| Robinhood Chain (4663) | `0x78F3556b67E17Df817D51Ef5a990cDaF09E8d3A9` (aggregator `0x6091e64eb7138eef066a80fd3a0d7427b91f2721`) | `0xa2c5184bF03d373Dc9dE4876eb4Bce595B460251` (aggregator `0xc5845f87ad59a7a3d4bf9b90a0c19dba38475eec`) |
+| Arc (5042) | `0x50FCDD99D6762D1C170DC6A9111db944AEE6D364` (aggregator `0xdbd49223aaafeba743a58d45df45d78a61234ec7`) | `0xa109B535C70C8Be9995be64Bb6751AcDB27e03De` (aggregator `0x733fe1ba02ea9003c3cfbf5dcc41cf685ff64362`) |
+
+Other feeds read live on 2026-10-30 (proxy → `aggregator()`, 8 decimals): Robinhood Chain USDC/USD `0x9e6f4605992a899eE2999999F3Ec80C41F452546` → `0xdadd7441395913a7468fac020709e86aefc04ef9`, LINK/USD `0xe86e3422Aa9B5e8ee9f3E41a63975bC387A8bce9` → `0x3d2a8e2937f306d11829d95059deda9a290c74da`. Robinhood Chain also carries **stock-token feeds** (asset class Equity; `description()` = "RHSPY / USD", "RHTSLA / USD", ...): SPY `0x319724394D3A0e3669269846abE664Cd621f9f6A` → `0x78bcb218fa04b9b3a278ebc865ed320bf8defbac`, TSLA `0x4A1166a659A55625345e9515b32adECea5547C38` → `0x7a6b81ba7fbcb90104d8c496158cf383cd7233b1`; the price is the share price times the token multiplier (docs.robinhood.com/chain/oracles-and-price-feeds). Arc: USDC/USD `0x84EA90AC252Dc437031461836DB5164219147905` → `0x3a9eb2b28b7f2a7c38807eb0cb64644c803c54b8`, LINK/USD `0xD37600AB06758356F0f5eE607299204785bF8c3a` → `0xe62cbd248482d7fe2a4ee2832a419905ed12b34c`, EURC/USD `0x361b95c10b76Ca3f35C686d423e43A951755Bf23` → `0xd0586a927e9b6af51b5b83e58453c811fa5c243e`; Arc also has 8 Forex feeds.
 
 **Feed discovery (the right way to get them all):** there is no on-chain factory/registry that enumerates feeds on L2s. Either (a) scrape the [docs feed-address page](https://docs.chain.link/data-feeds/price-feeds/addresses) per chain, (b) on Ethereum walk the `FeedRegistry`, or (c) collect proxy addresses from your own config and resolve `aggregator()` per proxy, then index `AnswerUpdated`/`NewTransmission` on the resolved aggregator (re-resolving on `phaseId` change).
 
@@ -180,6 +184,13 @@ ETH_BTCUSD                  = '\xf4030086522a5beea4988f8ca5b36dbc97bee88c'
 ARB_SEQ_UPTIME              = '\xfdb631f5ee196f0ed6faa767959853a9f217697d'
 OP_SEQ_UPTIME               = '\x371ead81c9102c9bf4874a9075ffff170f2ee389'
 BASE_SEQ_UPTIME             = '\xbcf85224fc0756b9fa45aa7892530b47e10b6433'
+-- Robinhood Chain (4663) and Arc (5042)
+RH_ETHUSD                   = '\x78f3556b67e17df817d51ef5a990cdaf09e8d3a9'
+RH_BTCUSD                   = '\xa2c5184bf03d373dc9de4876eb4bce595b460251'
+RH_SPYUSD                   = '\x319724394d3a0e3669269846abe664cd621f9f6a'
+ARC_ETHUSD                  = '\x50fcdd99d6762d1c170dc6a9111db944aee6d364'
+ARC_BTCUSD                  = '\xa109b535c70c8be9995be64bb6751acdb27e03de'
+ARC_USDCUSD                 = '\x84ea90ac252dc437031461836db5164219147905'
 -- USD = Denominations.USD sentinel for FeedRegistry
 DENOM_USD                   = '\x0000000000000000000000000000000000000348'
 ```

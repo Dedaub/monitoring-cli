@@ -1,6 +1,6 @@
-# Hyperlane warp routes — Topics, Selectors, Addresses (Ethereum, Base, Arbitrum, Optimism, Polygon, BNB, Avalanche; Robinhood Chain: no registry route)
+# Hyperlane warp routes — Topics, Selectors, Addresses (Ethereum, Base, Arbitrum, Optimism, Polygon, BNB, Avalanche, Robinhood Chain, Arc)
 
-**Status:** verified on 2026-09-29 against live RPC on all eight target chains, the canonical `hyperlane-xyz/hyperlane-registry` (`deployments/warp_routes/*/*-config.yaml`, commit `09aa8356`, 2026-09-28) and `hyperlane-xyz/hyperlane-monorepo` (`solidity/contracts/token`, commit `c52b7280`). Topics and selectors recomputed as `keccak256(signature)` and matched against deployed route bytecode; every listed route address existence-checked with `eth_getCode` (all are EIP-1967 proxies, except the non-proxy routes marked below).
+**Status:** verified on 2026-09-29 against live RPC on all eight target chains, the canonical `hyperlane-xyz/hyperlane-registry` (`deployments/warp_routes/*/*-config.yaml`, commit `09aa8356`, 2026-09-28) and `hyperlane-xyz/hyperlane-monorepo` (`solidity/contracts/token`, commit `c52b7280`). Topics and selectors recomputed as `keccak256(signature)` and matched against deployed route bytecode; every listed route address existence-checked with `eth_getCode` (all are EIP-1967 proxies, except the non-proxy routes marked below). Re-checked on 2026-10-30 (registry commit `853a5e60`): registry routes now exist on Robinhood Chain (USDG/moonpay, ETH/coti-ethereum, ETH/viction) and Arc (USDC/moonpay, the CCTP v2 routes, USDC/eclipsemainnet), checked live (§10).
 **Scope:** warp routes, Hyperlane's token bridges: **HypERC20Collateral** (lock and release), **HypERC20** (synthetic: burn and mint), **HypNative** (native ETH), **HypXERC20** and **HypXERC20Lockbox** (xERC20 burn and mint), **CrossCollateralRouter** (multi-token collateral) and the **CCTP routes** (USDC by Circle CCTP under a Hyperlane message). Any team can deploy a route, so the address lists are a floor: they hold the major registry routes on the seven chains and every route that was active in the pinned window. The messaging core (Mailbox, hooks, domains) is in [core.md](core.md).
 
 A warp route is a set of router contracts, one per chain, that trust each other (`enrollRemoteRouter`). The user calls `transferRemote` on the source route. The route takes the tokens (lock, burn or CCTP burn), emits `SentTransferRemote`, and dispatches a message through the Mailbox. On the destination, `Mailbox.process` calls the destination route's `handle`, which emits `ReceivedTransferRemote` and releases or mints the tokens to the recipient.
@@ -336,9 +336,26 @@ Mailbox `0xFf06aFcaABaDDd1fb08371f9ccA15D73D51FeBD6`. Pinned window, any emitter
 | USDC/aleo | USDC | Collateral | `0x1FdA66FA15A261F01F1E09228D41bD0A806d7529` | `0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E` | 0 / 0 |
 | USDC/eclipsemainnet | USDC | Collateral | `0x252833ad2daa5BCb7C251Aa8E12ce97D6Bd4765E` | `0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E` | 0 / 0 |
 | LITKEY/litchain | LITKEY | Synthetic | `0xa38Fce8bf2fA38a97749332724b9db3FF44F006D` | the route is the token | 0 / 0 |
-## 10. Robinhood Chain (chain ID 4663) — core deployed, no registry warp route
+## 10. Robinhood Chain (chain ID 4663) and Arc (chain ID 5042) — registry routes
 
-The registry lists the full Hyperlane core on Robinhood Chain ([core.md](core.md) §10) but **no warp route**: no `*-config.yaml` under `deployments/warp_routes/` names the chain (registry commit `09aa8356`). The pinned window holds one route transfer, from a route outside the registry:
+Registry routes for both chains appeared after the 2026-09-29 snapshot (registry commit `853a5e60`, 2026-10-27). Every route below was checked live on 2026-10-30: 2,840-byte TransparentUpgradeableProxy, `mailbox()` = the registry Mailbox of the chain ([core.md](core.md) §10, §10b), `token()` as listed.
+
+| Chain | Route (registry file) | Type | Address | Token (`token()`) | Implementation | Enrolled domains (`domains()`) |
+|-------|-----------------------|------|---------|-------------------|----------------|--------------------------------|
+| Robinhood Chain | USDG/moonpay and CROSS/moonpay | CrossCollateralRouter | `0x0179d2f23E86ac42Cc83d0E3BfE73e835f75e3E9` | USDG `0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168` | `0x05b0d9e0685ec1fe33f8cca58a7767ad12b997e5` | none (CrossCollateral enrollment) |
+| Robinhood Chain | ETH/coti-ethereum | Native | `0x2bef59e84615371304bd731601f6344F5F304504` | native ETH (`0x0`) | `0x7e163ae6a31956cb166b7426d508e1f346465d56` | 1, 8453, 42161, 2632500 |
+| Robinhood Chain | ETH/viction | Native | `0x4000b76E3d95947DdA57C20B42bD20b70deCD522` | native ETH (`0x0`) | `0x3b9486c24784936cb7b8efac0af14b9aaa0df215` | 1, 10, 88, 8453, 42161 |
+| Arc | USDC/moonpay and CROSS/moonpay | CrossCollateralRouter | `0x91c3FFE1E85a21B94Ac45A50DD4ccC666f572f05` | USDC `0x3600000000000000000000000000000000000000` | `0x3afe277a36abf61efa941fe361973f6bf23390df` | 1, 56, 137, 4114, 8453, 42161, 747474, 1399811149 |
+| Arc | USDC/mainnet-cctp-v2-standard | CCTP v2 route (collateral = USDC) | `0x16BF93e259ee7f7074453a2948379C35C6851b71` | USDC `0x3600…0000` | `0xed302316cfa0b570678b6f067750cecbdcb31cda` | 13 EVM domains, among them 1, 10, 137, 8453, 42161, 43114 |
+| Arc | USDC/mainnet-cctp-v2-fast | CCTP v2 route | `0x879f13a642642E938151d79Ec12E808B16E02e28` | USDC `0x3600…0000` | `0xd3ade54d66a9f1508e24de4a1fe2a89a40e287e7` | 13 EVM domains, the same set |
+| Arc | USDC/eclipsemainnet | Collateral | `0x56a255A080584de4433D0Fe6587F4C0105715589` | USDC `0x3600…0000` | `0x97d7e1f652ecb9e59bb3dccd7941f1d497640b70` | 15 domains, among them Solana 1399811149 and Eclipse 1408864445 |
+| Arc | USDC/mainnet-cctp-v2-standard-staging, -fast-staging | CCTP v2 routes (staging) | `0x6c07f25B23B5cab557E7df13f25D634F1491f146`, `0x2382899f9CaD4344cc2b9DD054A2A07FeeE4B8D0` | USDC `0x3600…0000` | `0xc08246a2…fa7c`, `0x5a8237b0…750c` | the 13-domain set; `owner()` = `0x22ea0e66c9afe2879135f4d16b5627454c53877e` (the other Arc routes: `0x70905ebe9ba33ab72ab2c51059b4048b835ae744`) |
+
+Owner of the three Robinhood routes: `0xae3b79d7c9fbe5905fc5638bb070dd356513d6fc`. The Arc CCTP routes pay out through Circle CCTP v2 (domain 26, [../cctp/v2.md](../cctp/v2.md) §4.3); see §13 item 6.
+
+**Literals that are routes on other chains hold other code here** (do not attach the other chain's role): on Robinhood Chain `0x050dcc964BCA53eF1A98A2347995cabC73cE25b9` and `0x766A80a7a6BBA555731DC1726DB5BFa030631270` are 9,626-byte plain contracts with `token()` = USDG and no `mailbox()`; `0xb71183f48F7f7789D40551149bE28a51f9A97F9A` is a 7,131-byte plain contract on the registry Mailbox; `0xEEC6574eAbBa52bac3f0277F2cD5Ac7e67197886` is an unlisted native route (domains 1 and 2632500). On Arc `0x050dcc964BCA53eF1A98A2347995cabC73cE25b9` is a 7,131-byte plain contract on the Arc Mailbox, `0x6E66a10Ce72fBdFA45Ab7de3693321246E254123` a 9,626-byte plain contract with `token()` = USDC, and `0xEEC6574eAbBa52bac3f0277F2cD5Ac7e67197886` an unlisted USDC collateral route (16 domains).
+
+Unlisted route seen on Robinhood Chain in the pinned window (2026-09-28 00:00–12:00 UTC):
 
 | Route | Mailbox | Token | Sample |
 |-------|---------|-------|--------|
@@ -346,24 +363,23 @@ The registry lists the full Hyperlane core on Robinhood Chain ([core.md](core.md
 
 Domain 2383 is not in the registry; its chain is unverified. Pinned window on Robinhood Chain: `SentTransferRemote` 1, `ReceivedTransferRemote` 0.
 
-**Arc (chain ID 5042):** the registry lists the core on Arc ([core.md](core.md) §10b) but no file in `deployments/warp_routes/` names Arc (registry commit `fe66faf5`, 2026-10-05).
-
 ---
 
 ## 11. Cross-chain summary (major registry routes; ✅ = route address with code, — = not in the route)
 
-| Route | ETH | Base | Arb | OP | Poly | BNB | Avax | Robin |
-|-------|-----|------|-----|----|------|-----|------|-------|
-| USDC/mainnet-cctp (CCTP v1) | ✅ | ✅ | ✅ | ✅ | ✅ | — | ✅ | — |
-| USDC/mainnet-cctp-v2-standard | ✅ | ✅ | ✅ | ✅ | ✅ | — | ✅ | — |
-| USDC/mainnet-cctp-v2-fast | ✅ | ✅ | ✅ | ✅ | ✅ | — | ✅ | — |
-| CROSS/moonpay (USDC and USDT) | ✅ | ✅ | ✅ | — | ✅ | ✅ | — | — |
-| EZETH/renzo-prod | ✅ lockbox | ✅ | ✅ | ✅ | — | ✅ | — | — |
-| oUSDT/production | ✅ lockbox | ✅ | ✅ | ✅ | — | ✅ | — | — |
-| USDT/eni | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | — | — |
-| USDC/aleo | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | — |
-| USDC/eclipsemainnet | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | — |
-| LITKEY/litchain | ✅ | ✅ | ✅ | ✅ | ✅ synthetic | ✅ synthetic | ✅ synthetic | — |
+| Route | ETH | Base | Arb | OP | Poly | BNB | Avax | Robin | Arc |
+|-------|-----|------|-----|----|------|-----|------|-------|-----|
+| USDC/mainnet-cctp (CCTP v1) | ✅ | ✅ | ✅ | ✅ | ✅ | — | ✅ | — | — |
+| USDC/mainnet-cctp-v2-standard | ✅ | ✅ | ✅ | ✅ | ✅ | — | ✅ | — | ✅ |
+| USDC/mainnet-cctp-v2-fast | ✅ | ✅ | ✅ | ✅ | ✅ | — | ✅ | — | ✅ |
+| CROSS/moonpay (USDC, USDT, USDG) | ✅ | ✅ | ✅ | — | ✅ | ✅ | — | ✅ USDG | ✅ USDC |
+| EZETH/renzo-prod | ✅ lockbox | ✅ | ✅ | ✅ | — | ✅ | — | — | — |
+| oUSDT/production | ✅ lockbox | ✅ | ✅ | ✅ | — | ✅ | — | — | — |
+| USDT/eni | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | — | — | — |
+| USDC/aleo | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | — | — |
+| USDC/eclipsemainnet | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | — | ✅ |
+| LITKEY/litchain | ✅ | ✅ | ✅ | ✅ | ✅ synthetic | ✅ synthetic | ✅ synthetic | — | — |
+| ETH/coti-ethereum, ETH/viction (native) | — | — | — | — | — | — | — | ✅ | — |
 
 Route addresses differ per chain, except a few CREATE2 routes (for example USDC/mainnet-cctp-v2-standard `0x33e94B6D2ae697c16a750dB7c3d9443622C4405a` on Base, Optimism, Polygon and Avalanche, and USDC/aleo `0x1FdA66FA15A261F01F1E09228D41bD0A806d7529` on four chains). The registry holds 526 route entries on the seven chains (Ethereum 172, Base 90, BNB 85, Arbitrum 76, Polygon 50, Optimism 37, Avalanche 16); this file lists the major and the active ones.
 
@@ -467,6 +483,14 @@ BNB_WARP_OUSDT                   = '\xc283600f0a84162c0a062f7273abb1f8f111b40c'
 BASE_WARP_UNLISTED_USDC          = '\xde0f17681123cbe998e7896b74a197937123b3d9'
 POLY_WARP_UNLISTED               = '\x53eef09d9e5ec83917788a182837da48b1c52a15'
 RH_WARP_UNLISTED_AEVA            = '\xa880b6e6511daf5a0bdde96ee8b36d8004d9d7ed'
+-- ===== Robinhood Chain (4663) and Arc (5042) registry routes (§10) =====
+RH_WARP_MOONPAY_USDG             = '\x0179d2f23e86ac42cc83d0e3bfe73e835f75e3e9'
+RH_WARP_ETH_COTI                 = '\x2bef59e84615371304bd731601f6344f5f304504'
+RH_WARP_ETH_VICTION              = '\x4000b76e3d95947dda57c20b42bd20b70decd522'
+ARC_WARP_MOONPAY_USDC            = '\x91c3ffe1e85a21b94ac45a50dd4ccc666f572f05'
+ARC_WARP_USDC_CCTP_V2_STANDARD   = '\x16bf93e259ee7f7074453a2948379c35c6851b71'
+ARC_WARP_USDC_CCTP_V2_FAST       = '\x879f13a642642e938151d79ec12e808b16e02e28'
+ARC_WARP_USDC_ECLIPSE            = '\x56a255a080584de4433d0fe6587f4c0105715589'
 ```
 
 ---

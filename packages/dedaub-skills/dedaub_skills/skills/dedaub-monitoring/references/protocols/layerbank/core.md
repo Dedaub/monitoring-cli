@@ -1,7 +1,7 @@
-# LayerBank — Topics, Selectors, Addresses (NOT deployed on any of the 7 requested chains; primary deployments are Linea / Scroll / Mode / Manta etc.)
+# LayerBank V1/V2 — Topics, Selectors, Addresses (BNB Smart Chain V2, near-dormant; primary deployments are Linea / Scroll / Mode / Manta etc.)
 
-**Status:** verified against the canonical `layerbank/contracts` (V1) and `layerbank-foundation/v2-contracts` (V2) repos and live RPC on 2026-06-08. Every topic0/selector below was recomputed locally as `keccak256(signature)`; the off-target anchor addresses were `eth_getCode`-checked on Linea and Scroll mainnet; the requested-chain absences were `eth_getCode`-checked on all seven target RPCs.
-**Scope:** the seven chains the user asked about — **LayerBank lending is deployed on NONE of them.** Ethereum (1), Base (8453), BNB Smart Chain (56), Avalanche (43114), Arbitrum (42161), Optimism (10), Polygon PoS (137) have **no** LayerBank `Core`/`LToken`/`PriceCalculator` contracts. This is a recorded finding (§4), not an omission. LayerBank's real footprint is on **Linea, Scroll, Mode, Manta Pacific, Bitlayer, B² (BSquared), BOB, zkLink Nova, Taiko, Mint, Hemi, RSK** and similar L2/alt chains — all outside the requested set. The two largest primary deployments (Linea V1, Scroll) are documented in §5 as **off-target reference anchors** so the doc has real, on-chain-verified constants; they are explicitly outside the 7-chain monitoring scope. Topics/selectors are chain-agnostic and apply to every LayerBank chain; addresses are network-specific.
+**Status:** verified against the canonical `layerbank/contracts` (V1) and `layerbank-foundation/v2-contracts` (V2) repos and live RPC on 2026-06-08. Every topic0/selector below was recomputed locally as `keccak256(signature)`; the off-target anchor addresses were `eth_getCode`-checked on Linea and Scroll mainnet; the requested-chain absences were `eth_getCode`-checked on all seven target RPCs. Re-checked on 2026-10-30: a LayerBank **V2 `Core` is deployed on BNB Smart Chain** (§3; the earlier "not on BNB" claim was wrong), and LayerBank **V3** (an Aave V3 fork) is live on Robinhood Chain — see [v3.md](v3.md). Index in [README.md](README.md).
+**Scope:** LayerBank V1/V2 (own `Core` + `LToken` design). Of the nine chains in this reference set, only **BNB Smart Chain (56)** has a V1/V2 deployment (a V2 `Core` with 15 markets and near-zero liquidity, §3). Ethereum (1), Base (8453), Avalanche (43114), Arbitrum (42161), Optimism (10), Polygon PoS (137), Robinhood Chain (4663) and Arc (5042) have **no** LayerBank `Core`/`LToken`/`PriceCalculator` contracts (§4); Robinhood Chain runs LayerBank V3 instead ([v3.md](v3.md)). LayerBank's real V1/V2 footprint is on **Linea, Scroll, Mode, Manta Pacific, Bitlayer, B² (BSquared), BOB, zkLink Nova, Taiko, Mint, Hemi, RSK** and similar L2/alt chains. The two largest primary deployments (Linea V1, Scroll) are documented in §5 as **off-target reference anchors**. Topics/selectors are chain-agnostic and apply to every LayerBank V1/V2 chain; addresses are network-specific.
 
 LayerBank is a **Compound-style money market with its own architecture** — `Core` (the risk engine / Comptroller-analogue) + per-asset `LToken` markets (`lETH`/`lUSDC`/`lWBTC`/`lUSDT`/…) + a single `RateModelSlope` interest-rate model + a `PriceCalculator` oracle + a `Validator` (liquidity/borrow-permission checker) + the `LAB`/`ULAB` governance token with `LABDistributor` (emissions) and `RebateDistributor` (reserve sink). It is **not a Compound `Comptroller`/`Unitroller` + `CErc20Delegator` fork** — there is no Unitroller delegator, no CErc20Delegator per-market proxy, and the events are LayerBank-specific. Two facts dominate monitoring:
 
@@ -158,21 +158,30 @@ Recomputed locally on 2026-06-08 from the V1/V2 sources. `redeemUnderlying`, `pr
 
 ---
 
-## 3. Addresses — the 7 requested chains
+## 3. Addresses — BNB Smart Chain (chain ID 56) — V2, near-dormant
 
-There is **no LayerBank deployment on any of them** — see §4. (No per-chain address tables exist because there are no contracts to list.)
+Source: the DefiLlama LayerBank adapter (`projects/lineabank/index.js`, V2 config `bsc`). Verified with `eth_getCode` and `eth_call` on `https://bsc-rpc.publicnode.com` on 2026-10-30. The `Core` is a plain contract (18890 B, EIP-1967 impl slot empty) and shares 73 of its ~82 `PUSH4` selectors with the Linea `Core`, so it is the same V2 family. Liquidity is near zero (for example `lUSDC.getCash()` ≈ 10 USDC; DefiLlama shows about $5 borrowed), and the `Core` emitted no logs in the last 5,000 blocks.
+
+| Role | Address | Notes |
+|------|---------|-------|
+| **Core** | `0x8eFdD7396b83Cd53ae7555224A30c41b1A100ffA` | `allMarkets()` = 15. `owner()` = `0x4b97210b0fb1bc00d6a0097eca3dc1c668d6f475`. |
+| PriceCalculator | `0xe1a2d363fa2645830f137f589de29bf7bfe12fff` | from `Core.priceCalculator()`. |
+| Validator | `0x9afa0a536d695f915adea6575f102dc1a228dfa6` | from `Core.validator()`. |
+| RebateDistributor | `0x8569f61ffe206fbf61c811141697bb7c8880d306` | from `Core.rebateDistributor()`. |
+| lBNB / lBTCB / lETH / lUSDC / lUSDT | `0xe6a89cfee340ebfe9d05b5af131526e006baf543` / `0xf8a89b4586c76e30853923b8e2803f80fd230d60` / `0xd1a761248ac61bc566212c3931c2605d8cb8ad3d` / `0xc0600bfb1dc7b0c584bf67b15c773be891408865` / `0xfb9292c180bb6056487af44ef077fde90b9c86b3` | Main markets (`symbol()` read live). |
+| Other markets | lbfBTC `0x10e4a696a8856ec30df96d3de96f84dc30e78e41`, lCake `0x1c0577f2d57e0bf3f4ad5a055a4dd2e52a0c325d`, lDOGE `0x308294607b5bc2ebbcd8b30074a37ba59b6919ff`, lFDUSD `0xdf62df0986fd8e7a3844949ca9918b6b9b3c8edf`, lSBTC `0x00bce4d6c3e138c25b79a6fbf09e9335e188d33c`, lSTONE `0xe009af49a384722657579812a304602f430f8750`, lSolvBTC `0x864ae2880cfdee8dd98b74cd0325d89024744e88`, lSolvBTCbbn `0xeb27ea9f1891bbfe7fbc3d111d7bf3aa9709fef2`, lwBETH `0xe07492f13d67bff89a82ea0102fb70eac49b0cae`, lXRP `0xf2794efbf9c510f107928e1400eb2a108252725d` | |
 
 ---
 
-## 4. Chains with NO LayerBank deployment (all seven requested chains)
+## 4. Chains with NO LayerBank V1/V2 deployment
 
-**Ethereum (1), Base (8453), BNB Smart Chain (56), Avalanche C-Chain (43114), Arbitrum One (42161), Optimism (10), Polygon PoS (137): LayerBank is NOT deployed.** Triangulated three ways:
+**Ethereum (1), Base (8453), Avalanche C-Chain (43114), Arbitrum One (42161), Optimism (10), Polygon PoS (137), Arc (5042): LayerBank is NOT deployed. Robinhood Chain (4663) has V3 only ([v3.md](v3.md)).** Triangulated three ways (2026-06-08; re-checked against the DefiLlama adapter on 2026-10-30):
 
-1. **DeFiLlama** (`api.llama.fi/protocol/layerbank`) lists TVL only on Mint, Hemi, Nibiru, BOB, Linea, Scroll, Manta, Plume, Morph, BSquared, Bitlayer, Taiko, Mode, RSK, zkLink. A nominal `"Binance"` key appears with **zero TVL and no contract addresses** (a placeholder, not a live BSC lending market). None of Base / Avalanche / Arbitrum / Optimism / Polygon / Ethereum appears with lending TVL. The DeFiLlama address registry for the protocol lists only a **Linea** address.
+1. **DeFiLlama** (`api.llama.fi/protocol/layerbank`) lists TVL only on Mint, Hemi, Nibiru, BOB, Linea, Scroll, Manta, Plume, Morph, BSquared, Bitlayer, Taiko, Mode, RSK, zkLink. A `"Binance"` key appears with near-zero TVL; it is the dormant V2 `Core` of §3, not a placeholder. None of Base / Avalanche / Arbitrum / Optimism / Polygon / Ethereum appears with lending TVL. The DeFiLlama address registry for the protocol lists only a **Linea** address.
 2. **Official docs** (`docs.layerbank.finance`) enumerate L2/alt chains; none of the seven targets has a lending market (the V2 docs mention "Base" aspirationally but no live contracts exist — `eth_getCode` empty, no TVL).
 3. **`eth_getCode` on all seven target RPCs** returned empty (`0x`) for every candidate LayerBank `Core`/`LAB` address (the Linea Core `0x009a…3833`, Scroll Core `0xEC53…89Aa`, Manta Core `0x72f7…3Ea6`, and Linea LAB `0xB97F…f75d`). LayerBank uses **different addresses per chain** (not CREATE2-shared), so a single address being empty is not sufficient — but **all** candidate addresses being empty on **all** seven chains, combined with (1) and (2), confirms absence.
 
-Any contract claiming to be "LayerBank" on these seven chains is a different protocol or a fork. Do **not** author LayerBank monitors for Ethereum/Base/BSC/Avalanche/Arbitrum/Optimism/Polygon.
+Any contract claiming to be "LayerBank" on these chains is a different protocol or a fork. Do **not** author LayerBank monitors for Ethereum/Base/Avalanche/Arbitrum/Optimism/Polygon/Arc.
 
 ---
 
@@ -233,17 +242,19 @@ Source: on-chain. `Core` discovered by tracing a live redeem tx; `allMarkets()`=
 |-------|----|--------------------|------|
 | Ethereum | 1 | ❌ not deployed | — |
 | Base | 8453 | ❌ not deployed | — |
-| BNB Smart Chain | 56 | ❌ not deployed (DeFiLlama "Binance" = zero-TVL placeholder, no contracts) | — |
+| BNB Smart Chain | 56 | ✅ V2, near-dormant (§3) | `0x8eFdD739…1A100ffA` |
 | Avalanche | 43114 | ❌ not deployed | — |
 | Arbitrum One | 42161 | ❌ not deployed | — |
 | Optimism | 10 | ❌ not deployed | — |
 | Polygon PoS | 137 | ❌ not deployed | — |
+| Robinhood Chain | 4663 | ❌ no V1/V2; ✅ **V3** (Aave V3 fork, [v3.md](v3.md)) | Pool `0x433e21dc…7dad43` |
+| Arc | 5042 | ❌ not deployed | — |
 | *Linea (off-target)* | 59144 | ✅ V1 (primary) | `0x009a0b7C…2943833` |
 | *Scroll (off-target)* | 534352 | ✅ | `0xEC53c830…94289Aa` |
 | *Mode / Manta / Bitlayer / B² / BOB / zkLink / Taiko / … (off-target)* | — | ✅ | per-chain |
 
 Patterns to internalize:
-1. **Nothing to monitor on the 7 target chains.** Any LayerBank work targets Linea/Scroll/Mode/Manta/etc.
+1. **Little to monitor on the nine target chains.** BNB has a dormant V2 `Core` (§3); Robinhood Chain has V3 ([v3.md](v3.md)). Most LayerBank V1/V2 activity is on Linea/Scroll/Mode/Manta/etc.
 2. **Addresses are per-chain unique** (not CREATE2-shared) — except a couple of incidental literal reuses (e.g. the same lUSDC address `0xBa6e89c9…` appears on both Mode and Manta). Always key on `(chainId, address)`.
 3. **lTokens are individually deployed** — enumerate via `Core.allMarkets()`, never derive.
 
@@ -267,7 +278,7 @@ LayerBank V1/V2 core contracts are deployed as **plain immutable logic** — **n
 
 ## 8. Detection invariants & gotchas
 
-1. **LayerBank is on none of the 7 requested chains** (§4). The whole detection set below applies only to off-target chains (Linea/Scroll/Mode/Manta/…).
+1. **LayerBank V1/V2 is on only one of the nine target chains: BNB, near-dormant** (§3–§4). The detection set below applies there and on the off-target chains (Linea/Scroll/Mode/Manta/…). Robinhood Chain runs V3, which uses Aave V3 topics ([v3.md](v3.md)).
 2. **Supply/redeem are on the `Core`; borrow/repay/liquidate are on the `LToken`.** To capture all five lending primitives you must index **both** the single `Core` (`MarketSupply`/`MarketRedeem`) **and** every `LToken` (`Mint`/`Redeem`/`Borrow`/`RepayBorrow`/`LiquidateBorrow`). A supply produces **two** logs (`Core.MarketSupply` + `LToken.Mint`); a redeem produces `Core.MarketRedeem` + `LToken.Redeem` — dedupe by tx if you only want one row per action.
 3. **It is NOT a Compound `Comptroller`/`Unitroller` fork.** No Unitroller delegator, no `CErc20Delegator`, no `comptrollerImplementation()`, no 3-arg `Mint`/4-arg `AccrueInterest`. Don't reuse the Compound/Moonwell detection set wholesale.
 4. **Topic0 collisions with Compound/Moonwell:** `LiquidateBorrow` (`0x298637f6…`), `Redeem` (`0xe5b754fb…`), `MarketEntered`/`MarketExited`/`MarketListed` are byte-identical to Compound's. **Disambiguate by emitter** — a LayerBank `Core`/`LToken`, never a Compound Comptroller/cToken. LayerBank's `Borrow`/`RepayBorrow`/`Mint` topic0s differ from Compound's (shorter arg lists).
@@ -342,7 +353,13 @@ SEL_LT_SEIZE                   = '\xb2a02ff1'
 SEL_PC_GET_UNDERLYING_PRICE    = '\xfc57d4df'
 SEL_PC_SET_PRICES              = '\x782661bc'
 SEL_PC_SET_TOKEN_FEED          = '\x87ef019a'
--- ===== Addresses — OFF-TARGET ANCHORS ONLY (NOT on any of the 7 requested chains) =====
+-- ===== Addresses — BNB Smart Chain (56), V2 =====
+BSC_CORE                       = '\x8efdd7396b83cd53ae7555224a30c41b1a100ffa'
+BSC_PRICE_CALCULATOR           = '\xe1a2d363fa2645830f137f589de29bf7bfe12fff'
+BSC_LUSDC                      = '\xc0600bfb1dc7b0c584bf67b15c773be891408865'
+BSC_LUSDT                      = '\xfb9292c180bb6056487af44ef077fde90b9c86b3'
+BSC_LBNB                       = '\xe6a89cfee340ebfe9d05b5af131526e006baf543'
+-- ===== Addresses — OFF-TARGET ANCHORS (outside the nine-chain set) =====
 LINEA_CORE                     = '\x009a0b7c38b542208936f1179151cd08e2943833'
 LINEA_PRICE_CALCULATOR         = '\x35a8c6050591c2f65b3e926b4b2ef825e3766bd6'
 LINEA_VALIDATOR                = '\xb5b25d9192f582568363243677dd25a939fe7112'
@@ -375,6 +392,6 @@ SCROLL_LWBTC                   = '\xc40d6957b8110ec55f0f1a20d7d3430e1d8aa4cf'
   - `LToken.Mint` `0x0f6798a5…` — found on live Scroll `lUSDC`, **2 data words** = `(minter, mintAmount)` (distinct from Compound's 3-arg `Mint`).
   - `Borrow` / `LiquidateBorrow` topic0s recomputed from source but **not observed** in the sampled live windows (low recent activity / wind-down on the sampled markets) — source-verified only.
 - **Addresses & wiring (off-target anchors):** Linea `Core.allMarkets()` (4 markets) + `priceCalculator()`/`validator()`/`rebateDistributor()`/`closeFactor()`/`liquidationIncentive()` read live; each lToken's `getRateModel()`/`underlying()`/`symbol()` read live. Scroll `Core` discovered by tracing a live `redeemUnderlying` tx (`to` = `0xEC53…89Aa`, selector `0x96294178`), then `allMarkets()` (13 markets) + wiring read live. `eth_getCode` confirmed code present (no EIP-1967 impl/admin/beacon slot; runtime prefix `0x6080604052…`, not `0x363d3d37…`).
-- **Absence on the 7 requested chains:** `eth_getCode` empty (`0x`) for the Linea/Scroll/Manta `Core` and Linea `LAB` addresses on all of `ethereum-rpc`, `base-rpc`, `bsc-rpc`, `avalanche-c-chain-rpc`, `arbitrum-one-rpc`, `optimism-rpc`, `polygon-bor-rpc.publicnode.com`. Corroborated by DeFiLlama (`api.llama.fi/protocol/layerbank`) showing no lending TVL on any of the seven (the `"Binance"` chain key carries zero TVL and no contract addresses) and by the official docs listing only L2/alt chains.
+- **Absence on the other target chains:** `eth_getCode` empty (`0x`) for the Linea/Scroll/Manta `Core` and Linea `LAB` addresses on all of `ethereum-rpc`, `base-rpc`, `bsc-rpc`, `avalanche-c-chain-rpc`, `arbitrum-one-rpc`, `optimism-rpc`, `polygon-bor-rpc.publicnode.com`. Corroborated by DeFiLlama (`api.llama.fi/protocol/layerbank`) showing no lending TVL on any of the seven and by the official docs listing only L2/alt chains. That check used the Linea/Scroll/Manta addresses only and so missed the BNB V2 `Core` at its own address; on 2026-10-30 the `Core` from the DefiLlama adapter (`projects/lineabank/index.js`) was found live on BNB (§3), and its wiring and markets were read with `eth_call`.
 - **Proxy classification:** EIP-1967 impl slot `0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc`, admin slot `0xb53127…5d6103`, beacon slot `0xa3f0ad74…133d50`, and OZ legacy slot all read **empty** on Linea `Core`/`lETH`/`lUSDC`/`PriceCalculator`/`Validator` and Scroll `lETH` → immutable logic, not proxied.
 - **Explorers:** LineaScan (`lineascan.build`), Scrollscan (`scrollscan.com`) for cross-reference of the lToken symbols/underlyings.

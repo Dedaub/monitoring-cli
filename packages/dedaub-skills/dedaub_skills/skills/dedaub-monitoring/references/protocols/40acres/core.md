@@ -1,7 +1,7 @@
-# 40 Acres Finance — Topics, Selectors, Addresses (Base, Optimism, Avalanche, +Ethereum portfolio layer)
+# 40 Acres Finance — Topics, Selectors, Addresses (Base, Optimism, Avalanche, +Ethereum / Robinhood Chain / Arc portfolio layer)
 
-**Status:** verified against Base, Optimism, Avalanche, and Ethereum mainnet RPC, the official docs (`docs.40acres.finance/contracts`), and Sourcify-verified source on 2026-05-29.
-**Scope:** all live 40 Acres deployments. Topics + selectors are **chain-agnostic**; addresses are network-specific. **Not deployed on BNB, Arbitrum, or Polygon** (`eth_getCode` = `0x` for every 40 Acres address on those three chains).
+**Status:** verified against Base, Optimism, Avalanche, and Ethereum mainnet RPC, the official docs (`docs.40acres.finance/contracts`), and Sourcify-verified source on 2026-05-29. Re-checked on 2026-10-30: the portfolio layer (PortfolioManager + 3 factories + 3 facet registries, no lending markets) is live on Robinhood Chain (4663) and Arc (5042), §7–§8; three new deterministic factory/registry pairs were added on Ethereum, Base and Optimism.
+**Scope:** all live 40 Acres deployments. Topics + selectors are **chain-agnostic**; addresses are network-specific. Robinhood Chain and Arc carry the portfolio layer only. **Not deployed on BNB, Arbitrum, or Polygon** (`eth_getCode` = `0x` for every 40 Acres address on those three chains).
 
 40 Acres is a **self-repaying, non-liquidatable, 0%-interest lending protocol** against yield-bearing collateral — primarily **veNFTs** (voting-escrow NFTs) on Aerodrome (Base), Velodrome (Optimism), and Pharaoh + Blackhole (Avalanche). A borrower deposits a veNFT, the protocol lends USDC (or the DEX token) sized to the veNFT's projected rewards (≈ avg weekly rewards × 8 epochs), and the veNFT's ongoing voting rewards automatically repay the loan. The collateral is held in protocol-owned escrow (the `Loan` contract) for the life of the loan. There are no version-numbered protocol releases (no "V1/V2/V3" redeploys); instead the lending contracts are **UUPS-upgradeable proxies** and the protocol ships per-DEX subclasses — hence this single `core.md` rather than `v{n}.md` files.
 
@@ -198,17 +198,17 @@ All verified via `eth_getCode` on `https://base-rpc.publicnode.com`. Proxies sho
 
 | Role | Address | Impl (if proxy) | One-liner |
 |------|---------|-----------------|-----------|
-| **PortfolioManager** | `0x40ac2e40acb7bdd6ec83e468143262fe216529ec` | — (singleton, 16 973 B) | Portfolio registry/factory hub. 4 factories, 4 facet registries. |
+| **PortfolioManager** | `0x40ac2e40acb7bdd6ec83e468143262fe216529ec` | — (singleton, 16 973 B) | Portfolio registry/factory hub. 6 factories, 6 facet registries (2026-10-30). |
 | **AERO-USDC-Vault** | `0xb99b6df96d4d5448cc0a5b3e0ef7896df9507cf5` | — (direct, 4 993 B) | ERC-4626 lender vault, `asset()` = USDC, `symbol()` = `"VAULT"`. |
 | **AERO USDC Loan** | `0x87f18b377e625b62c708d5f6ea96ec193558efd0` | `0xb43b30c405c61bc330227968635d130994450735` (`Loan`) | Borrow USDC against an Aerodrome veNFT. `getProtocolFee()` = 500. |
 | **AERO Loan** (native) | `0x1Dc76341CA156e376736ddbA042aba071bD3b858` | `0xeda1e6578f7cca28a36e5b50d71f2f154b93c061` (`LoanV2Native`) | Borrow AERO (managed-NFT variant). Quiet: 0 logs in the 30 d to 2026-10-05. |
 | **Claim** (`RedeemCommunityShares`) | `0x8Ac5aa057da4c86f3896cFD851cBcdFC19a04dfe` | `0x030ad5f8a436ac243e8682c8d036cd82bf5a9fe3` | Community-rewards redemption. **Only deployed here (Base).** |
-| Portfolio Factories (×4) | `0x967361472f99fedc26a2b8bb3cfc1d0966979c8e`, `0xc3b96d5e971407902c563194bf8386ca5dad787b`, `0xae7b5751c370dc566a2bcd63be3e20729d050264`†, `0x74488ee5f1599cc4b89fa42134b9c5a142cba7d6` | Diamond | Mint per-user portfolio accounts. |
-| Facet Registries (×4) | `0xc2b32a782b7d98939c9403343b9e6d3c019004a2`, `0x3a0e5b904991196c9fcf8d591c8b9db9450bcdf4`, `0x82357a62b407fc89b0505b986c70812f395aeecf‡`, `0x60ab719aa7e0de6797e1619fceacab29c2a9e24b` | Diamond | Facet/selector registries for the factories. |
+| Portfolio Factories (×6) | `0x967361472f99fedc26a2b8bb3cfc1d0966979c8e`§, `0xc3b96d5e971407902c563194bf8386ca5dad787b`, `0xae7b5751c370dc566a2bcd63be3e20729d050264`†, `0x74488ee5f1599cc4b89fa42134b9c5a142cba7d6`, `0x26d13b9f955cd5a7bc6c5594c8ea35a23af38764`§, `0x8a71e4bab42ddc3d996fa4b4780919567e367924`§ | Diamond | Mint per-user portfolio accounts. |
+| Facet Registries (×6) | `0xc2b32a782b7d98939c9403343b9e6d3c019004a2`§, `0x3a0e5b904991196c9fcf8d591c8b9db9450bcdf4`, `0x82357a62b407fc89b0505b986c70812f395aeecf‡`, `0x60ab719aa7e0de6797e1619fceacab29c2a9e24b`, `0x02886541dddc1bf1dcd1a869a503e4df6da2a17c`§, `0x8139b24596dc0bee2f7a66d5a0d519c16c962c86`§ | Diamond | Facet/selector registries for the factories. |
 | Protocol admin (`owner`) | `0xff16fd3d147220e6cc002a8e4a1f942ac41dbd23` | EOA/multisig | Owns PortfolioManager + all Loans; UUPS upgrade authority. |
 | USDC | `0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913` | — | 6 decimals; vault underlying. |
 
-† `0xae7b5751…0264` factory and ‡ `0x82357a62…eecf` facet registry are the **same addresses on Base, Optimism, and Ethereum** (deterministic deploy).
+† `0xae7b5751…0264` factory and ‡ `0x82357a62…eecf` facet registry are the **same addresses on Base, Optimism, and Ethereum** (deterministic deploy). § The three factories `0x967361…9c8e`, `0x26d13b…f764`, `0x8a71e4…7924` (4150 B) and the three facet registries `0xc2b32a…04a2`, `0x028865…a17c`, `0x8139b2…2c86` (6664 B) are the **same addresses on Ethereum, Base, Optimism, Robinhood Chain and Arc**.
 
 ---
 
@@ -218,12 +218,12 @@ Verified via `eth_getCode` on `https://optimism-rpc.publicnode.com`.
 
 | Role | Address | Impl (if proxy) | One-liner |
 |------|---------|-----------------|-----------|
-| **PortfolioManager** | `0x40ac2e40acb7bdd6ec83e468143262fe216529ec` | — (singleton) | 3 factories, 3 facet registries. |
+| **PortfolioManager** | `0x40ac2e40acb7bdd6ec83e468143262fe216529ec` | — (singleton) | 5 factories, 5 facet registries (2026-10-30). |
 | **VELO-USDC-Vault** | `0x08dcdbf7bade91ccd42cb2a4ea8e5d199d285957` | — (direct, 4 993 B) | ERC-4626 vault, `asset()` = USDC. |
 | **VELO USDC Loan** | `0xf132bD888897254521D13e2c401e109caABa06A7` | `0x972b1ac00dfb287f244205b379f4565ab286ed3a` (`Loan`, ≡ Base) | Borrow USDC against a Velodrome veNFT. |
 | **VELO Loan** (native) | `0x8C0Ae206A52D3FddE6D43Ea5B5CbbbE00e1C0315` | `0xbfb12bac6bd6ce8c1006542152c2bbbe0bf1e54b` (`LoanV2Native`, ≡ Base) | Borrow VELO. Quiet: 0 logs in the 30 d to 2026-10-05. |
-| Portfolio Factories (×3) | `0x8a71e4bab42ddc3d996fa4b4780919567e367924`, `0xce904f1c3c9bdf74d4dbd6a204058d1eb649140b`, `0xae7b5751c370dc566a2bcd63be3e20729d050264`† | Diamond | |
-| Facet Registries (×3) | `0x8139b24596dc0bee2f7a66d5a0d519c16c962c86`, `0xfbb7deab88be1f80dde3f2919b59acb9fe9e31e2`, `0x82357a62b407fc89b0505b986c70812f395aeecf‡` | Diamond | |
+| Portfolio Factories (×5) | `0x8a71e4bab42ddc3d996fa4b4780919567e367924`§, `0xce904f1c3c9bdf74d4dbd6a204058d1eb649140b`, `0xae7b5751c370dc566a2bcd63be3e20729d050264`†, `0x26d13b9f955cd5a7bc6c5594c8ea35a23af38764`§, `0x967361472f99fedc26a2b8bb3cfc1d0966979c8e`§ | Diamond | |
+| Facet Registries (×5) | `0x8139b24596dc0bee2f7a66d5a0d519c16c962c86`§, `0xfbb7deab88be1f80dde3f2919b59acb9fe9e31e2`, `0x82357a62b407fc89b0505b986c70812f395aeecf‡`, `0x02886541dddc1bf1dcd1a869a503e4df6da2a17c`§, `0xc2b32a782b7d98939c9403343b9e6d3c019004a2`§ | Diamond | |
 | USDC (native) | `0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85` | — | 6 decimals. |
 
 **No Claim / RedeemCommunityShares on Optimism** — `0x8Ac5aa05…` has `0x` bytecode here (the docs list it for all four DEXes, but it is Base-only).
@@ -254,29 +254,57 @@ Verified via `eth_getCode` on `https://ethereum-rpc.publicnode.com`. **No veNFT 
 
 | Role | Address | One-liner |
 |------|---------|-----------|
-| **PortfolioManager** | `0x40ac2e40acb7bdd6ec83e468143262fe216529ec` | Same singleton bytecode (16 973 B). **5 factories, 5 facet registries** — the most of any chain. `owner()` = `0xff16fd3d…`. |
-| Portfolio Factories (×5) | `0x581333879b1b6726dd92a740da0109193640a395`, `0xae7b5751c370dc566a2bcd63be3e20729d050264`†, `0x8f1f0270bf0a547925945997e3ad53967dcf4ffe`, `0xdef2781c0b9a76c317f74d97a09a1671b1979969`, `0x3721414f0aeb287c604b8e8a55b7986a19f687af` | Diamond portfolio factories. |
-| Facet Registries (×5) | `0x3f75dcc3aa32702fc308bb5cf4bbba91c4aa414a`, `0x82357a62b407fc89b0505b986c70812f395aeecf‡`, `0x909f6742187e7df354faf19227f0e66a5ed31530`, `0xcf8d230f7d81141f12e8f8a4f8dc70327b29e0af`, `0x88358d0b07b664e5a9e57923ff24b9dc337606f2` | Facet registries. |
+| **PortfolioManager** | `0x40ac2e40acb7bdd6ec83e468143262fe216529ec` | Same singleton bytecode (16 973 B). **8 factories, 8 facet registries** (2026-10-30) — the most of any chain. `owner()` = `0xff16fd3d…`. |
+| Portfolio Factories (×8) | `0x581333879b1b6726dd92a740da0109193640a395`, `0xae7b5751c370dc566a2bcd63be3e20729d050264`†, `0x8f1f0270bf0a547925945997e3ad53967dcf4ffe`, `0xdef2781c0b9a76c317f74d97a09a1671b1979969`, `0x3721414f0aeb287c604b8e8a55b7986a19f687af`, `0x26d13b9f955cd5a7bc6c5594c8ea35a23af38764`§, `0x8a71e4bab42ddc3d996fa4b4780919567e367924`§, `0x967361472f99fedc26a2b8bb3cfc1d0966979c8e`§ | Diamond portfolio factories. |
+| Facet Registries (×8) | `0x3f75dcc3aa32702fc308bb5cf4bbba91c4aa414a`, `0x82357a62b407fc89b0505b986c70812f395aeecf‡`, `0x909f6742187e7df354faf19227f0e66a5ed31530`, `0xcf8d230f7d81141f12e8f8a4f8dc70327b29e0af`, `0x88358d0b07b664e5a9e57923ff24b9dc337606f2`, `0x02886541dddc1bf1dcd1a869a503e4df6da2a17c`§, `0x8139b24596dc0bee2f7a66d5a0d519c16c962c86`§, `0xc2b32a782b7d98939c9403343b9e6d3c019004a2`§ | Facet registries. |
 
 ---
 
-## 7. Cross-chain summary
+## 7. Addresses — Robinhood Chain (chain ID 4663) · **portfolio layer only**
+
+Verified via `eth_getCode` and `eth_call` on `https://robinhood-rpc.publicnode.com` on 2026-10-30. **No veNFT lending markets** (no Loan/Vault/Claim; the docs list none, and every Base/OP/Avax Loan/Vault/Claim address returns `0x` here). The PortfolioManager runtime code is byte-identical to Base (same code hash), `owner()` = `0xff16fd3d…`, and the admin Safe proxy also has the same code as on Base.
+
+| Role | Address | One-liner |
+|------|---------|-----------|
+| **PortfolioManager** | `0x40ac2e40acb7bdd6ec83e468143262fe216529ec` | Singleton (16 973 B). `getAllFactories()` = 3, `getAllFacetRegistries()` = 3. |
+| Portfolio Factories (×3) | `0x8a71e4bab42ddc3d996fa4b4780919567e367924`§, `0x967361472f99fedc26a2b8bb3cfc1d0966979c8e`§, `0x26d13b9f955cd5a7bc6c5594c8ea35a23af38764`§ | Diamond portfolio factories (4150 B each). |
+| Facet Registries (×3) | `0x8139b24596dc0bee2f7a66d5a0d519c16c962c86`§, `0xc2b32a782b7d98939c9403343b9e6d3c019004a2`§, `0x02886541dddc1bf1dcd1a869a503e4df6da2a17c`§ | Facet registries (6664 B each). |
+| Protocol admin (`owner`) | `0xff16fd3d147220e6cc002a8e4a1f942ac41dbd23` | 171 B proxy, same code as on Base. |
+
+---
+
+## 8. Addresses — Arc (chain ID 5042) · **portfolio layer only**
+
+Verified via `eth_getCode` and `eth_call` on `https://rpc.mainnet.arc.io` on 2026-10-30. The same set as Robinhood Chain: same PortfolioManager code hash, `owner()` = `0xff16fd3d…`, and the same three factories and three facet registries (same addresses, same sizes). **No Loan/Vault/Claim.**
+
+| Role | Address | One-liner |
+|------|---------|-----------|
+| **PortfolioManager** | `0x40ac2e40acb7bdd6ec83e468143262fe216529ec` | Singleton (16 973 B). 3 factories, 3 facet registries. |
+| Portfolio Factories (×3) | `0x8a71e4bab42ddc3d996fa4b4780919567e367924`§, `0x967361472f99fedc26a2b8bb3cfc1d0966979c8e`§, `0x26d13b9f955cd5a7bc6c5594c8ea35a23af38764`§ | Diamond portfolio factories. |
+| Facet Registries (×3) | `0x8139b24596dc0bee2f7a66d5a0d519c16c962c86`§, `0xc2b32a782b7d98939c9403343b9e6d3c019004a2`§, `0x02886541dddc1bf1dcd1a869a503e4df6da2a17c`§ | Facet registries. |
+| Protocol admin (`owner`) | `0xff16fd3d147220e6cc002a8e4a1f942ac41dbd23` | 171 B proxy, same code as on Base. |
+
+---
+
+## 9. Cross-chain summary
 
 | Chain | ID | DEX(es) | PortfolioMgr | Factories | Vaults | USDC Loans | Native Loans | Claim |
 |---|---|---|---|---|---|---|---|---|
-| Ethereum | 1 | — | ✓ (singleton) | 5 | — | — | — | — |
-| Base | 8453 | Aerodrome | ✓ | 4 | direct | 1 (`Loan`) | 1 (`LoanV2Native`) | ✓ |
-| Optimism | 10 | Velodrome | ✓ | 3 | direct | 1 (`Loan`) | 1 (`LoanV2Native`) | — |
+| Ethereum | 1 | — | ✓ (singleton) | 8 | — | — | — | — |
+| Base | 8453 | Aerodrome | ✓ | 6 | direct | 1 (`Loan`) | 1 (`LoanV2Native`) | ✓ |
+| Optimism | 10 | Velodrome | ✓ | 5 | direct | 1 (`Loan`) | 1 (`LoanV2Native`) | — |
 | Avalanche | 43114 | Pharaoh, Blackhole | ✓ | 0 | **proxied** | 1 (`XPharaohLoan`) | 2 (`PharaohLoanV2Native` + Blackhole) | — |
 | BNB | 56 | — | ✗ | — | — | — | — | — |
 | Arbitrum | 42161 | — | ✗ | — | — | — | — | — |
 | Polygon | 137 | — | ✗ | — | — | — | — | — |
+| Robinhood Chain | 4663 | — | ✓ | 3 | — | — | — | — |
+| Arc | 5042 | — | ✓ | 3 | — | — | — | — |
 
-Vanity address tells: **PortfolioManager** is `0x40ac2e40ac…` (`40ac` = "40 Ac[res]") on all four deployed chains. **Claim** is `0x8Ac5aa05…` but only has code on Base.
+Vanity address tells: **PortfolioManager** is `0x40ac2e40ac…` (`40ac` = "40 Ac[res]") on all six deployed chains. **Claim** is `0x8Ac5aa05…` but only has code on Base.
 
 ---
 
-## 8. Proxies (old & new)
+## 10. Proxies (old & new)
 
 | Contract | Pattern | Detection | Upgrade auth |
 |----------|---------|-----------|--------------|
@@ -291,7 +319,7 @@ To read the live impl of any proxy: `cast storage <proxy> 0x360894a13ba1a3210667
 
 ---
 
-## 9. Detection invariants & gotchas
+## 11. Detection invariants & gotchas
 
 1. **A loan lifecycle = `CollateralAdded` → `FundsBorrowed` → (repeated `RewardsReceived`/`LoanPaid`) → `CollateralWithdrawn`,** keyed by `tokenId` (the veNFT id) on a single Loan contract. There is **no liquidation event** — loans are non-liquidatable by design.
 2. **`tokenId` is the veNFT id, not a 40 Acres-internal id.** It collides across DEXes (Aerodrome veNFT #5 ≠ Velodrome veNFT #5). Always key on `(chainId, loan address, tokenId)`.
@@ -301,17 +329,17 @@ To read the live impl of any proxy: `cast storage <proxy> 0x360894a13ba1a3210667
 6. **Avax vaults are proxies; Base/OP vaults are not.** Reading the EIP-1967 slot on a Base/OP vault returns empty — that's expected, not a missing proxy.
 7. **`Claim` (`0x8Ac5aa05…`) only has code on Base.** The contracts doc lists it under all four DEXes, but Optimism and Avalanche return `0x`. Don't index it cross-chain.
 8. **Blackhole's "USDC Loan" and "Loan" are the same address** (`0x5122…3558`, impl `0xce6fc22a…`). One contract, two doc rows.
-9. **PortfolioManager is the same vanity address (`0x40ac2e40ac…`) on ETH/Base/OP/Avax,** but the *factory/facet-registry sets differ per chain* (ETH 5, Base 4, OP 3, Avax 0). Always read `getAllFactories()` per chain. Factory `0xae7b5751…0264` and facet registry `0x82357a62…eecf` recur on ETH+Base+OP.
-10. **Ethereum has the portfolio layer but no lending.** If you only look for Loan/Vault you'll wrongly conclude "not on Ethereum" — the PortfolioManager + 5 factories are live there.
+9. **PortfolioManager is the same vanity address (`0x40ac2e40ac…`) on ETH/Base/OP/Avax/Robinhood Chain/Arc,** but the *factory/facet-registry sets differ per chain* (ETH 8, Base 6, OP 5, Robinhood Chain 3, Arc 3, Avax 0 on 2026-10-30). Always read `getAllFactories()` per chain. Factory `0xae7b5751…0264` and facet registry `0x82357a62…eecf` recur on ETH+Base+OP; the three newer factory/registry pairs (§) recur on ETH+Base+OP+Robinhood Chain+Arc.
+10. **Ethereum, Robinhood Chain and Arc have the portfolio layer but no lending.** If you only look for Loan/Vault you'll wrongly conclude "not on Ethereum" — the PortfolioManager + factories are live there.
 11. **UUPS impls are the upgrade target** — index events on the *proxy* address (stable), read state by `eth_call` to the *proxy* (delegates to impl). The impl address can change via `Upgraded`.
 12. **Distinguish `Loan` vs `LoanV2Native` by selectors:** USDC `Loan` has `borrowFromPortfolio`/`payFromPortfolio`/`lendingVault`; `LoanV2Native` has `getManagedNft`/`mergeIntoManagedNft`/`setOptInCommunityRewards` instead.
 13. **Reward-token liquidation uses Odos** (`odosRouter()`), not a 40 Acres AMM — expect Odos router calls inside `claim()` txs.
-14. **Not on BNB / Arbitrum / Polygon.** Every 40 Acres address returns `0x` there as of 2026-05-29.
+14. **Not on BNB / Arbitrum / Polygon.** Every 40 Acres address returns `0x` there as of 2026-05-29 (the 2026-10-30 re-check covered Robinhood Chain and Arc only).
 15. **veNFTs are the only live collateral.** The marketing line "USDC against veNFTs, RWAs, tokenized funds, and LP positions" lists a *roadmap* — RWAs / tokenized funds / LP positions are "coming soon," not yet live collateral types as of 2026-05. Only veNFT loans exist on-chain today.
 
 ---
 
-## 10. Quick-copy detection constants (bytea-ready for PG)
+## 12. Quick-copy detection constants (bytea-ready for PG)
 
 ```
 -- ===== Topics (chain-agnostic) =====
@@ -417,16 +445,27 @@ AVAX_USDC                         = '\xb97ef9ef8734c71904d8002f8b6bc66dd9c48a6e'
 -- NOTE: no Claim on Avalanche
 
 -- ===== Ethereum (chain ID 1) — portfolio layer only, NO lending markets =====
-ETH_PORTFOLIO_MANAGER             = '\x40ac2e40acb7bdd6ec83e468143262fe216529ec'   -- 5 factories, 5 facet registries
+ETH_PORTFOLIO_MANAGER             = '\x40ac2e40acb7bdd6ec83e468143262fe216529ec'   -- 8 factories, 8 facet registries
+
+-- ===== Robinhood Chain (4663) / Arc (5042) — portfolio layer only, NO lending markets =====
+ROBIN_PORTFOLIO_MANAGER           = '\x40ac2e40acb7bdd6ec83e468143262fe216529ec'   -- 3 factories, 3 facet registries
+ARC_PORTFOLIO_MANAGER             = '\x40ac2e40acb7bdd6ec83e468143262fe216529ec'   -- 3 factories, 3 facet registries
 
 -- Shared across ETH+Base+OP (deterministic deploy):
 SHARED_PORTFOLIO_FACTORY          = '\xae7b5751c370dc566a2bcd63be3e20729d050264'
 SHARED_FACET_REGISTRY             = '\x82357a62b407fc89b0505b986c70812f395aeecf'
+-- Shared across ETH+Base+OP+Robinhood Chain+Arc (deterministic deploy):
+SHARED_FACTORY_A                  = '\x8a71e4bab42ddc3d996fa4b4780919567e367924'
+SHARED_FACTORY_B                  = '\x967361472f99fedc26a2b8bb3cfc1d0966979c8e'
+SHARED_FACTORY_C                  = '\x26d13b9f955cd5a7bc6c5594c8ea35a23af38764'
+SHARED_FACET_REGISTRY_A           = '\x8139b24596dc0bee2f7a66d5a0d519c16c962c86'
+SHARED_FACET_REGISTRY_B           = '\xc2b32a782b7d98939c9403343b9e6d3c019004a2'
+SHARED_FACET_REGISTRY_C           = '\x02886541dddc1bf1dcd1a869a503e4df6da2a17c'
 ```
 
 ---
 
-## 11. Verification & sources
+## 13. Verification & sources
 
 How every constant was verified (2026-05-29):
 
@@ -435,7 +474,7 @@ How every constant was verified (2026-05-29):
 - **Contract names + ABIs:** Sourcify v2 verified source (`PortfolioManager` solc 0.8.30, `Vault` 0.8.28, `Loan` 0.8.30, `LoanV2Native` 0.8.28, `RedeemCommunityShares` 0.8.28 on Base); Routescan getsourcecode for Avax (`Vault`, `XPharaohLoan` solc 0.8.30, `PharaohLoanV2Native` 0.8.28).
 - **Topic0 + selectors:** computed locally as `keccak256(canonical signature)` / `[0:4]` (pycryptodome) from the Sourcify ABIs. Cross-checked against deployed bytecode.
 - **Cross-chain family match:** extracted `PUSH4` selector sets from each impl's runtime bytecode and matched against the Base reference impls — OP VELO loans/vault ≈ Base `Loan`/`LoanV2Native`/`Vault` (Jaccard 0.93–0.98); Avax Pharaoh/Blackhole loans match the `Loan`/`LoanV2Native` family (0.41–0.73, lower due to per-DEX subclassing).
-- **Live state (`eth_call`):** Base AERO-USDC-Loan `owner()` = `0xff16fd3d…`, `getProtocolFee()` = 500; PortfolioManager `getFactoriesLength()` = 4 (Base) / 5 (ETH) / 3 (OP) / 0 (Avax); Base vault `asset()` = USDC, `symbol()` = `"VAULT"`; `proxiableUUID()` reverts through the proxy (UUPS `notDelegated`).
+- **Live state (`eth_call`):** Base AERO-USDC-Loan `owner()` = `0xff16fd3d…`, `getProtocolFee()` = 500; PortfolioManager `getFactoriesLength()` = 4 (Base) / 5 (ETH) / 3 (OP) / 0 (Avax) on 2026-05-29, and `getAllFactories()` = 6 / 8 / 5 / 0, plus 3 on Robinhood Chain and 3 on Arc, on 2026-10-30; Base vault `asset()` = USDC, `symbol()` = `"VAULT"`; `proxiableUUID()` reverts through the proxy (UUPS `notDelegated`).
 - **Live events (`eth_getLogs`):** confirmed `LoanPaid`, `CollateralWithdrawn`, `VeNftIncreased`, `CollateralAdded` on the Base AERO-USDC-Loan proxy, and `LoanPaid` on the Optimism VELO-USDC-Loan proxy (proves the cross-chain event signatures are identical).
 - **Audits:** 4× Sherlock (lead auditors eeyore, 0xadrii, oot2k) — [security page](https://docs.40acres.finance/security).
 
