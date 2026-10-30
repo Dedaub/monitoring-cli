@@ -61,7 +61,7 @@ wheels = [
 
 [[package]]
 name = "dedaub-skills"
-version = "0.1.0"
+version = "0.2.0"
 source = { editable = "packages/dedaub-skills" }
 
 [[package]]
@@ -143,7 +143,7 @@ wheels = [
 
 [[package]]
 name = "monitoring-cli"
-version = "0.5.2"
+version = "0.6.0"
 source = { editable = "." }
 default-groups = ["dev", "lint"]
 dependencies = [

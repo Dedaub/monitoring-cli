@@ -96,7 +96,7 @@ class MonitoringClient:
 
     def _delete(
         self, path: str, params: dict | None = None, timeout: float | None = 30.0
-    ) -> None:
+    ) -> Any:
         resp = httpx.delete(
             f"{self._base}{path}",
             headers=self._headers(),
@@ -104,6 +104,14 @@ class MonitoringClient:
             timeout=timeout,
         )
         _raise_for_status(resp, path)
+        # Like _put: most DELETEs return no body, but a dashboard delete returns
+        # the count of the widgets it removed.
+        if resp.content:
+            try:
+                return resp.json()
+            except ValueError:
+                return None
+        return None
 
     # --- auth ---
 
@@ -677,6 +685,96 @@ class MonitoringClient:
 
     def delete_alert_filter(self, search_id: int) -> None:
         self._delete(f"/api/profile/alert-filter/{search_id}")
+
+    # --- dashboards ---
+
+    def list_dashboards(self) -> list[dict]:
+        return self._get("/api/profile/dashboards")
+
+    def get_dashboard(self, dashboard_id: int) -> dict:
+        return self._get(f"/api/profile/dashboard/{dashboard_id}")
+
+    def create_dashboard(
+        self,
+        name: str,
+        entity_id: int,
+        description: str | None = None,
+        is_public: bool = False,
+        is_unlisted: bool = False,
+    ) -> dict:
+        return self._post(
+            "/api/profile/dashboard",
+            json={
+                "name": name,
+                "description": description,
+                "is_public": is_public,
+                "is_unlisted": is_unlisted,
+                "entity_id": entity_id,
+            },
+        )
+
+    def update_dashboard(self, dashboard_id: int, dashboard: dict) -> None:
+        """Replace the dashboard's fields. The body is the whole BaseDashboard:
+        name, description, is_public, is_unlisted and entity_id."""
+        self._put(f"/api/profile/dashboard/{dashboard_id}", json=dashboard)
+
+    def delete_dashboard(self, dashboard_id: int, delete_widgets: bool = False) -> dict:
+        """Delete a dashboard. Its widgets stay saved, unless `delete_widgets`:
+        then the widgets that only this dashboard has go too."""
+        params = {"delete_widgets": "true"} if delete_widgets else None
+        return (
+            self._delete(f"/api/profile/dashboard/{dashboard_id}", params=params) or {}
+        )
+
+    def get_default_dashboard(self) -> int | None:
+        return self._get("/api/profile/dashboard/default").get("dashboard_id")
+
+    def set_default_dashboard(self, dashboard_id: int | None) -> None:
+        """Set the default dashboard, or clear it with None."""
+        self._put("/api/profile/dashboard/default", json={"dashboard_id": dashboard_id})
+
+    def set_dashboard_layout(self, dashboard_id: int, layout: list[dict]) -> list[dict]:
+        return self._put(f"/api/profile/dashboard/{dashboard_id}/layout", json=layout)
+
+    def remove_dashboard_widget(self, dashboard_id: int, widget_id: int) -> None:
+        """Take a widget off one dashboard. It stays saved, and on its other dashboards."""
+        self._delete(f"/api/profile/dashboard/{dashboard_id}/widget/{widget_id}")
+
+    # --- widgets ---
+
+    def list_widgets(
+        self, query_id: int | None = None, dashboard_id: int | None = None
+    ) -> list[dict]:
+        params: dict[str, Any] = {}
+        if query_id is not None:
+            params["query_id"] = query_id
+        if dashboard_id is not None:
+            params["dashboard_id"] = dashboard_id
+        return self._get("/api/profile/widgets", **params)
+
+    def get_widget(self, widget_id: int) -> dict:
+        return self._get(f"/api/profile/widget/{widget_id}")
+
+    def create_widget(self, widget: dict) -> dict:
+        """Save a widget (a BaseWidget body), on no dashboard or on `dashboard_ids`."""
+        return self._post("/api/profile/widget", json=widget)
+
+    def update_widget(self, widget_id: int, widget: dict) -> dict:
+        """Change a widget on every dashboard that has it. Its places stay."""
+        return self._put(f"/api/profile/widget/{widget_id}", json=widget)
+
+    def delete_widget(self, widget_id: int) -> None:
+        """Delete a widget. It leaves every dashboard."""
+        self._delete(f"/api/profile/widget/{widget_id}")
+
+    def add_widget_to_dashboards(
+        self, widget_id: int, dashboard_ids: list[int]
+    ) -> dict:
+        """Put a saved widget on more dashboards, each under its lowest widget."""
+        return self._post(
+            f"/api/profile/widget/{widget_id}/dashboards",
+            json={"dashboard_ids": dashboard_ids},
+        )
 
 
 def _raise_for_status(resp: httpx.Response, path: str) -> None:

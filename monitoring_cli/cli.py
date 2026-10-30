@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import contextlib
 import datetime
+import json
 import os
 import select
 import shutil
@@ -8,12 +10,14 @@ import sys
 import time
 from importlib.resources import as_file, files
 from pathlib import Path, PurePosixPath
-from typing import Annotated, NamedTuple, NoReturn
+from typing import Annotated, Any, NamedTuple, NoReturn
 
+import httpx
 import typer
 from rich.console import Console
+from rich.markup import escape
 
-from monitoring_cli import output
+from monitoring_cli import output, widgets
 from monitoring_cli.auth import (
     AuthError,
     DeviceFlowExpiredError,
@@ -1519,6 +1523,911 @@ def telegram_code(
     except Exception as e:
         _exit_error(e)
     output.format_query_metadata(result)
+
+
+# --- dashboards and widgets ---
+#
+# Flat commands, like the query commands above. The widget rules (config keys,
+# axis checks, the SQL a widget reads) live in widgets.py, copied from the web
+# app, so the CLI gives the same answers as the Visualize tab.
+
+_LINK_INDENT = "  "
+
+
+def _read_json_input(source: str, flag: str) -> Any:
+    """JSON from a file, or from stdin when `source` is "-"."""
+    if source == "-":
+        text = _read_ready_stdin()
+        if not text.strip():
+            err.print(f"No JSON on stdin for {flag}. Pipe it in, or pass a file.")
+            raise typer.Exit(1)
+    else:
+        try:
+            text = Path(source).read_text(encoding="utf-8")
+        except OSError as e:
+            err.print(f"Cannot read {flag} file: {e}")
+            raise typer.Exit(1)
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError as e:
+        err.print(f"{flag} is not valid JSON: {e}")
+        raise typer.Exit(1)
+
+
+def _config_input(source: str | None) -> dict:
+    """The --config object with snake_case keys, or {}."""
+    if source is None:
+        return {}
+    data = _read_json_input(source, "--config")
+    if not isinstance(data, dict):
+        err.print("--config must be a JSON object of config keys.")
+        raise typer.Exit(1)
+    return widgets.normalize_config(data)
+
+
+def _flag_config(
+    x: str | None,
+    y: str | None,
+    y1: str | None,
+    series_by: str | None,
+    x_label: str | None,
+    y_label: str | None,
+    timeframe: str | None,
+) -> dict:
+    """The config keys that the flags set. An empty value clears the key."""
+    pairs = {
+        "x_axis_name": x,
+        "y_axis_name": y,
+        "y1_axis_name": y1,
+        "series_by": series_by,
+        "x_label": x_label,
+        "y_label": y_label,
+        "timeframe": timeframe,
+    }
+    return {k: v for k, v in pairs.items() if v is not None}
+
+
+_ALERT_CATEGORY = "ALERT"
+
+
+class _Draft(NamedTuple):
+    """A widget to check, preview or save: a saved one with changes, or a new one."""
+
+    stored: dict | None
+    query: dict | None
+    widget_type: str
+    label: str | None
+    config: dict
+
+
+def _widget_draft(
+    client: MonitoringClient,
+    widget_id: int | None,
+    query_id: int | None,
+    widget_type: str | None,
+    label: str | None,
+    config_input: dict,
+    flags: dict,
+    clear: list[str] | None = None,
+) -> _Draft:
+    """The widget that the flags describe. With `widget_id`, the saved widget
+    is the base and the stored config merges with --config, then the flags; a
+    new widget starts from the web app's default config. The flags win."""
+    if widget_id is not None:
+        stored = client.get_widget(widget_id)
+        if stored.get("category") == _ALERT_CATEGORY:
+            # The dashboard draws the alerts of its query, not a chart (Widget.tsx).
+            err.print(
+                "An alerts widget shows the alerts of its query; edit it in the web app."
+            )
+            raise typer.Exit(1)
+        base = widgets.normalize_config(stored.get("config") or {})
+        for key in clear or []:
+            base.pop(widgets.camel_to_snake(key), None)
+        query_ids = stored.get("query_ids") or []
+        if query_id is None and query_ids:
+            query_id = query_ids[0]
+        widget_type = widget_type or str(stored.get("type") or "")
+        label = label if label is not None else stored.get("label")
+    else:
+        stored = None
+        base = dict(widgets.DEFAULT_CONFIG)
+    config = widgets.clean_config({**base, **config_input, **flags})
+    query = client.get_query(query_id) if query_id is not None else None
+    return _Draft(stored, query, widget_type or "", label, config)
+
+
+def _require_new_widget_args(query_id: int | None, widget_type: str | None) -> None:
+    if query_id is None or widget_type is None:
+        err.print(
+            "Provide --id <widget_id>, or --query-id and --type for a new widget."
+        )
+        raise typer.Exit(2)
+
+
+def _query_network(query: dict) -> str:
+    return query.get("default_network") or "ethereum"
+
+
+def _widget_columns(client: MonitoringClient, query: dict) -> list[dict]:
+    """The query's columns as {"name", "type"}, as getQueryColumns reads them."""
+    text = query.get("query_text")
+    if not text:
+        return []
+    columns = client.query_columns(
+        text, query["query_id"], query["owner"]["entity_id"], _query_network(query)
+    )
+    return [
+        {"name": c.get("column_name", ""), "type": c.get("column_type", "")}
+        for c in columns
+    ]
+
+
+def _widget_problems(
+    client: MonitoringClient, draft: _Draft, check_columns: bool = True
+) -> tuple[list[str], list[str]]:
+    """The problems (each one blocks a save) and the notes of a draft."""
+    problems = widgets.config_problems(draft.widget_type, draft.config)
+    notes = widgets.config_notes(draft.widget_type, draft.config)
+    axis = widgets.missing_axis(draft.widget_type, draft.config)
+    if axis:
+        problems.append(axis)
+    if not check_columns:
+        return problems, notes
+    if draft.query is None:
+        notes.append("The widget reads no query, so the column check was skipped.")
+        return problems, notes
+    try:
+        columns = _widget_columns(client, draft.query)
+    except (httpx.HTTPStatusError, PermissionError) as e:
+        problems.append(f"Cannot read the query columns: {e}")
+        return problems, notes
+    if not columns:
+        notes.append(
+            "The query metadata has no columns, so the column check was skipped."
+        )
+    names = [c["name"] for c in columns]
+    for name in widgets.columns_not_in_query(draft.config, names, draft.widget_type):
+        problems.append(f"The query has no column {name!r}.")
+    return problems, notes
+
+
+def _print_problems(problems: list[str], notes: list[str]) -> None:
+    for note in notes:
+        err.print(f"[yellow]Note:[/] {escape(note)}")
+    for problem in problems:
+        err.print(f"[red]✗[/] {escape(problem)}")
+
+
+def _widget_category(client: MonitoringClient, query: dict) -> str:
+    """The Visualize tab's category: a scheduled query or one with
+    notifications reads its materialized table; any other one, a view."""
+    notify = False
+    if not query.get("is_scheduled"):
+        # The web app reads a missing notification config as "no notifications".
+        with contextlib.suppress(NotFoundError, httpx.HTTPStatusError, PermissionError):
+            config = client.get_notify_config(query["query_id"], _query_network(query))
+            notify = bool((config or {}).get("notify"))
+    return widgets.chart_category(query, notify)
+
+
+def _echo_links(base_url: str, widget: dict | None, dashboard_ids: list[int]) -> None:
+    if widget is not None and widget.get("widget_id") is not None:
+        typer.echo(_LINK_INDENT + widgets.widget_link(base_url, widget["widget_id"]))
+    for dashboard_id in dashboard_ids:
+        typer.echo(
+            f"{_LINK_INDENT}dashboard {dashboard_id}: "
+            + widgets.dashboard_link(base_url, dashboard_id)
+        )
+
+
+# Option types that create-widget, update-widget, check-widget and
+# preview-widget share.
+_WidgetQueryOpt = Annotated[
+    int | None, typer.Option("--query-id", help="ID of the query that the widget draws")
+]
+_WidgetTypeOpt = Annotated[
+    str | None,
+    typer.Option(
+        "--type",
+        help="Widget type: line, bar, stackedbar, linebar, scatter, histogram, range, pie, table, value",
+    ),
+]
+_WidgetLabelOpt = Annotated[
+    str | None,
+    typer.Option(
+        "--label",
+        help="Widget title (inline Markdown and TeX). Default: the query name",
+    ),
+]
+_XOpt = Annotated[str | None, typer.Option("--x", help="X-axis column (x_axis_name)")]
+_YOpt = Annotated[str | None, typer.Option("--y", help="Y-axis column (y_axis_name)")]
+_Y1Opt = Annotated[
+    str | None, typer.Option("--y1", help="Second Y column (y1_axis_name)")
+]
+_SeriesByOpt = Annotated[
+    str | None,
+    typer.Option(
+        "--series-by", help="One series for each value of this column (series_by)"
+    ),
+]
+_XLabelOpt = Annotated[
+    str | None,
+    typer.Option(
+        "--x-label",
+        help="X-axis label: inline Markdown and TeX, max 120 characters (x_label)",
+    ),
+]
+_YLabelOpt = Annotated[
+    str | None,
+    typer.Option(
+        "--y-label",
+        help="Y-axis label: inline Markdown and TeX, max 120 characters (y_label)",
+    ),
+]
+_TimeframeOpt = Annotated[
+    str | None,
+    typer.Option(
+        "--timeframe", help="Time range the widget reads: 24h, 7d, 30d or 60d"
+    ),
+]
+_ConfigOpt = Annotated[
+    str | None,
+    typer.Option(
+        "--config",
+        help="JSON object of config keys from a file, or - for stdin. camelCase or snake_case keys. The flags win.",
+    ),
+]
+_ClearOpt = Annotated[
+    list[str] | None,
+    typer.Option("--clear", help="Remove this key from the saved config. Repeatable."),
+]
+
+
+@app.command()
+def list_dashboards(profile: ProfileOption = None) -> None:
+    """List the dashboards you can open. The default dashboard is marked."""
+    client, _ = _load_client(profile)
+    try:
+        dashboards = client.list_dashboards()
+    except Exception as e:
+        _exit_error(e)
+    default_id = None
+    with contextlib.suppress(Exception):
+        default_id = client.get_default_dashboard()
+    output.format_dashboards(dashboards, default_id)
+
+
+@app.command()
+def get_dashboard(
+    id: Annotated[int, typer.Option(help="Dashboard ID")],
+    profile: ProfileOption = None,
+) -> None:
+    """Show a dashboard and its widgets (JSON)."""
+    client, _ = _load_client(profile)
+    try:
+        dashboard = client.get_dashboard(id)
+        dashboard["widgets"] = client.list_widgets(dashboard_id=id)
+    except NotFoundError as e:
+        err.print(str(e))
+        raise typer.Exit(1)
+    except Exception as e:
+        _exit_error(e)
+    output.format_query_metadata(dashboard)
+
+
+@app.command()
+def create_dashboard(
+    name: Annotated[str, typer.Argument(help="Dashboard name")],
+    profile: ProfileOption = None,
+    description: Annotated[str | None, typer.Option(help="Description")] = None,
+    public: Annotated[
+        bool, typer.Option("--public", help="Anyone with the link can open it")
+    ] = False,
+    unlisted: Annotated[
+        bool,
+        typer.Option(
+            "--unlisted", help="Public, but not in the public list (needs --public)"
+        ),
+    ] = False,
+    entity_id: Annotated[
+        int | None,
+        typer.Option(
+            help="Owner entity ID: you (default) or one of your organisations"
+        ),
+    ] = None,
+) -> None:
+    """Create a dashboard. Prints its ID and link."""
+    if unlisted and not public:
+        err.print("--unlisted needs --public: only a public dashboard can be unlisted.")
+        raise typer.Exit(2)
+    client, p = _load_client(profile)
+    try:
+        if entity_id is None:
+            entity_id = client.get_me()["entity_id"]
+        created = client.create_dashboard(
+            name, entity_id, description, is_public=public, is_unlisted=unlisted
+        )
+    except Exception as e:
+        _exit_error(e)
+    dashboard_id = created.get("dashboard_id")
+    typer.echo(f"Created dashboard (id: {dashboard_id}).")
+    if dashboard_id is not None:
+        _echo_links(p.base_url, None, [dashboard_id])
+
+
+@app.command()
+def update_dashboard(
+    id: Annotated[int, typer.Option(help="Dashboard ID")],
+    profile: ProfileOption = None,
+    name: Annotated[str | None, typer.Option(help="New name")] = None,
+    description: Annotated[
+        str | None, typer.Option(help="New description (empty to remove)")
+    ] = None,
+    public: Annotated[
+        bool | None,
+        typer.Option("--public/--private", help="Make the dashboard public or private"),
+    ] = None,
+    unlisted: Annotated[
+        bool | None,
+        typer.Option(
+            "--unlisted/--listed",
+            help="Hide a public dashboard from the public list, or show it",
+        ),
+    ] = None,
+) -> None:
+    """Change a dashboard's name, description or visibility. The other fields stay."""
+    if name is None and description is None and public is None and unlisted is None:
+        err.print(
+            "Nothing to change. Pass --name, --description, --public/--private or --unlisted/--listed."
+        )
+        raise typer.Exit(2)
+    client, p = _load_client(profile)
+    try:
+        stored = client.get_dashboard(id)
+        is_public = stored.get("is_public", False) if public is None else public
+        is_unlisted = stored.get("is_unlisted", False) if unlisted is None else unlisted
+        if is_unlisted and not is_public:
+            if unlisted:
+                err.print("--unlisted needs a public dashboard: add --public.")
+                raise typer.Exit(2)
+            # A private dashboard cannot stay unlisted.
+            is_unlisted = False
+        client.update_dashboard(
+            id,
+            {
+                "name": stored.get("name") if name is None else name,
+                "description": (
+                    stored.get("description")
+                    if description is None
+                    else description or None
+                ),
+                "is_public": is_public,
+                "is_unlisted": is_unlisted,
+                "entity_id": stored.get("entity_id"),
+            },
+        )
+    except typer.Exit:
+        raise
+    except NotFoundError as e:
+        err.print(str(e))
+        raise typer.Exit(1)
+    except Exception as e:
+        _exit_error(e)
+    typer.echo(f"Updated dashboard {id}.")
+    _echo_links(p.base_url, None, [id])
+
+
+@app.command()
+def delete_dashboard(
+    id: Annotated[int, typer.Option(help="Dashboard ID")],
+    profile: ProfileOption = None,
+    delete_widgets: Annotated[
+        bool,
+        typer.Option(
+            "--delete-widgets",
+            help="Also delete the widgets that only this dashboard has. Default: they stay saved.",
+        ),
+    ] = False,
+) -> None:
+    """Delete a dashboard. Its widgets stay saved unless --delete-widgets."""
+    client, _ = _load_client(profile)
+    try:
+        result = client.delete_dashboard(id, delete_widgets=delete_widgets)
+    except NotFoundError as e:
+        err.print(str(e))
+        raise typer.Exit(1)
+    except Exception as e:
+        _exit_error(e)
+    if delete_widgets:
+        count = result.get("deleted_widgets", 0)
+        typer.echo(f"Deleted dashboard {id} and {count} widget(s).")
+    else:
+        typer.echo(f"Deleted dashboard {id}. Its widgets stay saved.")
+
+
+@app.command()
+def set_default_dashboard(
+    profile: ProfileOption = None,
+    id: Annotated[int | None, typer.Option(help="Dashboard ID")] = None,
+    clear: Annotated[
+        bool, typer.Option("--clear", help="Remove the default dashboard")
+    ] = False,
+) -> None:
+    """Set the dashboard that /dashboard opens for you, or clear it with --clear."""
+    if (id is None) == (not clear):
+        err.print("Provide either --id or --clear.")
+        raise typer.Exit(2)
+    client, p = _load_client(profile)
+    try:
+        client.set_default_dashboard(None if clear else id)
+    except NotFoundError as e:
+        err.print(str(e))
+        raise typer.Exit(1)
+    except Exception as e:
+        _exit_error(e)
+    if id is None:
+        typer.echo("Cleared the default dashboard.")
+    else:
+        typer.echo(f"Default dashboard is now {id}.")
+        _echo_links(p.base_url, None, [id])
+
+
+@app.command()
+def set_layout(
+    id: Annotated[int, typer.Option(help="Dashboard ID")],
+    layout: Annotated[
+        str,
+        typer.Option(
+            help='JSON list of {"widget_id", "x", "y", "width", "height"} from a file, or - for stdin'
+        ),
+    ],
+    profile: ProfileOption = None,
+) -> None:
+    """Set the place and size of widgets on a dashboard (12-column grid). All or nothing."""
+    data = _read_json_input(layout, "--layout")
+    problems = widgets.layout_problems(data)
+    if problems:
+        _print_problems(problems, [])
+        raise typer.Exit(1)
+    assert isinstance(data, list)
+    client, p = _load_client(profile)
+    try:
+        client.set_dashboard_layout(id, data)
+    except NotFoundError as e:
+        err.print(str(e))
+        raise typer.Exit(1)
+    except Exception as e:
+        _exit_error(e)
+    typer.echo(f"Saved the layout of {len(data)} widget(s) on dashboard {id}.")
+    _echo_links(p.base_url, None, [id])
+
+
+@app.command()
+def list_widgets(
+    profile: ProfileOption = None,
+    query_id: Annotated[
+        int | None, typer.Option(help="Only the widgets of this query")
+    ] = None,
+    dashboard_id: Annotated[
+        int | None, typer.Option(help="Only the widgets on this dashboard")
+    ] = None,
+) -> None:
+    """List your widgets. Filter with --query-id or --dashboard-id."""
+    client, _ = _load_client(profile)
+    try:
+        result = client.list_widgets(query_id=query_id, dashboard_id=dashboard_id)
+    except NotFoundError as e:
+        err.print(str(e))
+        raise typer.Exit(1)
+    except Exception as e:
+        _exit_error(e)
+    output.format_widgets(result)
+
+
+@app.command()
+def get_widget(
+    id: Annotated[int, typer.Option(help="Widget ID")],
+    profile: ProfileOption = None,
+) -> None:
+    """Show a widget by ID (JSON)."""
+    client, _ = _load_client(profile)
+    try:
+        result = client.get_widget(id)
+    except NotFoundError as e:
+        err.print(str(e))
+        raise typer.Exit(1)
+    except Exception as e:
+        _exit_error(e)
+    output.format_query_metadata(result)
+
+
+@app.command()
+def check_widget(
+    profile: ProfileOption = None,
+    id: Annotated[
+        int | None, typer.Option(help="Saved widget ID (the flags change it)")
+    ] = None,
+    query_id: _WidgetQueryOpt = None,
+    widget_type: _WidgetTypeOpt = None,
+    label: _WidgetLabelOpt = None,
+    x: _XOpt = None,
+    y: _YOpt = None,
+    y1: _Y1Opt = None,
+    series_by: _SeriesByOpt = None,
+    x_label: _XLabelOpt = None,
+    y_label: _YLabelOpt = None,
+    timeframe: _TimeframeOpt = None,
+    config: _ConfigOpt = None,
+    clear: _ClearOpt = None,
+) -> None:
+    """Check a widget like the web Visualize tab: config keys and values, the axes the type needs, and the columns of the query. Prints each problem and exits 1 when there is one. Takes --id, or --query-id and --type."""
+    if id is None:
+        _require_new_widget_args(query_id, widget_type)
+    config_input = _config_input(config)
+    flags = _flag_config(x, y, y1, series_by, x_label, y_label, timeframe)
+    client, _ = _load_client(profile)
+    try:
+        draft = _widget_draft(
+            client, id, query_id, widget_type, label, config_input, flags, clear
+        )
+        problems, notes = _widget_problems(client, draft)
+    except typer.Exit:
+        raise
+    except NotFoundError as e:
+        err.print(str(e))
+        raise typer.Exit(1)
+    except Exception as e:
+        _exit_error(e)
+    _print_problems(problems, notes)
+    if problems:
+        raise typer.Exit(1)
+    out.print("[green]✓[/] valid")
+    output.format_query_metadata(
+        {
+            "type": draft.widget_type,
+            "label": draft.label,
+            "query_id": draft.query.get("query_id") if draft.query else None,
+            "config": draft.config,
+        }
+    )
+
+
+@app.command()
+def preview_widget(
+    profile: ProfileOption = None,
+    id: Annotated[
+        int | None, typer.Option(help="Saved widget ID (the flags change it)")
+    ] = None,
+    query_id: _WidgetQueryOpt = None,
+    widget_type: _WidgetTypeOpt = None,
+    label: _WidgetLabelOpt = None,
+    x: _XOpt = None,
+    y: _YOpt = None,
+    y1: _Y1Opt = None,
+    series_by: _SeriesByOpt = None,
+    x_label: _XLabelOpt = None,
+    y_label: _YLabelOpt = None,
+    timeframe: _TimeframeOpt = None,
+    config: _ConfigOpt = None,
+    clear: _ClearOpt = None,
+    limit: Annotated[
+        int | None,
+        typer.Option(
+            help=f"Max rows (max 500). Default: {widgets.CHART_ROWS} for a chart, {widgets.TABLE_ROWS} for a table"
+        ),
+    ] = None,
+    timeout: Annotated[
+        float,
+        typer.Option(help="Max seconds to wait; then the server task is revoked"),
+    ] = 120.0,
+    sql: Annotated[
+        bool,
+        typer.Option("--sql", help="Print the SQL the widget runs, and do not run it"),
+    ] = False,
+) -> None:
+    """Run the SQL that the dashboard runs for a widget and print its rows: the query's table through ref(), or the query text when ref() cannot find the query. Takes --id, or --query-id and --type. Ctrl-C (or --timeout) revokes the server task."""
+    if id is None:
+        _require_new_widget_args(query_id, widget_type)
+    config_input = _config_input(config)
+    flags = _flag_config(x, y, y1, series_by, x_label, y_label, timeframe)
+    client, _ = _load_client(profile)
+    try:
+        draft = _widget_draft(
+            client, id, query_id, widget_type, label, config_input, flags, clear
+        )
+        problems, notes = _widget_problems(client, draft, check_columns=False)
+        if draft.query is None:
+            problems.append("The widget reads no query, so it has no rows to preview.")
+        if problems:
+            _print_problems(problems, notes)
+            raise typer.Exit(1)
+        assert draft.query is not None
+        query = draft.query
+        try:
+            columns = _widget_columns(client, query)
+        except (httpx.HTTPStatusError, PermissionError) as e:
+            # The dashboard reads the rows without the columns too.
+            err.print(
+                f"[yellow]Note:[/] cannot read the query columns: {escape(str(e))}"
+            )
+            columns = []
+        ref_sql, text_sql = widgets.widget_sqls_of(
+            query=query,
+            columns=columns,
+            widget_type=draft.widget_type,
+            config=draft.config,
+            timeframe=draft.config.get("timeframe"),
+        )
+        if sql:
+            typer.echo(ref_sql)
+            if text_sql is not None:
+                typer.echo("\n-- When ref() cannot find the query, the rows come from:")
+                typer.echo(text_sql)
+            return
+        rows_limit = limit or (
+            widgets.TABLE_ROWS if draft.widget_type == "table" else widgets.CHART_ROWS
+        )
+
+        def run(statement: str) -> list[dict]:
+            return client.execute_query(
+                statement,
+                query["query_id"],
+                query["owner"]["entity_id"],
+                limit=rows_limit,
+                poll_timeout=timeout,
+                on_start=lambda tid: err.print(f"task {tid} (Ctrl-C to cancel)"),
+            )
+
+        try:
+            rows = run(ref_sql)
+        except (RuntimeError, httpx.HTTPStatusError) as e:
+            if text_sql is None or not widgets.NOT_REFERABLE.search(str(e)):
+                raise
+            err.print(
+                "ref() cannot find the query (it has no run settings): reading the query text."
+            )
+            try:
+                rows = run(text_sql)
+            except (RuntimeError, httpx.HTTPStatusError) as text_error:
+                raise RuntimeError(
+                    f"Read from the query text (the query has no run settings): {text_error}"
+                ) from text_error
+    except typer.Exit:
+        raise
+    except KeyboardInterrupt:
+        err.print("Cancelled — server task revoked.")
+        raise typer.Exit(130)
+    except TimeoutError as e:
+        err.print(f"{e} — task revoked. Shorten --timeframe, or raise --timeout.")
+        raise typer.Exit(1)
+    except NotFoundError as e:
+        err.print(str(e))
+        raise typer.Exit(1)
+    except Exception as e:
+        _exit_error(e)
+    output.format_query_results(rows)
+
+
+@app.command()
+def create_widget(
+    query_id: Annotated[
+        int, typer.Option("--query-id", help="ID of the query that the widget draws")
+    ],
+    widget_type: Annotated[
+        str,
+        typer.Option(
+            "--type",
+            help="Widget type: line, bar, stackedbar, linebar, scatter, histogram, range, pie, table, value",
+        ),
+    ],
+    profile: ProfileOption = None,
+    label: _WidgetLabelOpt = None,
+    x: _XOpt = None,
+    y: _YOpt = None,
+    y1: _Y1Opt = None,
+    series_by: _SeriesByOpt = None,
+    x_label: _XLabelOpt = None,
+    y_label: _YLabelOpt = None,
+    timeframe: _TimeframeOpt = None,
+    config: _ConfigOpt = None,
+    dashboard_id: Annotated[
+        list[int] | None,
+        typer.Option(
+            "--dashboard-id",
+            help="Also put the widget on this dashboard, under its lowest widget. Repeatable.",
+        ),
+    ] = None,
+    entity_id: Annotated[
+        int | None,
+        typer.Option(
+            help="Owner entity ID: you (default) or an organisation you manage"
+        ),
+    ] = None,
+    force: Annotated[
+        bool,
+        typer.Option(
+            "--force", help="Skip the column checks (the other checks still run)"
+        ),
+    ] = False,
+) -> None:
+    """Save a chart, table or value widget of a query, with the checks of check-widget first. Prints the widget ID and link."""
+    config_input = _config_input(config)
+    flags = _flag_config(x, y, y1, series_by, x_label, y_label, timeframe)
+    client, p = _load_client(profile)
+    try:
+        draft = _widget_draft(
+            client, None, query_id, widget_type, label, config_input, flags
+        )
+        problems, notes = _widget_problems(client, draft, check_columns=not force)
+        _print_problems(problems, notes)
+        if problems:
+            raise typer.Exit(1)
+        query = draft.query
+        assert query is not None
+        body: dict = {
+            "label": draft.label or query.get("query_name"),
+            "category": _widget_category(client, query),
+            "type": draft.widget_type,
+            "query_ids": [query["query_id"]],
+            "query_keys": [query["key"]] if query.get("key") else [],
+            "config": draft.config,
+            "dashboard_ids": list(dict.fromkeys(dashboard_id or [])),
+            "x": 0,
+            "y": 0,
+            **widgets.default_widget_size(draft.widget_type),
+        }
+        if entity_id is not None:
+            body["entity_id"] = entity_id
+        created = client.create_widget(body)
+    except typer.Exit:
+        raise
+    except NotFoundError as e:
+        err.print(str(e))
+        raise typer.Exit(1)
+    except Exception as e:
+        _exit_error(e)
+    typer.echo(f"Created widget (id: {created.get('widget_id')}).")
+    _echo_links(p.base_url, created, created.get("dashboard_ids") or [])
+
+
+@app.command()
+def update_widget(
+    id: Annotated[int, typer.Option(help="Widget ID")],
+    profile: ProfileOption = None,
+    query_id: _WidgetQueryOpt = None,
+    widget_type: _WidgetTypeOpt = None,
+    label: _WidgetLabelOpt = None,
+    x: _XOpt = None,
+    y: _YOpt = None,
+    y1: _Y1Opt = None,
+    series_by: _SeriesByOpt = None,
+    x_label: _XLabelOpt = None,
+    y_label: _YLabelOpt = None,
+    timeframe: _TimeframeOpt = None,
+    config: _ConfigOpt = None,
+    clear: _ClearOpt = None,
+    force: Annotated[
+        bool,
+        typer.Option(
+            "--force", help="Skip the column checks (the other checks still run)"
+        ),
+    ] = False,
+) -> None:
+    """Change a widget on every dashboard that has it. The flags and --config merge into the saved config; --clear removes a key. Runs the checks of check-widget first. Its places stay."""
+    config_input = _config_input(config)
+    flags = _flag_config(x, y, y1, series_by, x_label, y_label, timeframe)
+    client, p = _load_client(profile)
+    try:
+        draft = _widget_draft(
+            client, id, query_id, widget_type, label, config_input, flags, clear
+        )
+        problems, notes = _widget_problems(client, draft, check_columns=not force)
+        _print_problems(problems, notes)
+        if problems:
+            raise typer.Exit(1)
+        stored = draft.stored
+        assert stored is not None
+        query_ids = stored.get("query_ids") or []
+        query_keys = stored.get("query_keys") or []
+        category = stored.get("category")
+        query = draft.query
+        if query_id is not None and query is not None and query_ids != [query_id]:
+            # A new query: its key and its category, as a new widget gets them.
+            query_ids = [query_id]
+            query_keys = [query["key"]] if query.get("key") else []
+            category = _widget_category(client, query)
+        updated = client.update_widget(
+            id,
+            {
+                # No dashboard: the backend then changes no place. With one, it
+                # writes width/height to that place, and the stored legacy
+                # columns can be older than the place.
+                "dashboard_id": None,
+                "label": draft.label,
+                "category": category,
+                "type": draft.widget_type,
+                "query_ids": query_ids,
+                "query_keys": query_keys,
+                "config": draft.config,
+                # The body must be inside the grid, but with no dashboard_id
+                # the backend does not use these values.
+                "x": 0,
+                "y": 0,
+                "width": 6,
+                "height": 4,
+            },
+        )
+    except typer.Exit:
+        raise
+    except NotFoundError as e:
+        err.print(str(e))
+        raise typer.Exit(1)
+    except Exception as e:
+        _exit_error(e)
+    typer.echo(f"Updated widget {id}.")
+    _echo_links(p.base_url, updated or {"widget_id": id}, [])
+
+
+@app.command()
+def delete_widget(
+    id: Annotated[int, typer.Option(help="Widget ID")],
+    profile: ProfileOption = None,
+) -> None:
+    """Delete a widget. It leaves every dashboard that has it."""
+    client, _ = _load_client(profile)
+    try:
+        client.delete_widget(id)
+    except NotFoundError as e:
+        err.print(str(e))
+        raise typer.Exit(1)
+    except Exception as e:
+        _exit_error(e)
+    typer.echo(f"Deleted widget {id} from every dashboard.")
+
+
+@app.command()
+def add_widget(
+    id: Annotated[int, typer.Option(help="Widget ID")],
+    dashboard_id: Annotated[
+        list[int],
+        typer.Option(
+            "--dashboard-id",
+            help="Dashboard to put the widget on, under its lowest widget. Repeatable.",
+        ),
+    ],
+    profile: ProfileOption = None,
+) -> None:
+    """Put a saved widget on one or more dashboards. A dashboard that has it already keeps its place."""
+    client, p = _load_client(profile)
+    targets = list(dict.fromkeys(dashboard_id))
+    try:
+        client.add_widget_to_dashboards(id, targets)
+    except NotFoundError as e:
+        err.print(str(e))
+        raise typer.Exit(1)
+    except Exception as e:
+        _exit_error(e)
+    typer.echo(f"Widget {id} is on dashboard(s) {', '.join(map(str, targets))}.")
+    _echo_links(p.base_url, None, targets)
+
+
+@app.command()
+def remove_widget(
+    id: Annotated[int, typer.Option(help="Widget ID")],
+    dashboard_id: Annotated[int, typer.Option(help="Dashboard to take it off")],
+    profile: ProfileOption = None,
+) -> None:
+    """Take a widget off one dashboard. It stays saved, and on its other dashboards."""
+    client, _ = _load_client(profile)
+    try:
+        client.remove_dashboard_widget(dashboard_id, id)
+    except NotFoundError as e:
+        err.print(str(e))
+        raise typer.Exit(1)
+    except Exception as e:
+        _exit_error(e)
+    typer.echo(f"Removed widget {id} from dashboard {dashboard_id}.")
 
 
 # --- webhook sub-app ---

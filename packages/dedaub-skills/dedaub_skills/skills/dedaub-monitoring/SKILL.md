@@ -518,6 +518,15 @@ final SQL + the query's folder path & id + its UI link `https://app.dedaub.com/t
 Address lookup (Step 0): the contract-page link(s) `https://app.dedaub.com/<app-chain>/address/<address>/overview`
 per chain, plus the query-mode results if the user chose to continue.
 
+### Optional final step — a widget (shell CLI only)
+
+Only when you can run `dedaub-monitoring` commands in a shell (you work through the CLI, not inside the
+Dedaub app); with no shell, skip this step. After the query is saved and runs, judge whether a chart
+helps (read `references/widgets.md`, "Judge first"): when no chart fits, say why and stop; when the rows
+are row-level events, aggregate them first in a derived query. Then suggest one widget, run `check-widget`
+and `preview-widget`, create it with `create-widget`, and give the `/widget/<id>` link. Then ask the user
+whether to add it to a dashboard (`list-dashboards`, then `add-widget` or `create-dashboard`).
+
 ---
 
 ## Reference map (read on demand)
@@ -537,3 +546,4 @@ per chain, plus the query-mode results if the user chose to continue.
 | `…/handoff-schemas.md` | Step 5 — reviewer draft/verdict shapes |
 | `…/review-criteria.md` | Step 5 — reviewer checklist |
 | `…/deploy-playbook.md` | Step 5 — deploy, smoke-test, execution slot, timeout diagnosis |
+| `…/widgets.md` | Step 6 optional widget (shell CLI only) — widget types, config keys, checks, widget and dashboard commands |
