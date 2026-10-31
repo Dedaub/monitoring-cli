@@ -1,11 +1,29 @@
-.PHONY: setup login token format lint typecheck test check
+.PHONY: setup setup-local install install-local login token format lint typecheck test check
 
-# One-shot setup: install the CLI (force, via uv), install the agent skill, and
-# log in. install-skill (picker) and login (browser) are interactive on their own.
-setup:
-	uv tool install . --force
+REPO := https://github.com/Dedaub/monitoring-cli
+
+# One-shot setup: install the latest CLI, install the agent skill, and log in.
+# install-skill (picker) and login (browser) are interactive on their own.
+setup: install
 	dedaub-monitoring install-skill
 	dedaub-monitoring login
+
+# The same, but with the CLI of this working tree (to test a branch).
+setup-local: install-local
+	dedaub-monitoring install-skill
+	dedaub-monitoring login
+
+# Always the latest main from GitHub, never the state of this clone: a clone
+# that is behind main installed an old CLI with no widget commands.
+# --reinstall makes uv fetch and build again, also when the version is the same.
+install:
+	uv tool install --force --reinstall "git+$(REPO)"
+	dedaub-monitoring --version
+
+# The CLI of this working tree, built again.
+install-local:
+	uv tool install --force --reinstall .
+	dedaub-monitoring --version
 
 # Authenticate the installed CLI via the browser device flow.
 login:
