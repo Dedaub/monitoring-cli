@@ -18,7 +18,7 @@ import difflib
 import json
 import math
 import re
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from typing import Any, cast
 from urllib.parse import urlsplit
 
@@ -226,6 +226,34 @@ def config_notes(widget_type: str, config: Mapping[str, Any]) -> list[str]:
         f"{key} has no effect: a {widget_type} widget has no axes."
         for key in LABEL_KEYS
         if config.get(key)
+    ]
+
+
+# The chart palette has this many colours (palette.ts SERIES_LIGHT). With more
+# series_by values, data.ts keeps the largest MAX_SERIES - 1 series and adds the
+# rest together into one "Other" series.
+MAX_SERIES = 8
+
+
+def series_notes(
+    widget_type: str, config: Mapping[str, Any], rows: Sequence[Mapping[str, Any]]
+) -> list[str]:
+    """A note when the rows have more series_by values than the chart draws."""
+    column = config.get("series_by")
+    if not column or widget_type not in AXIS_TYPES:
+        return []
+    values = {
+        str(row.get(column) if row.get(column) is not None else "(empty)")
+        for row in rows
+    }
+    if len(values) <= MAX_SERIES:
+        return []
+    kept = MAX_SERIES - 1
+    return [
+        f"series_by {column!r} has {len(values)} values in these rows. The chart draws "
+        f"the {kept} largest and adds the other {len(values) - kept} together as one "
+        f"'Other' series. That sum is wrong for a rate or a percentage: split the rows "
+        f"into two queries, or filter them, so that each chart has at most {MAX_SERIES}."
     ]
 
 

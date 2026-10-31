@@ -2,8 +2,10 @@
 
 A **widget** is a saved chart, table or single value of one query. A **dashboard** is a grid of widgets.
 A widget can be on no dashboard, or on many. These commands need a shell with the `dedaub-monitoring`
-CLI. The CLI runs the same checks and the same SQL as the web app's Visualize tab, so a widget that
-passes `check-widget` draws on the dashboard.
+CLI, version 0.6.0 or later (`dedaub-monitoring --version`; an older CLI has no widget commands). The
+CLI runs the same checks and the same SQL as the web app's Visualize tab, so a widget that passes
+`check-widget` draws on the dashboard. An HTTP 500 on a widget command can mean that the server does
+not have the backend of that command yet: the error names the CLI version. Do not retry it in a loop.
 
 ## Flow
 
@@ -57,6 +59,42 @@ Decide case by case. Do not force a chart.
   already shows run settings: do not overwrite an alert's `INCREMENTAL` config. Name every output
   column with `AS`. Copy the saved query's `--#default_network=` first line when it has one.
 - **Chart directly.** The rows already have a time or category column and a number: use the table above.
+
+## Series: at most 8 on one chart
+
+The chart palette has 8 colours. When `series_by` has more than 8 values, the chart keeps the 7 largest
+series (by total) and adds all the others together into one grey **Other** series. A sum is correct for a
+count or a volume, but it is wrong for a rate, an average or a percentage (TPS, block time, gas used %).
+`check-widget` cannot see this, because it does not run the query. `preview-widget` counts the values in
+its rows and prints a note. Fix it in the SQL: split the rows into two derived queries (for example L1
+chains and L2 chains, each one `SELECT … FROM {{ ref("Query") }} WHERE layer = 'L1'`), or filter the rows.
+
+## Value tiles
+
+A `value` widget shows **one row**: the newest row by its `--x` column (the widget sorts the rows
+descending). With `--x` set to a time column, the tile also shows the change from the row before it and
+a sparkline of up to 30 rows. So give a headline tile an hourly or daily series (one row per bucket, the
+totals in columns), not a one-row snapshot. Without `--x`, the tile shows the first row as the query
+returns it, with no change and no sparkline.
+
+## Dashboard layout
+
+The grid has 12 columns. `create-widget --dashboard-id` and `add-widget` put each new widget under the
+lowest widget, so many new widgets make one long column. After you add the widgets, set the layout
+once with `set-layout` (all or nothing; `x + width` ≤ 12). A layout that reads well:
+
+| Row | Widgets | Width × height |
+|-----|---------|----------------|
+| 1 | Headline `value` tiles, 4 or 6 in a row | 3 × 2 or 2 × 2 |
+| 2 and on | Charts in pairs (`line`, `bar`, `stackedbar`) | 6 × 4 (6 × 5 for a busy line chart) |
+| next | A wide chart beside a `pie` | 8 × 5 and 4 × 5 |
+| last | `table` widgets | 12 × 6 |
+
+```bash
+dedaub-monitoring get-dashboard --id 78        # the widget ids
+dedaub-monitoring set-layout --id 78 --layout layout.json
+# layout.json: [{"widget_id": 456, "x": 0, "y": 0, "width": 2, "height": 2}, …]
+```
 
 ## Types and the columns each one needs (`missingAxis`)
 

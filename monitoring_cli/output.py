@@ -63,8 +63,12 @@ def format_query_text(
     *,
     console: Console | None = None,
 ) -> None:
+    """Write the SQL exactly as it is stored. Rich would wrap long lines at the
+    terminal width (80 columns in a pipe) and read `[...]` as markup, so
+    `read-query | write-query` would change the query."""
     c = console or _console
-    c.print(query_text)
+    c.file.write(query_text if query_text.endswith("\n") else query_text + "\n")
+    c.file.flush()
 
 
 def format_query_metadata(

@@ -478,3 +478,39 @@ def test_links():
         widgets.dashboard_link("https://api.dedaub.com", 5)
         == "https://app.dedaub.com/dashboard/5"
     )
+
+
+# --- series overflow -------------------------------------------------------------
+
+
+def _rows(n: int) -> list[dict]:
+    return [
+        {"hour": "2026-10-31T10:00:00Z", "network": f"net{i}", "tps": i}
+        for i in range(n)
+    ]
+
+
+def test_series_notes_warn_above_the_palette():
+    notes = widgets.series_notes("line", {"series_by": "network"}, _rows(9))
+    assert len(notes) == 1
+    assert "9 values" in notes[0]
+    assert "7 largest" in notes[0]
+    assert "'Other'" in notes[0]
+
+
+def test_series_notes_accept_the_palette_size():
+    assert widgets.series_notes("line", {"series_by": "network"}, _rows(8)) == []
+
+
+def test_series_notes_count_null_as_one_value():
+    rows = _rows(8) + [{"network": None}, {"network": None}]
+    assert len(widgets.series_notes("bar", {"series_by": "network"}, rows)) == 1
+
+
+@pytest.mark.parametrize("widget_type", ["table", "value", "pie"])
+def test_series_notes_skip_types_without_series(widget_type):
+    assert widgets.series_notes(widget_type, {"series_by": "network"}, _rows(12)) == []
+
+
+def test_series_notes_need_series_by():
+    assert widgets.series_notes("line", {}, _rows(12)) == []

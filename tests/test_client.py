@@ -734,3 +734,79 @@ def test_add_widget_to_dashboards():
     )
     MonitoringClient(PROFILE).add_widget_to_dashboards(12, [3, 4])
     assert _json_body(route) == {"dashboard_ids": [3, 4]}
+
+
+# --- GET retry and server errors ---------------------------------------------------
+
+
+@pytest.fixture
+def no_sleep(monkeypatch):
+    waits: list[float] = []
+    monkeypatch.setattr("monitoring_cli.client._sleep", waits.append)
+    return waits
+
+
+@respx.mock
+def test_get_retries_a_gateway_timeout(no_sleep):
+    mock_token(respx)
+    route = respx.get(f"{BASE}/api/auth/me").mock(
+        side_effect=[
+            httpx.Response(504, json={"detail": "Request Timeout"}),
+            httpx.Response(200, json={"user_id": 1}),
+        ]
+    )
+    assert MonitoringClient(PROFILE).get_me() == {"user_id": 1}
+    assert route.call_count == 2
+    assert no_sleep == [1.0]
+
+
+@respx.mock
+def test_get_retries_a_read_timeout(no_sleep):
+    mock_token(respx)
+    route = respx.get(f"{BASE}/api/auth/me").mock(
+        side_effect=[
+            httpx.ReadTimeout("slow"),
+            httpx.Response(200, json={"user_id": 1}),
+        ]
+    )
+    assert MonitoringClient(PROFILE).get_me() == {"user_id": 1}
+    assert route.call_count == 2
+
+
+@respx.mock
+def test_get_stops_after_three_attempts(no_sleep):
+    mock_token(respx)
+    route = respx.get(f"{BASE}/api/auth/me").mock(
+        return_value=httpx.Response(503, json={"detail": "busy"})
+    )
+    with pytest.raises(httpx.HTTPStatusError):
+        MonitoringClient(PROFILE).get_me()
+    assert route.call_count == 3
+    assert no_sleep == [1.0, 2.0]
+
+
+@respx.mock
+def test_get_does_not_retry_a_500(no_sleep):
+    mock_token(respx)
+    route = respx.get(f"{BASE}/api/auth/me").mock(
+        return_value=httpx.Response(500, text="Internal Server Error")
+    )
+    with pytest.raises(httpx.HTTPStatusError) as caught:
+        MonitoringClient(PROFILE).get_me()
+    assert route.call_count == 1
+    assert no_sleep == []
+    message = str(caught.value)
+    assert "HTTP 500 on /api/auth/me" in message
+    assert "the server may not have it yet" in message
+    assert "this CLI is v" in message
+
+
+@respx.mock
+def test_post_is_never_retried(no_sleep):
+    mock_token(respx)
+    route = respx.post(f"{BASE}/api/profile/widget").mock(
+        return_value=httpx.Response(504, json={"detail": "Request Timeout"})
+    )
+    with pytest.raises(httpx.HTTPStatusError):
+        MonitoringClient(PROFILE).create_widget({"type": "table"})
+    assert route.call_count == 1

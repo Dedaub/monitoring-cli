@@ -47,10 +47,33 @@ from monitoring_cli.config import (
     Profile,
     ProfileNotFoundError,
 )
+from monitoring_cli.version import cli_version
 
 app = typer.Typer(help="Dedaub Monitoring CLI")
 err = Console(stderr=True)
 out = Console()
+
+
+def _print_version(value: bool) -> None:
+    if value:
+        typer.echo(f"dedaub-monitoring {cli_version()}")
+        raise typer.Exit()
+
+
+@app.callback()
+def _main(
+    version: Annotated[
+        bool,
+        typer.Option(
+            "--version",
+            callback=_print_version,
+            is_eager=True,
+            help="Print the CLI version and exit.",
+        ),
+    ] = False,
+) -> None:
+    """Dedaub Monitoring CLI"""
+
 
 # Single network is currently supported across config/alert commands.
 _NETWORK = "ethereum"
@@ -2207,6 +2230,7 @@ def preview_widget(
     except Exception as e:
         _exit_error(e)
     output.format_query_results(rows)
+    _print_problems([], widgets.series_notes(draft.widget_type, draft.config, rows))
 
 
 @app.command()

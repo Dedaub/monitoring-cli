@@ -59,6 +59,8 @@ address — this branch does not apply.
 1. **Auth:** `dedaub-monitoring entities` — if it fails, ask the user to `login` and stop. With no
    browser (CI, container, remote agent), ask them instead to run `dedaub-monitoring token` where they
    are logged in and set the output as `DEDAUB_MONITORING_REFRESH_TOKEN` here. Never print the token yourself.
+   Also run `dedaub-monitoring --version` once: it is the `v<version>` of the header comment (Step 5), and
+   the widget commands need 0.6.0 or later. An older CLI has no `--version`: tell the user to update it.
 2. **Schema (don't WebFetch):**
    ```bash
    dedaub-monitoring get-schema --macros            # macro/table set
@@ -352,7 +354,7 @@ Write PG SQL from the §5 skeleton + grepped constants + scope guard + Step 4 st
 - Every unique-key / template column must appear in SELECT.
 - **Header comment (provenance) on every created query — both modes.** Lead the SQL with a comment:
   ```sql
-  -- Created <UTC ISO8601 — from `date -u +%Y-%m-%dT%H:%M:%SZ`> · <query|alert> · dedaub-monitoring v<pyproject version>
+  -- Created <UTC ISO8601 — from `date -u +%Y-%m-%dT%H:%M:%SZ`> · <query|alert> · dedaub-monitoring v<`dedaub-monitoring --version`>
   -- <one line: what it answers + protocol(s) / chain(s) / look-back window>
   ```
   Comments are preserved by the engine and satisfy the no-trailing-`;` rule (a query may *end* on a

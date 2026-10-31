@@ -1021,3 +1021,12 @@ def test_an_alerts_widget_is_not_a_chart(monkeypatch, command):
     client.execute_query.assert_not_called()
     client.update_widget.assert_not_called()
     client.query_columns.assert_not_called()
+
+
+def test_version_flag_prints_the_installed_version():
+    from monitoring_cli.version import cli_version
+
+    result = runner.invoke(app, ["--version"])
+    assert result.exit_code == 0
+    assert result.output.strip() == f"dedaub-monitoring {cli_version()}"
+    assert cli_version() != "unknown"
