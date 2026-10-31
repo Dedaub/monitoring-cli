@@ -311,3 +311,74 @@ def format_query_history(
             str(h.get("default_network") or ""),
         )
     c.print(table)
+
+
+def format_dashboards(
+    dashboards: list[dict],
+    default_id: int | None = None,
+    *,
+    console: Console | None = None,
+) -> None:
+    c = console or _console
+    if not dashboards:
+        c.print("No dashboards.")
+        return
+    table = Table(show_header=True)
+    table.add_column("ID")
+    table.add_column("Name")
+    table.add_column("Visibility")
+    table.add_column("Widgets")
+    table.add_column("Updated")
+    for d in dashboards:
+        name = str(d.get("name", ""))
+        if default_id is not None and d.get("dashboard_id") == default_id:
+            name += " (default)"
+        if not d.get("is_public"):
+            visibility = "private"
+        elif d.get("is_unlisted"):
+            visibility = "public, unlisted"
+        else:
+            visibility = "public"
+        widget_count = d.get("widget_count")
+        table.add_row(
+            str(d.get("dashboard_id", "")),
+            name,
+            visibility,
+            "" if widget_count is None else str(widget_count),
+            str(d.get("updated_at") or d.get("_ts") or ""),
+        )
+    c.print(table)
+
+
+def format_widgets(
+    widgets: list[dict],
+    *,
+    console: Console | None = None,
+) -> None:
+    c = console or _console
+    if not widgets:
+        c.print("No widgets.")
+        return
+    table = Table(show_header=True)
+    table.add_column("ID")
+    table.add_column("Label")
+    table.add_column("Type")
+    table.add_column("Category")
+    table.add_column("Queries")
+    table.add_column("Dashboards")
+    for w in widgets:
+        ids = w.get("query_ids") or []
+        names = w.get("query_names") or []
+        queries = [
+            f"{qid} ({names[i]})" if i < len(names) and names[i] else str(qid)
+            for i, qid in enumerate(ids)
+        ]
+        table.add_row(
+            str(w.get("widget_id", "")),
+            _truncate(str(w.get("label") or ""), 60),
+            str(w.get("type", "")),
+            str(w.get("category", "")),
+            _truncate(", ".join(queries), 60),
+            ", ".join(str(d) for d in w.get("dashboard_ids") or []),
+        )
+    c.print(table)

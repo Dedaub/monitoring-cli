@@ -552,3 +552,185 @@ def test_rotated_refresh_token_is_reported_and_used():
     MonitoringClient(profile, on_refresh_token=seen.append).get_me()
     assert seen == ["new"]
     assert profile.refresh_token == "new"
+
+
+# --- dashboards and widgets: method, path, params and body of each call ------
+
+
+def _json_body(route) -> object:
+    return json.loads(route.calls.last.request.content)
+
+
+@respx.mock
+def test_list_dashboards():
+    mock_token(respx)
+    route = respx.get(f"{BASE}/api/profile/dashboards").mock(
+        return_value=httpx.Response(200, json=[{"dashboard_id": 3}])
+    )
+    assert MonitoringClient(PROFILE).list_dashboards() == [{"dashboard_id": 3}]
+    assert route.called
+
+
+@respx.mock
+def test_get_dashboard():
+    mock_token(respx)
+    respx.get(f"{BASE}/api/profile/dashboard/3").mock(
+        return_value=httpx.Response(200, json={"dashboard_id": 3})
+    )
+    assert MonitoringClient(PROFILE).get_dashboard(3) == {"dashboard_id": 3}
+
+
+@respx.mock
+def test_create_dashboard_body():
+    mock_token(respx)
+    route = respx.post(f"{BASE}/api/profile/dashboard").mock(
+        return_value=httpx.Response(200, json={"dashboard_id": 8})
+    )
+    MonitoringClient(PROFILE).create_dashboard(
+        "Fees", 45, "desc", is_public=True, is_unlisted=True
+    )
+    assert _json_body(route) == {
+        "name": "Fees",
+        "description": "desc",
+        "is_public": True,
+        "is_unlisted": True,
+        "entity_id": 45,
+    }
+
+
+@respx.mock
+def test_update_dashboard_sends_the_whole_dashboard():
+    mock_token(respx)
+    route = respx.put(f"{BASE}/api/profile/dashboard/8").mock(
+        return_value=httpx.Response(200, content=b"null")
+    )
+    body = {
+        "name": "N",
+        "description": None,
+        "is_public": False,
+        "is_unlisted": False,
+        "entity_id": 45,
+    }
+    MonitoringClient(PROFILE).update_dashboard(8, body)
+    assert _json_body(route) == body
+
+
+@respx.mock
+def test_delete_dashboard_keeps_widgets_by_default():
+    mock_token(respx)
+    route = respx.delete(f"{BASE}/api/profile/dashboard/8").mock(
+        return_value=httpx.Response(200, json={"deleted_widgets": 0})
+    )
+    assert MonitoringClient(PROFILE).delete_dashboard(8) == {"deleted_widgets": 0}
+    assert "delete_widgets" not in route.calls.last.request.url.params
+
+
+@respx.mock
+def test_delete_dashboard_with_widgets():
+    mock_token(respx)
+    route = respx.delete(f"{BASE}/api/profile/dashboard/8").mock(
+        return_value=httpx.Response(200, json={"deleted_widgets": 2})
+    )
+    result = MonitoringClient(PROFILE).delete_dashboard(8, delete_widgets=True)
+    assert result == {"deleted_widgets": 2}
+    assert route.calls.last.request.url.params["delete_widgets"] == "true"
+
+
+@respx.mock
+def test_default_dashboard_get_set_and_clear():
+    mock_token(respx)
+    respx.get(f"{BASE}/api/profile/dashboard/default").mock(
+        return_value=httpx.Response(200, json={"dashboard_id": 5})
+    )
+    route = respx.put(f"{BASE}/api/profile/dashboard/default").mock(
+        return_value=httpx.Response(200, json={"dashboard_id": None})
+    )
+    client = MonitoringClient(PROFILE)
+    assert client.get_default_dashboard() == 5
+    client.set_default_dashboard(7)
+    assert _json_body(route) == {"dashboard_id": 7}
+    client.set_default_dashboard(None)
+    assert _json_body(route) == {"dashboard_id": None}
+
+
+@respx.mock
+def test_set_dashboard_layout():
+    mock_token(respx)
+    route = respx.put(f"{BASE}/api/profile/dashboard/8/layout").mock(
+        return_value=httpx.Response(200, json=[])
+    )
+    layout = [{"widget_id": 1, "x": 0, "y": 0, "width": 4, "height": 4}]
+    MonitoringClient(PROFILE).set_dashboard_layout(8, layout)
+    assert _json_body(route) == layout
+
+
+@respx.mock
+def test_remove_dashboard_widget():
+    mock_token(respx)
+    route = respx.delete(f"{BASE}/api/profile/dashboard/8/widget/12").mock(
+        return_value=httpx.Response(200, content=b"null")
+    )
+    MonitoringClient(PROFILE).remove_dashboard_widget(8, 12)
+    assert route.called
+
+
+@respx.mock
+def test_list_widgets_filters():
+    mock_token(respx)
+    route = respx.get(f"{BASE}/api/profile/widgets").mock(
+        return_value=httpx.Response(200, json=[])
+    )
+    client = MonitoringClient(PROFILE)
+    client.list_widgets()
+    assert dict(route.calls.last.request.url.params) == {}
+    client.list_widgets(query_id=9, dashboard_id=3)
+    assert dict(route.calls.last.request.url.params) == {
+        "query_id": "9",
+        "dashboard_id": "3",
+    }
+
+
+@respx.mock
+def test_get_widget():
+    mock_token(respx)
+    respx.get(f"{BASE}/api/profile/widget/12").mock(
+        return_value=httpx.Response(200, json={"widget_id": 12})
+    )
+    assert MonitoringClient(PROFILE).get_widget(12) == {"widget_id": 12}
+
+
+@respx.mock
+def test_create_and_update_widget_send_the_body():
+    mock_token(respx)
+    create = respx.post(f"{BASE}/api/profile/widget").mock(
+        return_value=httpx.Response(200, json={"widget_id": 12})
+    )
+    update = respx.put(f"{BASE}/api/profile/widget/12").mock(
+        return_value=httpx.Response(200, json={"widget_id": 12})
+    )
+    body = {"type": "line", "config": {"x_axis_name": "day"}}
+    client = MonitoringClient(PROFILE)
+    assert client.create_widget(body) == {"widget_id": 12}
+    assert _json_body(create) == body
+    client.update_widget(12, body)
+    assert _json_body(update) == body
+
+
+@respx.mock
+def test_delete_widget():
+    mock_token(respx)
+    route = respx.delete(f"{BASE}/api/profile/widget/12").mock(
+        return_value=httpx.Response(200, content=b"null")
+    )
+    MonitoringClient(PROFILE).delete_widget(12)
+    assert route.called
+
+
+@respx.mock
+def test_add_widget_to_dashboards():
+    mock_token(respx)
+    route = respx.post(f"{BASE}/api/profile/widget/12/dashboards").mock(
+        return_value=httpx.Response(200, json={"widget_id": 12})
+    )
+    MonitoringClient(PROFILE).add_widget_to_dashboards(12, [3, 4])
+    assert _json_body(route) == {"dashboard_ids": [3, 4]}

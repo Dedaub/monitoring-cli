@@ -7,6 +7,7 @@
 - Query on-chain transactions, logs, and contracts with SQL (DedaubQL, a SQL dialect with macros for incremental, time-bounded execution).
 - Deploy real-time alerts with email notifications for events such as large transfers, fund drains, liquidations, oracle price deviations, and privileged admin/owner actions.
 - Manage query folders, schemas, run configs, execution logs, and fired-alert history without leaving the terminal.
+- Turn a query into a chart widget and put it on a dashboard.
 - Works across Ethereum, Arbitrum, Base, and other EVM-compatible chains supported by the Dedaub platform (selected via the `--network` option and DedaubQL macros).
 - Optional Claude Code skill (`dedaub-monitoring install-skill`, then `/dedaub-monitoring`) provides an AI-guided alert builder.
 
@@ -28,6 +29,10 @@
 - `get-schema` — show available tables, columns, and macros
 - `enable-alerts` / `disable-alerts` / `list-alerts` — manage alert notifications
 - `get-logs` / `get-alerts` — inspect execution logs and fired alerts
+- `check-widget` / `preview-widget` — check a chart widget of a query and print the rows it draws, with the same rules and SQL as the web Visualize tab
+- `create-widget` / `update-widget` / `delete-widget` / `list-widgets` / `get-widget` — manage widgets (charts, tables, values of a query)
+- `list-dashboards` / `get-dashboard` / `create-dashboard` / `update-dashboard` / `delete-dashboard` — manage dashboards
+- `add-widget` / `remove-widget` / `set-layout` / `set-default-dashboard` — place widgets on dashboards
 - `install-skill` — install the Claude Code skill
 
 ## Links

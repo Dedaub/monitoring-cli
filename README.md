@@ -294,6 +294,34 @@ Commands that act on a query or folder take it **either** by `--id <id>` **or** 
 | `telegram-code` | Get the Telegram bot linking code for a query's notifications |
 | `share-query` / `unshare-query` | Share or unshare a query with a team (`--team-id`, `--perm` READ/WRITE) |
 
+### Widgets & dashboards
+
+A widget is a saved chart, table or single value of one query; a dashboard is a grid of widgets. A widget can be on no dashboard or on many. The checks and the SQL are the same as in the web app's Visualize tab. Each write prints the `https://app.dedaub.com/widget/<id>` or `/dashboard/<id>` link (the host follows your profile's API URL).
+
+| Command | Description |
+|---------|-------------|
+| `check-widget` | Check a widget like the Visualize tab: config keys and values, the axes the type needs, the query's columns. Exits 1 with one line per problem |
+| `preview-widget` | Run the SQL the dashboard runs for the widget and print its rows (`--sql` prints the SQL only; Ctrl-C or `--timeout` revokes the task) |
+| `create-widget` | Save a widget of a query (`--query-id`, `--type`, `--x`/`--y`/`--y1`, `--series-by`, `--x-label`/`--y-label`, `--timeframe`, `--config FILE\|-`, `--dashboard-id`); runs the checks first |
+| `update-widget` | Change a widget on every dashboard that has it; the flags merge into the saved config, `--clear KEY` removes a key |
+| `get-widget` / `list-widgets` | Show a widget (JSON), or list your widgets (`--query-id`, `--dashboard-id`) |
+| `delete-widget` | Delete a widget (it leaves every dashboard) |
+| `add-widget` / `remove-widget` | Put a widget on dashboards (`--dashboard-id`, repeatable), or take it off one |
+| `list-dashboards` / `get-dashboard` | List your dashboards (the default is marked), or show one with its widgets (JSON) |
+| `create-dashboard` / `update-dashboard` | Create a dashboard (`--public`, `--unlisted`, `--description`), or change its name, description or visibility |
+| `delete-dashboard` | Delete a dashboard; its widgets stay saved unless `--delete-widgets` |
+| `set-layout` | Set the place and size of widgets on the 12-column grid (`--layout FILE\|-`, a JSON list of `{widget_id, x, y, width, height}`) |
+| `set-default-dashboard` | Set the dashboard that `/dashboard` opens (`--id`), or `--clear` it |
+
+```bash
+dedaub-monitoring check-widget   --query-id 123 --type line --x day --y volume_usd --y-label 'Volume (\$)'
+dedaub-monitoring preview-widget --query-id 123 --type line --x day --y volume_usd --timeframe 7d
+dedaub-monitoring create-widget  --query-id 123 --type line --x day --y volume_usd --label '**Daily volume**'
+dedaub-monitoring add-widget     --id 456 --dashboard-id 78
+```
+
+The widget types and every config key are in the skill's [`references/widgets.md`](packages/dedaub-skills/dedaub_skills/skills/dedaub-monitoring/references/widgets.md).
+
 ## FAQ
 
 ### What is dedaub-monitoring?
