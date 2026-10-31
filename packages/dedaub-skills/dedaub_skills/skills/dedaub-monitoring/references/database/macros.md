@@ -14,7 +14,7 @@ but doesn't execute. Read it for *index lead / `Seq Scan` vs index scan*, not it
 
 **Companion — `common_query_patterns.md`** (the SQL craft to this file's macro surface; most queries need
 both): §1 schema/indexes · §2 block-times · §3 perf rules · §7 question→pattern · §8 edge cases · §9
-anti-patterns. Its two siblings hold the bulk: **`query_patterns.md`** (§5 P1–P17 templates) and
+anti-patterns. Its two siblings hold the bulk: **`query_patterns.md`** (§5 P1–P18 templates) and
 **`decode_primitives.md`** (§4 decode/enrich cheat-sheet).
 
 ## Table macros

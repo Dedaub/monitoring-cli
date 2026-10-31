@@ -137,8 +137,8 @@ _If no schema appears above, none is available in this environment — ask the u
 ## Step 1 — Read patterns, classify
 
 **Read first:** `common_query_patterns.md` — the hub (rulebook + index: §1 schema/indexes, §2 block-times,
-§3 perf rules, §5 P1–P17 index, §7 question→pattern, §8 edge cases, §9 anti-patterns, §10 checklist); skim
-`macros.md`. When writing SQL, open the two siblings it indexes: **`query_patterns.md`** (full P1–P17
+§3 perf rules, §5 P1–P18 index, §7 question→pattern, §8 edge cases, §9 anti-patterns, §10 checklist); skim
+`macros.md`. When writing SQL, open the two siblings it indexes: **`query_patterns.md`** (full P1–P18
 templates) and **`decode_primitives.md`** (decode/enrich cheat-sheet — topics, USD, `eth_call`, …).
 
 One macro dialect: `outer_transaction` (1/top-level tx: `tx_hash`,`callvalue`,`status`),
@@ -154,11 +154,11 @@ Classify:
 | **Primitive** | topic0 / 4-byte selector / token+decimals / address |
 | **Mode** | presence (P1/P2/…) vs **absence** (didn't happen in N — P13) |
 | **Scope** | specific deployment vs all-forks (Step 3 collision guard) |
-| **Pattern** | P1–P17 (§7 map) |
+| **Pattern** | P1–P18 (§7 map) |
 
 Pattern menu: P1–P12 = event/call/value/aggregate; **P13** absence/staleness, **P14** drain (net USD
 out/tx), **P15** reentrancy (`is_ancestor`), **P16** anomaly (window drop/spike), **P17** allowance exposure
-(`token_allowance`). §4 primitives: holders
+(`token_allowance`), **P18** network health (block headers: blocks/s, TPS, gas, base fee). §4 primitives: holders
 (`token_balance`), live state (`eth_call`), USD (`to_usd_value`), price drift.
 
 Needs protocol constants → Step 2. Protocol-agnostic → Step 4.
@@ -537,7 +537,8 @@ whether to add it to a dashboard (`list-dashboards`, then `add-widget` or `creat
 |------|------|
 | `…/protocols/INDEX.md` | **Step 0 (startup) + Step 2a** — category & chain → protocol(slug) lookup map; resolve a category/chain ask to the right `<slug>/` |
 | `…/sample_queries/common_query_patterns.md` | always (Step 1) — hub: schema, indexes, perf rules, pattern index, anti-patterns, checklist |
-| `…/database/query_patterns.md` | Step 5 — full P1–P17 SQL templates (indexed by the hub §5) |
+| `…/database/query_patterns.md` | Step 5 — full P1–P18 SQL templates (indexed by the hub §5) |
+| `…/sample_queries/network_health.md` | Step 5 — validated 9-chain network-health set (P18): snapshot, hourly series, tx activity, tx-type mix, Ethereum builders, plus the dashboard recipe |
 | `…/database/decode_primitives.md` | Step 5 — decode/enrich cheat-sheet (hub §4) |
 | `…/decode-verification.md` | **Step 5 — decode gate** (after the tuning loop, both modes): the numbered checks, the probe SQL, the fix recipes |
 | `…/database/macros.md` | Step 1/5 — macros, VIEW/`ref`/INCREMENTAL, CLI notes |

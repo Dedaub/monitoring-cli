@@ -9,7 +9,7 @@ post-run decode verification (§11). Two heavy sections live in siblings and are
 actually write SQL:
 
 - **`../decode_primitives.md`** (§4) — the decode/enrich cheat-sheet (topics, `hex_to_numeric`, USD, `eth_call`, …).
-- **`../query_patterns.md`** (§5) — the full P1–P17 SQL templates.
+- **`../query_patterns.md`** (§5) — the full P1–P18 SQL templates.
 
 > **How to use.** The protocol doc supplies *constants* (addresses, selectors, topic0 hashes, assets).
 > Pick the pattern via §7 (or the §5 index), open `query_patterns.md` for the template, substitute
@@ -36,7 +36,7 @@ Per-chain schema (`base.`, `ethereum.`, `arbitrum.`, `optimism.`, `polygon.`, `b
 | `<chain>.token_ledger` | `(address, block_number, tx_index, vm_step_start, vm_step)` | Parsed token movements. Two rows per transfer, one per side, linked by `counterparty_address`. **Sign rule: `value_delta > 0` = `address` SENT the tokens; `value_delta < 0` = `address` RECEIVED them.** It is the amount sent, **not** a balance change (measured against `Transfer` logs on all 8 chains: every non-zero row agrees except self-transfers, where `address` is both sides; a mint is a `> 0` row on the zero address). Sender row → `value_delta > 0`; net inflow to `address` → `-SUM(value_delta)`. |
 | `<chain>.token_transfers` | `(block_number, tx_index, vm_step_start, vm_step)` | One row per token transfer: `token_address`, `from_a`, `to_a`, `value` (unsigned). Lighter than `token_ledger` when you don't need signed deltas / counterparty. |
 | `<chain>.contracts` | `(address)` | One row per deployed contract. `deployer`, `eoa_deployer` (both nullable — §8.11), `block_number`, `md5_bytecode` (→ code-similarity via §4 embeddings). |
-| `<chain>.block` | `(block_number)` | Block headers; source of truth for tip and timestamps. |
+| `<chain>.block` | `(block_number)` | Block headers; source of truth for tip and timestamps. Also `gas_used`, `gas_limit`, `base_fee_per_gas`, `coinbase`, `extra_data`, and `transactions` (`ethword[]` of the top-level tx hashes → `cardinality()` = tx count without a tx scan). Network health → P18. |
 | `<chain>.token_balance` | `(token_address, owner_address)` | **Current** ERC-20 balance per holder: `value` (numeric, raw units), `block_number` (last update). Indexed on `owner_address` and `token_address`-leading PK → both "holders of token X" and "balances of address Y" are index-fast. Holder/concentration/whale analytics — no log replay needed. Referenced raw (no macro). |
 | `<chain>.token_allowance` | `(token_address, spender_address, owner_address)` | **Current** ERC-20 allowance per `(token, spender, owner)`: `value` (numeric, raw units; `>= 2^255` ≈ unlimited), `block_number` (last change). State, not history — `value = 0` rows remain after a revoke or full spend (filter `value > 0`); for approval events/history use `Approval` logs (P2). Referenced raw (no macro). Exposure / "who can pull from whom" → P17. |
 | `<chain>.protocol_contract` | `(protocol_id, address)` | Maps a contract `address` → `protocol_id` for **Watchdog-supported** protocols. JOIN `token_ledger`/`logs`/`transaction_detail` `USING (address)` to attribute activity to a protocol without hardcoding its address set. Pair with `<chain>.protocol (protocol_id, protocol_name)` for the readable name. Referenced raw. |
@@ -139,7 +139,7 @@ ERC20 metadata (`latest_token_info`) · **USD price — JOIN `network_token_info
 
 ---
 
-## 5. Query patterns (P1–P17) → `../query_patterns.md`
+## 5. Query patterns (P1–P18) → `../query_patterns.md`
 
 Full SQL templates in the sibling file. Index (pick via this table or §7, then open `query_patterns.md`):
 
@@ -162,6 +162,7 @@ Full SQL templates in the sibling file. Index (pick via this table or §7, then 
 | P15 | Reentrancy (`is_ancestor`) | a call nested inside another call (same callee re-entered) |
 | P16 | Anomaly vs baseline | sudden drop / spike vs recent norm (window `LAG`/rolling `AVG`) |
 | P17 | Allowance exposure (`token_allowance`) | who can spend whose tokens; large / unlimited approvals to a spender |
+| P18 | Network health (`block` headers) | blocks/s, block time, TPS, gas/s, gas used %, base fee, head age — per chain, now or hourly |
 
 §4 primitives also stand alone as "patterns" for: holders/concentration (`token_balance`), live state
 (`eth_call`), mint/burn, price drift.
@@ -214,6 +215,8 @@ If the protocol doc lacks a value, **stop and ask** — never guess a selector o
 | "Sudden drop / spike vs recent norm" (TVL, withdrawals, volume) | **P16** (window LAG / rolling AVG) | the metric + bucket + threshold |
 | "Holders / concentration / whale balance" | `token_balance` (§4) | token address (+ N) |
 | "Who can spend X's tokens / approvals to spender S / unlimited approvals / exposure if S is compromised" | **P17** (`token_allowance`, current state) | spender or owner or token address |
+| "Blocks per second / TPS / gas / base fee per network" (chain-health dashboard) | **P18** (`block` headers; `outer_transaction` only for user TPS / senders / fees) | chain list; window (1h snapshot, 24h series) |
+| "Which builders build Ethereum blocks?" | P18 + §8.19 (`coinbase` + `extra_data` tag) | window |
 | "When / how often were approvals granted, or what was the old allowance?" | P2 on ERC-20 `Approval(address indexed owner, address indexed spender, uint256 value)` (`token_allowance` keeps no history) | token address(es) or spender in `topic2` |
 | "Live contract state (supply, price, config)" | `eth_call` (§4) | contract + view-fn signature |
 | "Mint / burn / supply change" | §4 zero-address `token_ledger` | token address |
@@ -240,6 +243,13 @@ If the protocol doc lacks a value, **stop and ask** — never guess a selector o
 | 10 | Proxy calls produce TWO `transaction_detail` frames — a `CALL` (`to_a` = proxy) and a `DELEGATECALL` (`to_a` = implementation, **same calldata**) | Default `AND td.call_opcode = 'CALL'` on every `to_a`/selector monitor — else proxies double-count and implementation addresses match. Drop it deliberately (and say so in the header comment) when the delegatecall surface — self-upgrades, diamond facets — is in scope |
 | 11 | Nullable address columns (`contracts.eoa_deployer`, `contracts.deployer`) | Compare with `IS [NOT] DISTINCT FROM`, never `!=`/`=` — a NULL deployer silently drops the row from a `!=` filter. For "not the original deployer" asks, check **both** `eoa_deployer` AND `deployer` |
 | 12 | `token_balance` keeps fully-exited holders as stale `value = 0` rows (never pruned) | `AND value > 0` on every holder-count / concentration / registry / supply read — else dead rows inflate the count and get scanned. Omit only when a zero balance is the point (ex-holders, or a specific token↔wallet combo that holds nothing) |
+| 13 | Per-chain **system txs** inflate tx counts and TPS (measured over 1h): Arbitrum and Robinhood add one `ArbitrumInternalTx` (`tx_type = 106`) per block, ≈20% of all txs; OP-stack chains (Base, Optimism) add one L1-attributes deposit (`tx_type = 126`) at `tx_index = 0` — other type-126 rows are real user bridge deposits; BNB adds one validator call per block to `0x…1000` with zero gas price. BNB also carries many **user** txs with zero gas price, so a zero price alone does not mark a system tx | User tx filter on `outer_transaction`: `NOT (tx_type = 106)` (Arbitrum, Robinhood) · `NOT (tx_type = 126 AND tx_index = 0)` (Base, Optimism) · `NOT (to_a = '\x0000000000000000000000000000000000001000'::bytea AND gas_price = 0)` (BNB) · none on Ethereum, Polygon, Avalanche, Arc. `block.transactions` counts include them — say "raw TPS" or subtract |
+| 14 | Arbitrum-style chains (Arbitrum, Robinhood) set a **placeholder block `gas_limit`** (~1.1e15), so `gas_used / gas_limit` is ~0% | Return NULL for gas used %: `CASE WHEN gas_limit / blocks < 1e12 THEN … END` |
+| 15 | **BNB has no EIP-1559 base fee**: `base_fee_per_gas` is 0 by design; the fee is the gas price | Show 0 and say why, or use the median paid fee from `outer_transaction` (§8.18) |
+| 16 | **Gas tokens differ per chain**: ETH (Ethereum, Base, Arbitrum, Optimism, Robinhood), POL, BNB, AVAX, and **USDC on Arc** | Compare chains in USD, not gwei. Pin Arc's gas token to $1 |
+| 17 | Robinhood `network_token_info` holds **many tokens with the symbol `WETH`/`ETH` and junk prices** (from 2e-6 to 60,000) | Never look a price up by symbol. Price ETH-gas chains from Ethereum WETH by address (`ethereum.network_token_info`, `\xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2`); other natives from their own wrapped token by address |
+| 18 | **Fee totals follow outliers**: on Robinhood ~360 legacy txs/h paid ~250 gwei (≈10× normal) and made most of the hour's $27k of fees | Report `percentile_cont(0.5) WITHIN GROUP (ORDER BY gas_used * gas_price)` beside the sum. `gas_used * gas_price` is the execution fee only — it excludes OP-stack L1 data fees |
+| 19 | Ethereum **builder tags** in `extra_data` are often binary; `encode(extra_data, 'escape')` then gives `\323…` text that a printable-ASCII regex still matches | Tag = `substring(encode(extra_data, 'escape') FROM '^[A-Za-z0-9 ._()/:-]{4,}')` (no backslash in the class), `mode()` per `coinbase`; fall back to the shortened `coinbase` address. Never guess a builder name |
 
 ---
 
