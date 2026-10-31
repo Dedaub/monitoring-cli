@@ -166,3 +166,18 @@ def test_format_alert_queries_shows_path():
     out = _capture(format_alert_queries, queries, folders)
     assert "55" in out
     assert "/Alpha/MyQuery" in out
+
+
+def test_format_query_text_writes_the_sql_unchanged():
+    # A narrow console must not wrap the line, and `[...]` is not markup.
+    long_line = "-- " + "summed per chain, " * 12
+    sql = f"{long_line}\nSELECT pool_tokens[1], '[bold]x[/bold]' AS t\nFROM t"
+    buf = StringIO()
+    format_query_text(sql, console=Console(file=buf, width=40))
+    assert buf.getvalue() == sql + "\n"
+
+
+def test_format_query_text_adds_no_second_newline():
+    buf = StringIO()
+    format_query_text("SELECT 1\n", console=Console(file=buf))
+    assert buf.getvalue() == "SELECT 1\n"

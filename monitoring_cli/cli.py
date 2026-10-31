@@ -47,10 +47,33 @@ from monitoring_cli.config import (
     Profile,
     ProfileNotFoundError,
 )
+from monitoring_cli.version import cli_version
 
 app = typer.Typer(help="Dedaub Monitoring CLI")
 err = Console(stderr=True)
 out = Console()
+
+
+def _print_version(value: bool) -> None:
+    if value:
+        typer.echo(f"dedaub-monitoring {cli_version()}")
+        raise typer.Exit()
+
+
+@app.callback()
+def _main(
+    version: Annotated[
+        bool,
+        typer.Option(
+            "--version",
+            callback=_print_version,
+            is_eager=True,
+            help="Print the CLI version and exit.",
+        ),
+    ] = False,
+) -> None:
+    """Dedaub Monitoring CLI"""
+
 
 # Single network is currently supported across config/alert commands.
 _NETWORK = "ethereum"
@@ -2004,6 +2027,60 @@ def set_layout(
 
 
 @app.command()
+def arrange_dashboard(
+    id: Annotated[int, typer.Option(help="Dashboard ID")],
+    dry_run: Annotated[
+        bool,
+        typer.Option(
+            "--dry-run",
+            help="Print the layout as JSON (the input of set-layout) and save nothing",
+        ),
+    ] = False,
+    profile: ProfileOption = None,
+) -> None:
+    """Arrange the widgets of a dashboard on the 12-column grid by type: value tiles in a row at the top, charts in pairs (a pie beside an 8-wide chart), tables at full width at the bottom. The order of the widgets stays. All or nothing."""
+    client, p = _load_client(profile)
+    try:
+        # The dashboard body has no widgets; get-dashboard reads them the same way.
+        current = client.list_widgets(dashboard_id=id) or []
+        layout = widgets.auto_layout(current)
+        if not layout:
+            typer.echo(f"Dashboard {id} has no widgets.")
+            return
+        problems = widgets.layout_problems(layout)
+        if problems:  # A bug in auto_layout: never send a bad layout.
+            _print_problems(problems, [])
+            raise typer.Exit(1)
+        if dry_run:
+            typer.echo(json.dumps(layout, indent=2))
+            return
+        client.set_dashboard_layout(id, layout)
+    except typer.Exit:
+        raise
+    except NotFoundError as e:
+        err.print(str(e))
+        raise typer.Exit(1)
+    except Exception as e:
+        _exit_error(e)
+    by_id = {w.get("widget_id"): w for w in current}
+    output.format_query_results(
+        [
+            {
+                "widget_id": item["widget_id"],
+                "type": by_id.get(item["widget_id"], {}).get("type"),
+                "x": item["x"],
+                "y": item["y"],
+                "width": item["width"],
+                "height": item["height"],
+            }
+            for item in layout
+        ]
+    )
+    typer.echo(f"Arranged {len(layout)} widget(s) on dashboard {id}.")
+    _echo_links(p.base_url, None, [id])
+
+
+@app.command()
 def list_widgets(
     profile: ProfileOption = None,
     query_id: Annotated[
@@ -2207,6 +2284,7 @@ def preview_widget(
     except Exception as e:
         _exit_error(e)
     output.format_query_results(rows)
+    _print_problems([], widgets.series_notes(draft.widget_type, draft.config, rows))
 
 
 @app.command()

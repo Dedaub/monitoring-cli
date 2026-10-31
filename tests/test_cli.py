@@ -1021,3 +1021,50 @@ def test_an_alerts_widget_is_not_a_chart(monkeypatch, command):
     client.execute_query.assert_not_called()
     client.update_widget.assert_not_called()
     client.query_columns.assert_not_called()
+
+
+def test_version_flag_prints_the_installed_version():
+    from monitoring_cli.version import cli_version
+
+    result = runner.invoke(app, ["--version"])
+    assert result.exit_code == 0
+    assert result.output.strip() == f"dedaub-monitoring {cli_version()}"
+    assert cli_version() != "unknown"
+
+
+def test_arrange_dashboard_dry_run_saves_nothing(monkeypatch):
+    client = _widget_client(monkeypatch)
+    client.list_widgets.return_value = [
+        {"widget_id": 1, "type": "value", "x": 0, "y": 0},
+        {"widget_id": 2, "type": "pie", "x": 0, "y": 2},
+    ]
+    result = runner.invoke(app, ["arrange-dashboard", "--id", "3", "--dry-run"])
+    assert result.exit_code == 0, _all_output(result)
+    assert json.loads(result.output) == [
+        {"widget_id": 1, "x": 0, "y": 0, "width": 4, "height": 2},
+        {"widget_id": 2, "x": 0, "y": 2, "width": 6, "height": 4},
+    ]
+    client.list_widgets.assert_called_once_with(dashboard_id=3)
+    client.set_dashboard_layout.assert_not_called()
+
+
+def test_arrange_dashboard_saves_the_layout(monkeypatch):
+    client = _widget_client(monkeypatch)
+    client.list_widgets.return_value = [
+        {"widget_id": 1, "type": "table", "x": 0, "y": 0}
+    ]
+    result = runner.invoke(app, ["arrange-dashboard", "--id", "3"])
+    assert result.exit_code == 0, _all_output(result)
+    client.set_dashboard_layout.assert_called_once_with(
+        3, [{"widget_id": 1, "x": 0, "y": 0, "width": 12, "height": 6}]
+    )
+    assert "Arranged 1 widget(s) on dashboard 3." in result.output
+
+
+def test_arrange_dashboard_with_no_widgets(monkeypatch):
+    client = _widget_client(monkeypatch)
+    client.list_widgets.return_value = []
+    result = runner.invoke(app, ["arrange-dashboard", "--id", "3"])
+    assert result.exit_code == 0
+    assert "has no widgets" in result.output
+    client.set_dashboard_layout.assert_not_called()

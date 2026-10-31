@@ -2,8 +2,10 @@
 
 A **widget** is a saved chart, table or single value of one query. A **dashboard** is a grid of widgets.
 A widget can be on no dashboard, or on many. These commands need a shell with the `dedaub-monitoring`
-CLI. The CLI runs the same checks and the same SQL as the web app's Visualize tab, so a widget that
-passes `check-widget` draws on the dashboard.
+CLI, version 0.6.0 or later (`dedaub-monitoring --version`; an older CLI has no widget commands). The
+CLI runs the same checks and the same SQL as the web app's Visualize tab, so a widget that passes
+`check-widget` draws on the dashboard. An HTTP 500 on a widget command can mean that the server does
+not have the backend of that command yet: the error names the CLI version. Do not retry it in a loop.
 
 ## Flow
 
@@ -13,6 +15,7 @@ passes `check-widget` draws on the dashboard.
 4. `create-widget` with the same flags — prints the widget id and `https://app.dedaub.com/widget/<id>`.
 5. Ask the user about a dashboard: `list-dashboards`, then `add-widget --id <WID> --dashboard-id <DID>`,
    or `create-dashboard "<Name>"` first.
+6. After the last widget is on the dashboard, run `arrange-dashboard --id <DID>` (see Dashboard layout).
 
 Each write prints its link. Give the user the link. Never delete or change a widget or dashboard that you
 did not create in this session unless the user asks.
@@ -57,6 +60,46 @@ Decide case by case. Do not force a chart.
   already shows run settings: do not overwrite an alert's `INCREMENTAL` config. Name every output
   column with `AS`. Copy the saved query's `--#default_network=` first line when it has one.
 - **Chart directly.** The rows already have a time or category column and a number: use the table above.
+
+## Series: at most 8 on one chart
+
+The chart palette has 8 colours. When `series_by` has more than 8 values, the chart keeps the 7 largest
+series (by total) and adds all the others together into one grey **Other** series. A sum is correct for a
+count or a volume, but it is wrong for a rate, an average or a percentage (TPS, block time, gas used %).
+`check-widget` cannot see this, because it does not run the query. `preview-widget` counts the values in
+its rows and prints a note. Fix it in the SQL: split the rows into two derived queries (for example L1
+chains and L2 chains, each one `SELECT … FROM {{ ref("Query") }} WHERE layer = 'L1'`), or filter the rows.
+
+## Value tiles
+
+A `value` widget shows **one row**: the newest row by its `--x` column (the widget sorts the rows
+descending). With `--x` set to a time column, the tile also shows the change from the row before it and
+a sparkline of up to 30 rows. So give a headline tile an hourly or daily series (one row per bucket, the
+totals in columns), not a one-row snapshot. Without `--x`, the tile shows the first row as the query
+returns it, with no change and no sparkline.
+
+## Dashboard layout
+
+The grid has 12 columns. `create-widget --dashboard-id` and `add-widget` put each new widget in a place
+that the server selects, so after many adds the dashboard can be one long column. **After you add the
+widgets, arrange the dashboard once:**
+
+```bash
+dedaub-monitoring arrange-dashboard --id 78 --dry-run   # print the layout (JSON), save nothing
+dedaub-monitoring arrange-dashboard --id 78             # save it
+```
+
+`arrange-dashboard` keeps the order of the widgets (top to bottom, then left to right) and sets the
+place and size of each one from its type:
+
+| Widgets | Place | Width × height |
+|---------|-------|----------------|
+| `value` tiles | First, at most 6 in a row | 1–3 tiles: 4 × 2; 4 tiles: 3 × 2; 5–6 tiles: 2 × 2 |
+| Charts | In pairs, after the tiles | 6 + 6; a `pie` beside a chart: 8 + 4; a chart alone: 12 (a `pie` alone: 6). Height 5 when the row has a `line`, `linebar` or `range`, else 4 |
+| `table` and alerts widgets | Last | 12 × 6 |
+
+So put the widgets in the order that you want, then arrange. To change one place, take the `--dry-run`
+JSON, edit it, and give it to `set-layout --id 78 --layout layout.json` (all or nothing; `x + width` ≤ 12).
 
 ## Types and the columns each one needs (`missingAxis`)
 
@@ -141,6 +184,7 @@ dedaub-monitoring create-dashboard "DEX volume" --description 'Daily DEX volume'
 dedaub-monitoring update-dashboard --id 78 --name "DEX volume (Base)"
 dedaub-monitoring add-widget     --id 456 --dashboard-id 78           # under the lowest widget
 dedaub-monitoring remove-widget  --id 456 --dashboard-id 78           # off this dashboard only
+dedaub-monitoring arrange-dashboard --id 78 [--dry-run]            # a clean grid from the widget types
 dedaub-monitoring set-layout     --id 78 --layout layout.json         # [{"widget_id", "x", "y", "width", "height"}]
 dedaub-monitoring set-default-dashboard --id 78
 dedaub-monitoring delete-dashboard --id 78                            # widgets stay; --delete-widgets removes them

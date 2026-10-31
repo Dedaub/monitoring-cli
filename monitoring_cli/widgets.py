@@ -18,7 +18,7 @@ import difflib
 import json
 import math
 import re
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from typing import Any, cast
 from urllib.parse import urlsplit
 
@@ -226,6 +226,34 @@ def config_notes(widget_type: str, config: Mapping[str, Any]) -> list[str]:
         f"{key} has no effect: a {widget_type} widget has no axes."
         for key in LABEL_KEYS
         if config.get(key)
+    ]
+
+
+# The chart palette has this many colours (palette.ts SERIES_LIGHT). With more
+# series_by values, data.ts keeps the largest MAX_SERIES - 1 series and adds the
+# rest together into one "Other" series.
+MAX_SERIES = 8
+
+
+def series_notes(
+    widget_type: str, config: Mapping[str, Any], rows: Sequence[Mapping[str, Any]]
+) -> list[str]:
+    """A note when the rows have more series_by values than the chart draws."""
+    column = config.get("series_by")
+    if not column or widget_type not in AXIS_TYPES:
+        return []
+    values = {
+        str(row.get(column) if row.get(column) is not None else "(empty)")
+        for row in rows
+    }
+    if len(values) <= MAX_SERIES:
+        return []
+    kept = MAX_SERIES - 1
+    return [
+        f"series_by {column!r} has {len(values)} values in these rows. The chart draws "
+        f"the {kept} largest and adds the other {len(values) - kept} together as one "
+        f"'Other' series. That sum is wrong for a rate or a percentage: split the rows "
+        f"into two queries, or filter them, so that each chart has at most {MAX_SERIES}."
     ]
 
 
@@ -599,6 +627,87 @@ def layout_problems(layout: Any) -> list[str]:
             )
         seen.add(item["widget_id"])
     return problems
+
+
+# --- arrange ----------------------------------------------------------------------
+
+TILE_HEIGHT = 2
+CHART_HEIGHT = 4
+TALL_CHART_HEIGHT = 5
+TABLE_HEIGHT = 6
+TILES_PER_ROW = 6
+# A time series with many points reads better a little taller.
+TALL_TYPES = ("line", "linebar", "range")
+# A pie beside another chart: the pie is narrow, the chart is wide.
+PIE_WIDTH = 4
+
+
+def _is_full_width(widget: Mapping[str, Any]) -> bool:
+    """A table, or an alerts widget (it shows the alerts of its query as rows)."""
+    return widget.get("type") == "table" or widget.get("category") == "ALERT"
+
+
+def auto_layout(dashboard_widgets: Sequence[Mapping[str, Any]]) -> list[dict[str, int]]:
+    """A clean 12-column layout for the widgets of a dashboard, from their types.
+
+    The order of the widgets stays (top to bottom, then left to right):
+    - value tiles go first, at most 6 in a row: 1-3 tiles are 4 wide, 4 are 3
+      wide, 5-6 are 2 wide;
+    - the charts follow in pairs, 6 and 6 wide; a pie beside another chart is
+      4 wide and the chart is 8 wide; a chart alone in its row is 12 wide (a pie
+      alone is 6 wide);
+    - tables and alerts widgets go last, 12 wide.
+    """
+    ordered = sorted(
+        dashboard_widgets,
+        key=lambda w: (w.get("y") or 0, w.get("x") or 0, w.get("widget_id") or 0),
+    )
+    tiles = [w for w in ordered if w.get("type") == "value" and not _is_full_width(w)]
+    wide = [w for w in ordered if _is_full_width(w)]
+    charts = [w for w in ordered if w not in tiles and w not in wide]
+
+    layout: list[dict[str, int]] = []
+    y = 0
+
+    def place(widget: Mapping[str, Any], x: int, width: int, height: int) -> None:
+        layout.append(
+            {
+                "widget_id": int(widget["widget_id"]),
+                "x": x,
+                "y": y,
+                "width": width,
+                "height": height,
+            }
+        )
+
+    for start in range(0, len(tiles), TILES_PER_ROW):
+        row = tiles[start : start + TILES_PER_ROW]
+        width = max(2, min(4, GRID_COLUMNS // len(row)))
+        for i, widget in enumerate(row):
+            place(widget, i * width, width, TILE_HEIGHT)
+        y += TILE_HEIGHT
+
+    for start in range(0, len(charts), 2):
+        pair = charts[start : start + 2]
+        pies = [w.get("type") == "pie" for w in pair]
+        if len(pair) == 1:
+            widths = [GRID_COLUMNS // 2 if pies[0] else GRID_COLUMNS]
+        elif pies.count(True) == 1:
+            widths = [PIE_WIDTH if pie else GRID_COLUMNS - PIE_WIDTH for pie in pies]
+        else:
+            widths = [GRID_COLUMNS // 2, GRID_COLUMNS // 2]
+        tall = any(w.get("type") in TALL_TYPES for w in pair)
+        height = TALL_CHART_HEIGHT if tall else CHART_HEIGHT
+        x = 0
+        for widget, width in zip(pair, widths, strict=True):
+            place(widget, x, width, height)
+            x += width
+        y += height
+
+    for widget in wide:
+        place(widget, 0, GRID_COLUMNS, TABLE_HEIGHT)
+        y += TABLE_HEIGHT
+    return layout
 
 
 # --- links -------------------------------------------------------------------------

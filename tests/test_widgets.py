@@ -478,3 +478,99 @@ def test_links():
         widgets.dashboard_link("https://api.dedaub.com", 5)
         == "https://app.dedaub.com/dashboard/5"
     )
+
+
+# --- series overflow -------------------------------------------------------------
+
+
+def _rows(n: int) -> list[dict]:
+    return [
+        {"hour": "2026-10-31T10:00:00Z", "network": f"net{i}", "tps": i}
+        for i in range(n)
+    ]
+
+
+def test_series_notes_warn_above_the_palette():
+    notes = widgets.series_notes("line", {"series_by": "network"}, _rows(9))
+    assert len(notes) == 1
+    assert "9 values" in notes[0]
+    assert "7 largest" in notes[0]
+    assert "'Other'" in notes[0]
+
+
+def test_series_notes_accept_the_palette_size():
+    assert widgets.series_notes("line", {"series_by": "network"}, _rows(8)) == []
+
+
+def test_series_notes_count_null_as_one_value():
+    rows = _rows(8) + [{"network": None}, {"network": None}]
+    assert len(widgets.series_notes("bar", {"series_by": "network"}, rows)) == 1
+
+
+@pytest.mark.parametrize("widget_type", ["table", "value", "pie"])
+def test_series_notes_skip_types_without_series(widget_type):
+    assert widgets.series_notes(widget_type, {"series_by": "network"}, _rows(12)) == []
+
+
+def test_series_notes_need_series_by():
+    assert widgets.series_notes("line", {}, _rows(12)) == []
+
+
+# --- arrange -----------------------------------------------------------------------
+
+
+def _w(widget_id: int, widget_type: str, y: int = 0, x: int = 0, **extra) -> dict:
+    return {"widget_id": widget_id, "type": widget_type, "x": x, "y": y, **extra}
+
+
+def _places(layout: list[dict]) -> dict[int, tuple[int, int, int, int]]:
+    return {i["widget_id"]: (i["x"], i["y"], i["width"], i["height"]) for i in layout}
+
+
+def test_auto_layout_of_no_widgets_is_empty():
+    assert widgets.auto_layout([]) == []
+
+
+def test_auto_layout_builds_the_network_dashboard():
+    # Created in one column (y = 0, 2, 4, …), as the server places new widgets.
+    types = ["value"] * 6 + ["line", "line", "bar", "bar", "stackedbar", "pie", "table"]
+    layout = widgets.auto_layout([_w(100 + i, t, y=2 * i) for i, t in enumerate(types)])
+    places = {k - 100: v for k, v in _places(layout).items()}
+    assert [places[i] for i in range(6)] == [(2 * i, 0, 2, 2) for i in range(6)]
+    assert places[6] == (0, 2, 6, 5) and places[7] == (6, 2, 6, 5)
+    assert places[8] == (0, 7, 6, 4) and places[9] == (6, 7, 6, 4)
+    assert places[10] == (0, 11, 8, 4) and places[11] == (8, 11, 4, 4)
+    assert places[12] == (0, 15, 12, 6)
+    assert widgets.layout_problems(layout) == []
+
+
+@pytest.mark.parametrize(("n", "width"), [(1, 4), (3, 4), (4, 3), (5, 2), (6, 2)])
+def test_auto_layout_tile_width(n, width):
+    places = _places(widgets.auto_layout([_w(i, "value", y=i) for i in range(n)]))
+    assert {p[2] for p in places.values()} == {width}
+
+
+def test_auto_layout_wraps_tiles_after_six():
+    places = _places(widgets.auto_layout([_w(i, "value", y=i) for i in range(8)]))
+    assert places[6] == (0, 2, 4, 2) and places[7] == (4, 2, 4, 2)
+
+
+def test_auto_layout_keeps_the_order_and_puts_tables_last():
+    given = [_w(1, "table", y=0), _w(2, "bar", y=6), _w(3, "value", y=10)]
+    places = _places(widgets.auto_layout(given))
+    assert places[3] == (0, 0, 4, 2)
+    assert places[2] == (0, 2, 12, 4)
+    assert places[1] == (0, 6, 12, 6)
+
+
+def test_auto_layout_lone_pie_is_half_width():
+    places = _places(widgets.auto_layout([_w(1, "pie")]))
+    assert places[1] == (0, 0, 6, 4)
+
+
+def test_auto_layout_puts_an_alerts_widget_at_full_width():
+    places = _places(
+        widgets.auto_layout([_w(1, "line", category="ALERT"), _w(2, "bar", y=1)])
+    )
+    assert places[2] == (0, 0, 12, 4)
+    assert places[1] == (0, 4, 12, 6)

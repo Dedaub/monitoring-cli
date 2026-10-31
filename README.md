@@ -44,13 +44,16 @@ dedaub-monitoring login
 
 ### Contributors — from a clone
 
-If you're hacking on the CLI, work from a checkout. From a clone, `make setup` runs the whole onboarding against your working tree:
+If you're hacking on the CLI, work from a checkout. From a clone, `make setup` runs the whole onboarding. It always installs the latest `main` from GitHub, also when your clone is behind or on another branch:
 
 ```bash
 git clone https://github.com/Dedaub/monitoring-cli.git
 cd monitoring-cli
-make setup   # uv tool install . --force  +  install-skill  +  login
+make setup         # latest main (uv tool install --force --reinstall git+…)  +  install-skill  +  login
+make setup-local   # the same with your working tree, to test a branch
 ```
+
+To update the CLI only, run `make install` (latest `main`) or `make install-local` (your working tree). Both print the installed version.
 
 The skill picker and the login browser flow are interactive, so you stay in control of those two steps. Re-authenticate any time with `make login`.
 

@@ -1,7 +1,7 @@
 # §4 — Decode primitives (cheat-sheet)
 
 Sibling of `sample_queries/common_query_patterns.md` (the hub). `§N` references point to the hub;
-pattern templates (P1–P17) live in `query_patterns.md`.
+pattern templates (P1–P18) live in `query_patterns.md`.
 
 | Need | Snippet |
 |------|---------|

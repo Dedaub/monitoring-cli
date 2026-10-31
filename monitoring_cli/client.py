@@ -10,10 +10,19 @@ import httpx
 
 from monitoring_cli.auth import SessionExpiredError, refresh_tokens
 from monitoring_cli.config import Profile
+from monitoring_cli.version import cli_version
 
 # Refresh the access token this many seconds before it expires, so a request
 # never leaves with a token that dies in flight.
 _EXPIRY_MARGIN = 30
+
+# Retry a GET this many times in all, after a timeout, a failed connection, or
+# one of these statuses (request timeout, bad gateway, unavailable, gateway
+# timeout). The wait doubles from _GET_BACKOFF_SECONDS.
+_GET_ATTEMPTS = 3
+_GET_BACKOFF_SECONDS = 1.0
+_RETRY_STATUSES = frozenset({408, 502, 503, 504})
+_sleep = time.sleep
 
 
 class MonitoringClient:
@@ -43,12 +52,23 @@ class MonitoringClient:
         return {"Authorization": f"Bearer {self._access_token}"}
 
     def _get(self, path: str, _timeout: float | None = 30.0, **params: Any) -> Any:
-        resp = httpx.get(
-            f"{self._base}{path}",
-            headers=self._headers(),
-            params=params,
-            timeout=_timeout,
-        )
+        # A GET changes nothing, so a timeout or a busy gateway is safe to retry.
+        for attempt in range(_GET_ATTEMPTS):
+            last = attempt == _GET_ATTEMPTS - 1
+            try:
+                resp = httpx.get(
+                    f"{self._base}{path}",
+                    headers=self._headers(),
+                    params=params,
+                    timeout=_timeout,
+                )
+            except (httpx.TimeoutException, httpx.ConnectError):
+                if last:
+                    raise
+            else:
+                if resp.status_code not in _RETRY_STATUSES or last:
+                    break
+            _sleep(_GET_BACKOFF_SECONDS * 2**attempt)
         _raise_for_status(resp, path)
         return resp.json()
 
@@ -791,6 +811,12 @@ def _raise_for_status(resp: httpx.Response, path: str) -> None:
             detail = resp.json().get("detail", resp.text)
         except Exception:
             detail = resp.text
+        if resp.status_code >= 500:
+            detail = (
+                f"{detail} (HTTP {resp.status_code} on {path}). The server failed. "
+                f"If this command is new, the server may not have it yet: "
+                f"this CLI is v{cli_version()}."
+            )
         raise httpx.HTTPStatusError(str(detail), request=resp.request, response=resp)
 
 

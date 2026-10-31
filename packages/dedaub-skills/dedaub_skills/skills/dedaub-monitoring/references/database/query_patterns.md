@@ -1,4 +1,4 @@
-# §5 — Query patterns (P1–P17)
+# §5 — Query patterns (P1–P18)
 
 Sibling of `sample_queries/common_query_patterns.md` (the hub). `§N` references point to the hub; decode
 snippets are in `decode_primitives.md`. Each pattern is a template — placeholders use `{{UPPER_CASE}}`;
@@ -19,7 +19,8 @@ the protocol doc supplies the constants. Pick via the hub's §7 map or the quick
 "amount/volume/USD"→P4 · "by hour/day/week, trend"→P6 · "top/leaderboard"→P7 · "network/graph/edges"→P8 ·
 "multiple paths/variants"→P9 · "across chains"→P10 · "total/sum/aggregate (esp. cross-chain)"→P12 ·
 "deployer/first deployed"→P11 · "hasn't happened in N"→P13 · "drained >$N in one tx"→P14 ·
-"reentrancy/nested call"→P15 · "sudden drop/spike vs norm"→P16 · "who can spend / approvals / allowance"→P17.
+"reentrancy/nested call"→P15 · "sudden drop/spike vs norm"→P16 · "who can spend / approvals / allowance"→P17 ·
+"blocks/sec, TPS, gas, base fee, chain health"→P18.
 
 ### P1 — Function-call discovery (`to_a + selector`)
 
@@ -495,3 +496,62 @@ LIMIT 200
 Lead with an indexed column: `spender_address` (who can this spender pull from), `owner_address` (whom has this owner approved), `token_address` (PK prefix), or `block_number` (recent changes). Any other lead is a full scan. Price exposure as `LEAST(ta.value, tb.value)` with `<chain>.token_balance tb ON (tb.token_address, tb.owner_address) = (ta.token_address, ta.owner_address)` — an allowance can exceed what the owner holds. The table updates on every allowance-spending `transferFrom`, so a `block_number` recency filter alone returns busy routers, not *new* approvals; pair it with `is_unlimited` or a spender allowlist/denylist.
 
 **Pull without an allowance (bypass candidates).** For a `transferFrom` pull `(token, spender=caller, owner)`, a **missing** row is the candidate signal — not `value = 0`, which a normal approval spent to zero leaves behind. Look it up by the PK: `NOT EXISTS (SELECT 1 FROM {{CHAIN}}.token_allowance ta WHERE (ta.token_address, ta.spender_address, ta.owner_address) = (p.token, p.spender, p.owner))`. It ranks, it does not prove: measured over 15m of all pulls, 0.5% of triples on Robinhood and 5% on Ethereum had no row, and the misses included Permit2 pulls (an index gap) and non-token contracts that share the `transferFrom` selector. Before you report a bypass, confirm the candidate with the `Approval` logs (P2) or an `eth_call` to `allowance(owner, spender)` (tip state only — a later revoke or spend hides the past value).
+
+### P18 — Network health from block headers (blocks/s, TPS, gas, base fee)
+
+> Use when: "blocks per second / block time per chain", "TPS by network", "gas throughput or gas used %", "base fee now or over the last day", "how far behind is the data", or a chain-health dashboard. Validated 9-chain set + dashboard recipe: `sample_queries/network_health.md`.
+
+`<chain>.block` has one row per block: `ts`, `gas_used`, `gas_limit`, `base_fee_per_gas`, `coinbase`, `extra_data`, and **`transactions` (`ethword[]`, the hashes of the block's top-level txs)**. So `cardinality(b.transactions)` gives the tx count of a block, and you do not scan `outer_transaction`. The table is small and the `{{ block(duration=…) }}` macro bounds it by `block_number`: all 9 chains over 1h run in ~3 s, over 24h hourly in ~6 s (warm).
+
+```sql
+{% set nets = [
+  ('ethereum', 'Ethereum', 1),
+  ('base',     'Base',     8453)
+] %}                                                           -- extend: one tuple per chain (schema, label, chain_id)
+WITH per_chain AS (
+  {% for schema, label, chain_id in nets %}
+  SELECT
+      '{{ label }}' AS network,
+      {{ chain_id }} AS chain_id,
+      count(*) AS blocks,
+      max(b.block_number) AS head_block,
+      max(b.ts) AS head_ts,
+      extract(epoch FROM max(b.ts) - min(b.ts)) AS span_s,
+      sum(cardinality(b.transactions)) AS txs,
+      sum(b.gas_used) AS gas_used,
+      sum(b.gas_limit) AS gas_limit,
+      avg(b.base_fee_per_gas) AS avg_base_fee_wei
+  FROM {{ block(duration='1h', network=schema) }} b             -- the window: 1h snapshot, 24h for a series
+  {% if not loop.last %}
+
+  UNION ALL
+  {% endif %}
+  {% endfor %}
+)
+SELECT
+    network,
+    chain_id,
+    head_block,
+    round(extract(epoch FROM now() - head_ts)::numeric, 0) AS head_age_s,
+    round((span_s / nullif(blocks - 1, 0))::numeric, 3) AS block_time_s,
+    round(((blocks - 1) / nullif(span_s, 0))::numeric, 3) AS blocks_per_sec,
+    round((txs * (blocks - 1) / blocks / nullif(span_s, 0))::numeric, 2) AS tps,
+    round((gas_used * (blocks - 1) / blocks / nullif(span_s, 0) / 1e6)::numeric, 2) AS mgas_per_sec,
+    CASE
+      WHEN gas_limit / blocks < 1e12 THEN round((100 * gas_used / nullif(gas_limit, 0))::numeric, 2)
+    END AS gas_used_pct,                                       -- NULL on placeholder gas limits (§8.14)
+    round((avg_base_fee_wei / 1e9)::numeric, 9) AS avg_base_fee_gwei
+FROM per_chain
+ORDER BY tps DESC
+LIMIT 200
+```
+
+**Rates.** Use the time span of the window, not the window length: `span_s / (blocks - 1)` is the block time and `(blocks - 1) / span_s` the block rate. TPS and gas/s scale the totals by `(blocks - 1) / blocks` so that the first block does not count twice. On fast chains many blocks share one `ts` second; the average over the window stays correct.
+
+**Loop form.** Write the chain list as a Jinja list of tuples and call `{{ block(duration=…, network=schema) }}` (the same `network=` argument works for `outer_transaction`). A `{% for network in networks(…) %}` loop refuses `{{ network.get_chain_id() }}` ("Method call '.get_chain_id(...)' is not allowed"), so carry the literal `chain_id` in the tuple. End each loop body with the `{% if not loop.last %} UNION ALL {% endif %}` separator (§9).
+
+**Hourly series.** Add `date_trunc('hour', b.ts) AS hour` as the **first** column, `GROUP BY 1`, `duration='24h'`, and `WHERE blocks > 1 AND hour > now() - interval '24 hours'` in the outer query (drops the partial first hour). Because each rate uses its own bucket span, the current partial hour does not show a false drop; for a per-hour **total** (for example base-fee spend) scale it as `total * 3600 / span_s`.
+
+**USD.** Base fee units differ per chain (ETH, POL, BNB, AVAX, USDC on Arc). For a cross-chain number, multiply by the gas-token price: a scalar subquery on the wrapped native token in `network_token_info` (by address, §8.17), for example `avg_base_fee_wei * 21000 / 1e18 * price` = base-fee cost of a plain transfer, and `sum(base_fee_per_gas * gas_used)` = base fee paid.
+
+**User TPS, active senders, failure rate, fees.** These need `outer_transaction` (`tx_type`, `status`, `from_a`, `gas_price`, `gas_used`, `contract_address`). Keep the window at 1h for all chains (~5 s warm). Remove the per-chain system txs first (§8.13), and report the **median** fee, not only the sum (§8.18).
