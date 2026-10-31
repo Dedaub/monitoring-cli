@@ -15,6 +15,7 @@ not have the backend of that command yet: the error names the CLI version. Do no
 4. `create-widget` with the same flags — prints the widget id and `https://app.dedaub.com/widget/<id>`.
 5. Ask the user about a dashboard: `list-dashboards`, then `add-widget --id <WID> --dashboard-id <DID>`,
    or `create-dashboard "<Name>"` first.
+6. After the last widget is on the dashboard, run `arrange-dashboard --id <DID>` (see Dashboard layout).
 
 Each write prints its link. Give the user the link. Never delete or change a widget or dashboard that you
 did not create in this session unless the user asks.
@@ -79,22 +80,26 @@ returns it, with no change and no sparkline.
 
 ## Dashboard layout
 
-The grid has 12 columns. `create-widget --dashboard-id` and `add-widget` put each new widget under the
-lowest widget, so many new widgets make one long column. After you add the widgets, set the layout
-once with `set-layout` (all or nothing; `x + width` ≤ 12). A layout that reads well:
-
-| Row | Widgets | Width × height |
-|-----|---------|----------------|
-| 1 | Headline `value` tiles, 4 or 6 in a row | 3 × 2 or 2 × 2 |
-| 2 and on | Charts in pairs (`line`, `bar`, `stackedbar`) | 6 × 4 (6 × 5 for a busy line chart) |
-| next | A wide chart beside a `pie` | 8 × 5 and 4 × 5 |
-| last | `table` widgets | 12 × 6 |
+The grid has 12 columns. `create-widget --dashboard-id` and `add-widget` put each new widget in a place
+that the server selects, so after many adds the dashboard can be one long column. **After you add the
+widgets, arrange the dashboard once:**
 
 ```bash
-dedaub-monitoring get-dashboard --id 78        # the widget ids
-dedaub-monitoring set-layout --id 78 --layout layout.json
-# layout.json: [{"widget_id": 456, "x": 0, "y": 0, "width": 2, "height": 2}, …]
+dedaub-monitoring arrange-dashboard --id 78 --dry-run   # print the layout (JSON), save nothing
+dedaub-monitoring arrange-dashboard --id 78             # save it
 ```
+
+`arrange-dashboard` keeps the order of the widgets (top to bottom, then left to right) and sets the
+place and size of each one from its type:
+
+| Widgets | Place | Width × height |
+|---------|-------|----------------|
+| `value` tiles | First, at most 6 in a row | 1–3 tiles: 4 × 2; 4 tiles: 3 × 2; 5–6 tiles: 2 × 2 |
+| Charts | In pairs, after the tiles | 6 + 6; a `pie` beside a chart: 8 + 4; a chart alone: 12 (a `pie` alone: 6). Height 5 when the row has a `line`, `linebar` or `range`, else 4 |
+| `table` and alerts widgets | Last | 12 × 6 |
+
+So put the widgets in the order that you want, then arrange. To change one place, take the `--dry-run`
+JSON, edit it, and give it to `set-layout --id 78 --layout layout.json` (all or nothing; `x + width` ≤ 12).
 
 ## Types and the columns each one needs (`missingAxis`)
 
@@ -179,6 +184,7 @@ dedaub-monitoring create-dashboard "DEX volume" --description 'Daily DEX volume'
 dedaub-monitoring update-dashboard --id 78 --name "DEX volume (Base)"
 dedaub-monitoring add-widget     --id 456 --dashboard-id 78           # under the lowest widget
 dedaub-monitoring remove-widget  --id 456 --dashboard-id 78           # off this dashboard only
+dedaub-monitoring arrange-dashboard --id 78 [--dry-run]            # a clean grid from the widget types
 dedaub-monitoring set-layout     --id 78 --layout layout.json         # [{"widget_id", "x", "y", "width", "height"}]
 dedaub-monitoring set-default-dashboard --id 78
 dedaub-monitoring delete-dashboard --id 78                            # widgets stay; --delete-widgets removes them

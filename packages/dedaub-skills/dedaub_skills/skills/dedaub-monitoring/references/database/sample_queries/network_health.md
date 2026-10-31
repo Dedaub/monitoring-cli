@@ -398,9 +398,9 @@ LIMIT 200
 
 ## Dashboard recipe
 
-The dashboard grid has 12 columns. `create-widget --dashboard-id` puts each new widget under the lowest
-widget at `x = 0`, so set the places after you create the widgets: `set-layout --id <DID> --layout
-layout.json` with `[{"widget_id", "x", "y", "width", "height"}, …]`.
+The dashboard grid has 12 columns. Create the widgets in the order of the table below, then run
+`arrange-dashboard --id <DID>` one time. It gives the places in the last column (see `widgets.md`,
+"Dashboard layout"). To change a place, edit its `--dry-run` JSON and give that to `set-layout`.
 
 | Row (y) | Widget | Query | Type and axes | Place (x · width × height) |
 |---------|--------|-------|---------------|----------------------------|
@@ -408,9 +408,9 @@ layout.json` with `[{"widget_id", "x", "y", "width", "height"}, …]`.
 | 0 | User TPS, active senders | activity `Totals` | `value`, `--y <col>` (no time column: no sparkline) | 2 × 2 each |
 | 2 | TPS · L1s, TPS · L2s | series `L1`, `L2` | `line`, `--x hour --y tps --series-by network`, `scale log` | 0 and 6 · 6 × 5 |
 | 7 | User TPS by chain, block time by chain | activity, snapshot | `bar`, `--x network`, `order_by y`; block time with `scale log` | 0 and 6 · 6 × 4 |
-| 11 | Gas used % · L1s, base-fee spend · L2s | series `L1`, `L2` | `line`; gas with `reference_line 50` (Ethereum target), fee with `scale log` and `number_format currency` | 0 and 6 · 6 × 4 |
-| 15 | Transaction-type mix | tx-type mix | `stackedbar`, `--x network --y pct_of_chain --series-by tx_kind` | 0 · 8 × 5 |
-| 15 | Ethereum block builders | builders | `pie`, `--x builder --y blocks` | 8 · 4 × 5 |
+| 11 | Gas used % · L1s, base-fee spend · L2s | series `L1`, `L2` | `line`; gas with `reference_line 50` (Ethereum target), fee with `scale log` and `number_format currency` | 0 and 6 · 6 × 5 |
+| 16 | Transaction-type mix | tx-type mix | `stackedbar`, `--x network --y pct_of_chain --series-by tx_kind` | 0 · 8 × 4 |
+| 16 | Ethereum block builders | builders | `pie`, `--x builder --y blocks` | 8 · 4 × 4 |
 | 20 | Snapshot, activity | snapshot, activity | `table` | 0 · 12 × 6 each |
 
 Rules that this recipe follows:

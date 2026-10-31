@@ -527,7 +527,8 @@ Dedaub app); with no shell, skip this step. After the query is saved and runs, j
 helps (read `references/widgets.md`, "Judge first"): when no chart fits, say why and stop; when the rows
 are row-level events, aggregate them first in a derived query. Then suggest one widget, run `check-widget`
 and `preview-widget`, create it with `create-widget`, and give the `/widget/<id>` link. Then ask the user
-whether to add it to a dashboard (`list-dashboards`, then `add-widget` or `create-dashboard`).
+whether to add it to a dashboard (`list-dashboards`, then `add-widget` or `create-dashboard`). After the
+last widget is on the dashboard, run `arrange-dashboard --id <DID>`: it puts the widgets in a clean grid.
 
 ---
 
