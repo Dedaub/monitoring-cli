@@ -142,7 +142,19 @@ dedaub-monitoring get-alerts --id 1234
 
 ```bash
 dedaub-monitoring run-query --id 1234 --duration 1h --limit 20
+dedaub-monitoring run-query --id 1234 --format tsv <<'SQL'   # run SQL from stdin without storing it
+SELECT selector('transfer(address,uint256)') AS sel          -- the CLI replaces the call with the hash
+SQL
 ```
+
+`--format tsv` (or `json`, one object per line) prints the rows exact and uncut; the default table is
+for a person and cuts cells to the terminal width. Notes and the row count go to stderr.
+
+The account runs 3 queries at a time. `run-query` waits for a free slot (`--wait`, default 300 s) and
+exits 4 when none frees in time. On an empty result it counts the logs of each `logs(...)` signature's
+topic0 and says whether the indexed flags, the address or the window is the cause.
+
+`dedaub-monitoring status` checks the login (exit 3 when not logged in) and shows the query slots in use.
 
 ### Explore the schema
 
@@ -269,7 +281,8 @@ Commands that act on a query or folder take it **either** by `--id <id>` **or** 
 
 | Command | Description |
 |---------|-------------|
-| `run-query` | Execute a query and print results (async; Ctrl-C or `--timeout` revokes the server-side task) |
+| `run-query` | Execute a query and print results (async; Ctrl-C or `--timeout` revokes the server-side task; `--format table\|tsv\|json`; waits up to `--wait` for a query slot, exit 4 after) |
+| `status` | Check the login (exit 3 when not logged in) and show the query slots in use |
 | `cancel-query` | Revoke a running async query task by id (`--task-id`; idempotent) |
 | `active-queries` | List the task ids of currently-running async queries |
 | `download-results` | Download a completed async query's results as CSV (`--task-id`) |

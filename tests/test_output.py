@@ -181,3 +181,59 @@ def test_format_query_text_adds_no_second_newline():
     buf = StringIO()
     format_query_text("SELECT 1\n", console=Console(file=buf))
     assert buf.getvalue() == "SELECT 1\n"
+
+
+def _capture_rows(rows, fmt):
+    buf = StringIO()
+    console = Console(file=buf, highlight=False, width=200)
+    lossy = format_query_results(rows, fmt=fmt, console=console)
+    return buf.getvalue(), lossy
+
+
+_ROWS = [
+    {
+        "addr": "0x12ab",
+        "n": 230000.0,
+        "x": 1.5,
+        "big": 1.2345678901234568e28,
+        "ok": True,
+        "z": None,
+        "note": "a\tb\nc",
+    }
+]
+
+
+def test_tsv_is_exact_and_uncut():
+    text, lossy = _capture_rows(_ROWS, "tsv")
+    header, line = text.rstrip("\n").split("\n")
+    assert header == "addr\tn\tx\tbig\tok\tz\tnote"
+    assert line.split("\t") == [
+        "0x12ab",
+        "230000",
+        "1.5",
+        "1.2345678901234568e+28",
+        "true",
+        "null",
+        "a\\tb\\nc",
+    ]
+    assert lossy == 1
+
+
+def test_json_lines_keep_integers_as_integers():
+    import json
+
+    text, _ = _capture_rows(_ROWS, "json")
+    row = json.loads(text)
+    assert row["n"] == 230000 and isinstance(row["n"], int)
+    assert row["ok"] is True and row["z"] is None
+
+
+def test_table_escapes_markup_in_cells():
+    text, _ = _capture_rows([{"a": "[true]", "b": "[red]x[/red]"}], "table")
+    assert "[true]" in text
+    assert "[red]x[/red]" in text
+
+
+def test_tsv_of_no_rows_prints_nothing():
+    text, lossy = _capture_rows([], "tsv")
+    assert text == "" and lossy == 0

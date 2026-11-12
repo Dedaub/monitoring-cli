@@ -1068,3 +1068,214 @@ def test_arrange_dashboard_with_no_widgets(monkeypatch):
     assert result.exit_code == 0
     assert "has no widgets" in result.output
     client.set_dashboard_layout.assert_not_called()
+
+
+# --- run-query: formats, the cap, the empty-result check --------------------
+
+
+def _err(result) -> str:
+    text = result.output
+    with contextlib.suppress(ValueError, AttributeError):
+        text += result.stderr
+    return text
+
+
+def test_run_query_tsv_prints_rows_and_count(monkeypatch):
+    client = _run_query_client(monkeypatch)
+    client.execute_query.return_value = [{"a": 1.0, "b": "0x12"}]
+    result = runner.invoke(
+        app,
+        ["run-query", "--id", "9", "--entity-id", "7", "--format", "tsv", "SELECT 1"],
+    )
+    assert result.exit_code == 0, result.output
+    assert "a\tb\n1\t0x12\n" in result.output
+    assert "1 row(s)" in _err(result)
+
+
+def test_run_query_rejects_an_unknown_format(monkeypatch):
+    _run_query_client(monkeypatch)
+    result = runner.invoke(
+        app,
+        ["run-query", "--id", "9", "--entity-id", "7", "--format", "xml", "SELECT 1"],
+    )
+    assert result.exit_code == 2
+
+
+def test_run_query_passes_wait_and_slot_dir(monkeypatch):
+    client = _run_query_client(monkeypatch)
+    result = runner.invoke(
+        app, ["run-query", "--id", "9", "--entity-id", "7", "--wait", "42", "SELECT 1"]
+    )
+    assert result.exit_code == 0, result.output
+    kwargs = client.execute_query.call_args_list[0].kwargs
+    assert kwargs["cap_wait"] == 42
+    assert kwargs["slot_dir"] == cli.slots.STATE_DIR
+
+
+def test_run_query_exits_4_when_no_slot_frees(monkeypatch):
+    from monitoring_cli.client import QueryCapError
+
+    client = _run_query_client(monkeypatch)
+    client.execute_query.side_effect = QueryCapError(300)
+    client.get_active_queries.return_value = ["t1", "t2", "t3"]
+    result = runner.invoke(
+        app, ["run-query", "--id", "9", "--entity-id", "7", "SELECT 1"]
+    )
+    assert result.exit_code == cli.EXIT_SLOTS_BUSY
+    text = _err(result)
+    assert "t1, t2, t3" in text
+    assert "do not cancel" in text
+
+
+def test_run_query_rewrites_helpers_before_sending(monkeypatch):
+    client = _run_query_client(monkeypatch)
+    result = runner.invoke(
+        app,
+        ["run-query", "--id", "9", "--entity-id", "7"]
+        + ["SELECT * FROM t WHERE s = selector('transfer(address,uint256)')"],
+    )
+    assert result.exit_code == 0, result.output
+    sent = client.execute_query.call_args_list[0].args[0]
+    assert "'\\xa9059cbb'::bytea" in sent
+    assert "Rewrote selector(" in _err(result)
+
+
+def test_validate_query_warns_about_signed_ints(monkeypatch):
+    client = MagicMock()
+    client.validate_query.return_value = True
+    _patch_client(monkeypatch, client)
+    sql = "SELECT * FROM {{logs(inputs='Swap(int128 amount0, uint160 p)')}} l"
+    result = runner.invoke(
+        app, ["validate-query", "--id", "9", "--entity-id", "7", sql]
+    )
+    assert result.exit_code == 0, result.output
+    text = _err(result)
+    assert "int128 amount0" in text
+    assert "signed int" in text
+    assert "uint160" not in text.split("Warning:")[1].split("signed")[0]
+
+
+_EMPTY_SQL = (
+    "SELECT * FROM {{ethereum.logs(duration='7d', inputs="
+    "'0x1111111111111111111111111111111111111111.W(bytes32 h, bool ok)')}} l"
+)
+
+
+def test_run_query_explains_empty_result_by_indexed_layout(monkeypatch):
+    client = _run_query_client(monkeypatch)
+    client.execute_query.side_effect = [
+        [],
+        [
+            {"scope": "any", "n_indexed": 1, "n": 40},
+            {"scope": "address", "n_indexed": 1, "n": 12},
+        ],
+    ]
+    result = runner.invoke(
+        app, ["run-query", "--id", "9", "--entity-id", "7", _EMPTY_SQL]
+    )
+    assert result.exit_code == 0, result.output
+    check_sql = client.execute_query.call_args_list[1].args[0]
+    assert "{{ethereum.logs(duration='7d')}}" in check_sql
+    assert "UNION ALL" in check_sql  # the address has its own sample
+    text = _err(result)
+    assert "emitted 12 logs: 12 with 1 indexed" in text
+    assert "marks 0 argument(s) as indexed" in text
+
+
+def test_run_query_explains_empty_result_by_other_emitters(monkeypatch):
+    client = _run_query_client(monkeypatch)
+    client.execute_query.side_effect = [[], [{"scope": "any", "n_indexed": 0, "n": 5}]]
+    result = runner.invoke(
+        app, ["run-query", "--id", "9", "--entity-id", "7", _EMPTY_SQL]
+    )
+    assert result.exit_code == 0, result.output
+    assert "other emitters" in _err(result)
+
+
+def test_run_query_empty_check_failure_is_quiet(monkeypatch):
+    client = _run_query_client(monkeypatch)
+    client.execute_query.side_effect = [[], RuntimeError("boom")]
+    result = runner.invoke(
+        app, ["run-query", "--id", "9", "--entity-id", "7", _EMPTY_SQL]
+    )
+    assert result.exit_code == 0, result.output
+    assert "Could not count" in _err(result)
+
+
+def test_run_query_help_shows_the_window_brackets():
+    result = runner.invoke(app, ["run-query", "--help"], terminal_width=200)
+    assert "[end-time - duration, end-time]" in result.output
+
+
+# --- status: a login check with an exit code --------------------------------
+
+
+def test_status_logged_in(monkeypatch):
+    client = MagicMock()
+    client.get_me.return_value = {"username": "u", "entity_id": 7}
+    client.get_active_queries.return_value = ["t1"]
+    monkeypatch.setattr(
+        cli, "_load_client", lambda profile, not_logged_in_exit=1: (client, MagicMock())
+    )
+    result = runner.invoke(app, ["status"])
+    assert result.exit_code == 0, result.output
+    assert "Logged in as u (entity 7)" in result.output
+    assert "1 of 3" in result.output
+
+
+def test_status_session_expired_exits_3(monkeypatch):
+    from monitoring_cli.auth import SessionExpiredError
+
+    client = MagicMock()
+    client.get_me.side_effect = SessionExpiredError()
+    monkeypatch.setattr(
+        cli, "_load_client", lambda profile, not_logged_in_exit=1: (client, MagicMock())
+    )
+    result = runner.invoke(app, ["status"])
+    assert result.exit_code == cli.EXIT_NOT_LOGGED_IN
+
+
+def test_status_not_logged_in_exits_3(monkeypatch):
+    from monitoring_cli.config import NotLoggedInError
+
+    monkeypatch.delenv(cli.REFRESH_TOKEN_ENV, raising=False)
+
+    def _no_config():
+        raise NotLoggedInError()
+
+    monkeypatch.setattr(cli.Config, "load", staticmethod(_no_config))
+    result = runner.invoke(app, ["status"])
+    assert result.exit_code == cli.EXIT_NOT_LOGGED_IN
+
+
+def test_empty_note_other_layout_elsewhere_is_not_a_flag_error():
+    # ERC-20 and ERC-721 share the Transfer topic0 with 2 and 3 indexed
+    # arguments: logs of the other layout alone do not prove wrong flags.
+    sig = cli.sqltools.parse_signature(
+        "Transfer(address indexed from, address indexed to, uint256 value)"
+    )
+    rows = [
+        {"scope": "any", "n_indexed": 2, "n": 90},
+        {"scope": "any", "n_indexed": 3, "n": 10},
+    ]
+    note = cli._empty_result_note(sig, "0xddf2", rows)
+    assert "flags are not the cause" in note
+
+
+def test_empty_note_no_logs_at_all():
+    sig = cli.sqltools.parse_signature("E(uint256 a)")
+    note = cli._empty_result_note(sig, "0x01", [])
+    assert "the window or the event is the cause" in note
+
+
+def test_sigterm_is_treated_like_ctrl_c(monkeypatch):
+    import signal
+
+    installed = {}
+    monkeypatch.setattr(
+        cli.signal, "signal", lambda sig, fn: installed.setdefault(sig, fn)
+    )
+    cli._revoke_on_termination()
+    assert signal.SIGTERM in installed
+    with pytest.raises(KeyboardInterrupt):
+        installed[signal.SIGTERM](signal.SIGTERM, None)
