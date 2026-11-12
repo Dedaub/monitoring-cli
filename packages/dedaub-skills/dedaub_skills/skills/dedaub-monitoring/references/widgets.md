@@ -159,6 +159,31 @@ win over it. A new widget starts with `{"timeframe": "30d", "sorting_order": "AS
 - Axis labels: 120 characters max, and only the charts with axes show them: `line`, `bar`, `stackedbar`,
   `linebar`, `scatter`, `histogram`, `range`.
 
+**Always set both axis labels, in TeX.** On every chart with axes, give `--x-label` and `--y-label`, and
+write each one as one inline math span with the words in `\text{…}` and the unit in brackets. KaTeX
+renders it in the chart's math font, and a label in the same style on every widget makes the dashboard
+look finished.
+
+| Column | Label |
+|--------|-------|
+| `day` | `$\text{Day}$` |
+| `token_symbol` | `$\text{Token}$` |
+| `liquidated_usd` | `$\text{Liquidated (\$)}$` |
+| `share` | `$\text{Share of volume (\%)}$` |
+| `gas_used` | `$\text{Gas used}$` |
+| `amount_eth` | `$\text{Amount }(\Xi)$` |
+| `price_change` | `$\Delta\,\text{Price (\$)}$` |
+| `std_fee` | `$\sigma_{\text{fee}}\ \text{(gwei)}$` |
+
+- One span `$…$`, not display math `$$…$$`: display math is set larger and on its own line.
+- Inside the math, escape the TeX specials: `\$`, `\%` (a bare `%` starts a comment and hides the rest),
+  `\_`, `\&`, `\#`. A space between two math parts is `\ ` or `\,`.
+- Write words, not column names: `$\text{Gas used}$`, not `gas_used`.
+- In a shell, put the label in single quotes so the shell keeps `$` and `\`.
+- **The title (`--label`) stays mostly plain:** the widget lists, the tab titles and the add-widget list
+  show a title as text, with its TeX as source. Use Markdown (`**Daily volume**`) and TeX only for a
+  symbol (`**Fee volatility** $\sigma$`).
+
 ## Timeframes and rows
 
 `timeframe` filters the query's first time column (`timestamp…` or `date`) to the last 24h / 7d / 30d (one
@@ -170,10 +195,11 @@ through `ref()`; a query that `ref()` cannot find (no run settings) reads its te
 ## Commands (one example each)
 
 ```bash
-dedaub-monitoring check-widget   --query-id 123 --type line --x day --y volume_usd --y-label 'Volume (\$)'
+dedaub-monitoring check-widget   --query-id 123 --type line --x day --y volume_usd --x-label '$\text{Day}$' --y-label '$\text{Volume (\$)}$'
 dedaub-monitoring preview-widget --query-id 123 --type line --x day --y volume_usd --timeframe 7d
 dedaub-monitoring preview-widget --id 456 --sql                       # print the SQL, do not run it
-dedaub-monitoring create-widget  --query-id 123 --type line --x day --y volume_usd --label '**Daily volume**'
+dedaub-monitoring create-widget  --query-id 123 --type line --x day --y volume_usd --label '**Daily volume**' \
+                                 --x-label '$\text{Day}$' --y-label '$\text{Volume (\$)}$'
 dedaub-monitoring update-widget  --id 456 --type bar --clear y_label
 dedaub-monitoring get-widget     --id 456
 dedaub-monitoring list-widgets   --query-id 123
