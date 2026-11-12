@@ -1,13 +1,15 @@
 from __future__ import annotations
 
 import contextlib
+import random
 import time
 from collections.abc import Callable
-from pathlib import PurePosixPath
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 import httpx
 
+from monitoring_cli import slots
 from monitoring_cli.auth import SessionExpiredError, refresh_tokens
 from monitoring_cli.config import Profile
 from monitoring_cli.version import cli_version
@@ -22,6 +24,10 @@ _EXPIRY_MARGIN = 30
 _GET_ATTEMPTS = 3
 _GET_BACKOFF_SECONDS = 1.0
 _RETRY_STATUSES = frozenset({408, 502, 503, 504})
+# On HTTP 429 (the account already runs its limit of concurrent queries), try
+# again after this wait, doubled each time up to the maximum.
+_CAP_BACKOFF_SECONDS = 2.0
+_CAP_BACKOFF_MAX_SECONDS = 15.0
 _sleep = time.sleep
 
 
@@ -51,10 +57,16 @@ class MonitoringClient:
                     self._on_refresh_token(rotated)
         return {"Authorization": f"Bearer {self._access_token}"}
 
-    def _get(self, path: str, _timeout: float | None = 30.0, **params: Any) -> Any:
+    def _get(
+        self,
+        path: str,
+        _timeout: float | None = 30.0,
+        _attempts: int = _GET_ATTEMPTS,
+        **params: Any,
+    ) -> Any:
         # A GET changes nothing, so a timeout or a busy gateway is safe to retry.
-        for attempt in range(_GET_ATTEMPTS):
-            last = attempt == _GET_ATTEMPTS - 1
+        for attempt in range(_attempts):
+            last = attempt == _attempts - 1
             try:
                 resp = httpx.get(
                     f"{self._base}{path}",
@@ -445,50 +457,126 @@ class MonitoringClient:
         poll_interval: float = 2.0,
         poll_timeout: float = 1800.0,
         on_start: Callable[[str], None] | None = None,
+        cap_wait: float = 0.0,
+        on_cap_wait: Callable[[], None] | None = None,
+        slot_dir: Path | None = None,
     ) -> list[dict]:
-        task_id = self._post(
-            "/api/tsql/query/execute_async",
-            json={
-                "query": query,
-                "query_id": query_id,
-                "query_entity_id": entity_id,
-                "network": network,
-                "default_duration": default_duration,
-                "default_start_time": default_start_time,
-                "limit": limit,
-                "offset": offset,
-            },
+        """Run a query and return its rows.
+
+        `cap_wait` is how long to wait for a free query slot: on this machine
+        (lock files in `slot_dir`, when given) and at the server (HTTP 429).
+        After that, QueryCapError. `poll_timeout` starts when the server takes
+        the query; past it the task is revoked and TimeoutError is raised."""
+        cap_deadline = time.monotonic() + cap_wait
+        told = False
+
+        def tell_once() -> None:
+            # The wait can start in the local queue and go on at the server:
+            # say so one time.
+            nonlocal told
+            if not told and on_cap_wait is not None:
+                told = True
+                on_cap_wait()
+
+        slot = (
+            slots.hold(cap_deadline, slot_dir, on_wait=tell_once)
+            if slot_dir is not None
+            else contextlib.nullcontext()
         )
-        # task_id now exists server-side, so everything that could interrupt before we
-        # finish (the on_start callback, the poll loop) goes inside the try, and every
-        # revoke is best-effort — a failed DELETE must never mask the interrupt/timeout
-        # we actually want to surface.
+        try:
+            with slot:
+                task_id = self._submit(
+                    {
+                        "query": query,
+                        "query_id": query_id,
+                        "query_entity_id": entity_id,
+                        "network": network,
+                        "default_duration": default_duration,
+                        "default_start_time": default_start_time,
+                        "limit": limit,
+                        "offset": offset,
+                    },
+                    cap_deadline,
+                    tell_once,
+                )
+                return self._poll(task_id, poll_interval, poll_timeout, on_start)
+        except (slots.SlotWaitTimeout, QueryCapError):
+            raise QueryCapError(cap_wait) from None
+
+    def _submit(
+        self,
+        body: dict,
+        cap_deadline: float,
+        on_cap_wait: Callable[[], None] | None,
+    ) -> str:
+        """POST the query; on HTTP 429 (the account runs its limit of queries)
+        wait and try again until `cap_deadline`."""
+        backoff = _CAP_BACKOFF_SECONDS
+        told = False
+        while True:
+            resp = httpx.post(
+                f"{self._base}/api/tsql/query/execute_async",
+                headers=self._headers(),
+                json=body,
+                timeout=30.0,
+            )
+            if resp.status_code != 429:
+                _raise_for_status(resp, "/api/tsql/query/execute_async")
+                return resp.json()
+            remaining = cap_deadline - time.monotonic()
+            if remaining <= 0:
+                raise QueryCapError(None)
+            if not told and on_cap_wait is not None:
+                on_cap_wait()
+                told = True
+            _sleep(min(backoff * random.uniform(0.8, 1.2), remaining))
+            backoff = min(backoff * 2, _CAP_BACKOFF_MAX_SECONDS)
+
+    def _poll(
+        self,
+        task_id: str,
+        poll_interval: float,
+        poll_timeout: float,
+        on_start: Callable[[str], None] | None,
+    ) -> list[dict]:
+        # task_id now exists server-side. Whatever ends the wait other than a
+        # result (Ctrl-C, the deadline, a network error) revokes it; the revoke
+        # is best-effort, so a failed DELETE never masks the real error.
         deadline = time.monotonic() + poll_timeout
+        finished = False
         try:
             if on_start is not None:
                 on_start(task_id)
-            while time.monotonic() < deadline:
-                result = self._get(f"/api/tsql/query/execute_async/{task_id}")
+            while (remaining := deadline - time.monotonic()) > 0:
+                try:
+                    # One attempt per poll, cut to the time left, so a slow
+                    # poll cannot carry the wait past --timeout.
+                    result = self._get(
+                        f"/api/tsql/query/execute_async/{task_id}",
+                        _timeout=max(1.0, min(30.0, remaining)),
+                        _attempts=1,
+                    )
+                except (httpx.TimeoutException, httpx.ConnectError):
+                    continue
                 status = result.get("status")
                 if status == "SUCCESS":
+                    finished = True
                     return result.get("result") or []
                 if status == "FAILURE":
+                    finished = True
                     raise RuntimeError(result.get("error") or "Query execution failed")
                 if status in ("REVOKED", "IGNORED"):
+                    finished = True
                     raise RuntimeError(f"Query was {status}")
-                time.sleep(poll_interval)
-        except KeyboardInterrupt:
-            # Local Ctrl-C stops polling but the server task keeps running — revoke it.
-            with contextlib.suppress(Exception):
-                self.cancel_query(task_id)
-            raise
-        # Local poll timed out; the server task is still running — revoke it too.
-        with contextlib.suppress(Exception):
-            self.cancel_query(task_id)
+                time.sleep(max(0.0, min(poll_interval, deadline - time.monotonic())))
+        finally:
+            if not finished:
+                with contextlib.suppress(Exception):
+                    self.cancel_query(task_id)
         window = (
-            f"{int(poll_timeout)}s"
-            if poll_timeout < 60
-            else f"{int(poll_timeout // 60)}m"
+            f"{int(poll_timeout // 60)}m"
+            if poll_timeout >= 60 and poll_timeout % 60 == 0
+            else f"{poll_timeout:g}s"
         )
         raise TimeoutError(f"Query did not complete within {window}")
 
@@ -839,6 +927,18 @@ def resolve_query_id(folders: list[dict], queries: list[dict], path: str) -> int
 
 class NotFoundError(Exception):
     pass
+
+
+class QueryCapError(Exception):
+    """No query slot became free in time: the account runs its limit of
+    concurrent queries."""
+
+    def __init__(self, waited: float | None) -> None:
+        self.waited = waited
+        super().__init__(
+            "The account runs its limit of concurrent queries"
+            + (f" and no slot became free in {waited:.0f}s." if waited else ".")
+        )
 
 
 class ConflictError(Exception):

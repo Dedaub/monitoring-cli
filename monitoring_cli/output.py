@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import json
 from pathlib import PurePosixPath
 
 from rich.console import Console
+from rich.markup import escape
 from rich.table import Table
 from rich.tree import Tree
 
@@ -208,22 +210,89 @@ def format_fired_alerts(
         c.print(f"[dim]Next page: --after-id {aid}[/dim]")
 
 
+RESULT_FORMATS = ("table", "tsv", "json")
+
+# The API sends numeric values as JSON numbers, so they arrive as floats. A
+# float holds every integer below 2**53 exactly; above it the last digits are
+# already gone.
+_EXACT_INT_LIMIT = 2**53
+
+
+def _plain_value(value: object) -> object:
+    """A float with no fraction (230000.0) as the integer it stands for."""
+    if (
+        isinstance(value, float)
+        and value.is_integer()
+        and abs(value) < _EXACT_INT_LIMIT
+    ):
+        return int(value)
+    return value
+
+
+def _is_lossy(value: object) -> bool:
+    return isinstance(value, float) and abs(value) >= _EXACT_INT_LIMIT
+
+
+def _tsv_cell(value: object) -> str:
+    value = _plain_value(value)
+    if value is None:
+        return "null"
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, (dict, list)):
+        text = json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+    else:
+        text = str(value)
+    return (
+        text.replace("\\", "\\\\")
+        .replace("\t", "\\t")
+        .replace("\n", "\\n")
+        .replace("\r", "\\r")
+    )
+
+
 def format_query_results(
     results: list[dict],
     *,
+    fmt: str = "table",
     console: Console | None = None,
-) -> None:
+) -> int:
+    """Print the rows. `table` is for a person; `tsv` (a header line, then one
+    line per row, NULL as `null`) and `json` (one object per line) are exact
+    and uncut. Return how many values lost digits in the API (see
+    _EXACT_INT_LIMIT)."""
     c = console or _console
+    lossy = sum(_is_lossy(v) for row in results for v in row.values())
+    if fmt == "json":
+        for row in results:
+            line = json.dumps(
+                {k: _plain_value(v) for k, v in row.items()},
+                ensure_ascii=False,
+                default=str,
+            )
+            c.file.write(line + "\n")
+        c.file.flush()
+        return lossy
+    if fmt == "tsv":
+        if results:
+            headers = list(results[0].keys())
+            c.file.write("\t".join(_tsv_cell(h) for h in headers) + "\n")
+            for row in results:
+                c.file.write("\t".join(_tsv_cell(row.get(h)) for h in headers) + "\n")
+        c.file.flush()
+        return lossy
     if not results:
         c.print("No results.")
-        return
+        return lossy
     headers = list(results[0].keys())
     table = Table(show_header=True)
     for h in headers:
-        table.add_column(h)
+        table.add_column(escape(h))
     for row in results:
-        table.add_row(*[str(row.get(h, "")) for h in headers])
+        # escape: a cell such as `[true]` is data, not Rich markup.
+        table.add_row(*[escape(str(_plain_value(row.get(h, "")))) for h in headers])
     c.print(table)
+    return lossy
 
 
 def format_columns(

@@ -810,3 +810,118 @@ def test_post_is_never_retried(no_sleep):
     with pytest.raises(httpx.HTTPStatusError):
         MonitoringClient(PROFILE).create_widget({"type": "table"})
     assert route.call_count == 1
+
+
+# --- execute_query: the concurrency cap and the poll deadline ---------------
+
+_CAP_DETAIL = {
+    "detail": "You have reached the maximum number of concurrent query jobs, "
+    "either wait for completion or cancel existing jobs."
+}
+
+
+@respx.mock
+def test_execute_query_waits_on_429_then_runs(monkeypatch):
+    from monitoring_cli import client as client_module
+
+    mock_token(respx)
+    task_id = "550e8400-e29b-41d4-a716-446655440010"
+    route = respx.post(f"{BASE}/api/tsql/query/execute_async").mock(
+        side_effect=[
+            httpx.Response(429, json=_CAP_DETAIL),
+            httpx.Response(429, json=_CAP_DETAIL),
+            httpx.Response(200, json=task_id),
+        ]
+    )
+    respx.get(f"{BASE}/api/tsql/query/execute_async/{task_id}").mock(
+        return_value=httpx.Response(
+            200, json={"status": "SUCCESS", "result": [{"n": 1}], "error": None}
+        )
+    )
+    sleeps: list[float] = []
+    monkeypatch.setattr(client_module, "_sleep", sleeps.append)
+    told = []
+    rows = MonitoringClient(PROFILE).execute_query(
+        "select 1", 99, 45, cap_wait=60, on_cap_wait=lambda: told.append(1)
+    )
+    assert rows == [{"n": 1}]
+    assert route.call_count == 3
+    assert len(sleeps) == 2
+    assert told == [1]  # told once, not on every retry
+
+
+@respx.mock
+def test_execute_query_raises_cap_error_without_wait():
+    from monitoring_cli.client import QueryCapError
+
+    mock_token(respx)
+    respx.post(f"{BASE}/api/tsql/query/execute_async").mock(
+        return_value=httpx.Response(429, json=_CAP_DETAIL)
+    )
+    with pytest.raises(QueryCapError):
+        MonitoringClient(PROFILE).execute_query("select 1", 99, 45)
+
+
+@respx.mock
+def test_execute_query_revokes_when_polls_time_out(monkeypatch):
+    from monitoring_cli import client as client_module
+
+    mock_token(respx)
+    task_id = "550e8400-e29b-41d4-a716-446655440011"
+    respx.post(f"{BASE}/api/tsql/query/execute_async").mock(
+        return_value=httpx.Response(200, json=task_id)
+    )
+    respx.get(f"{BASE}/api/tsql/query/execute_async/{task_id}").mock(
+        side_effect=httpx.ReadTimeout("slow")
+    )
+    revoke = respx.delete(f"{BASE}/api/tsql/query/execute_async/{task_id}").mock(
+        return_value=httpx.Response(200)
+    )
+    clock = iter(range(0, 1000, 5))
+    monkeypatch.setattr(client_module.time, "monotonic", lambda: float(next(clock)))
+    monkeypatch.setattr(client_module.time, "sleep", lambda s: None)
+    with pytest.raises(TimeoutError):
+        MonitoringClient(PROFILE).execute_query("select 1", 99, 45, poll_timeout=20)
+    assert revoke.called
+
+
+@respx.mock
+def test_execute_query_poll_uses_one_attempt_cut_to_the_deadline(monkeypatch):
+    from monitoring_cli import client as client_module
+
+    mock_token(respx)
+    task_id = "550e8400-e29b-41d4-a716-446655440012"
+    respx.post(f"{BASE}/api/tsql/query/execute_async").mock(
+        return_value=httpx.Response(200, json=task_id)
+    )
+    respx.get(f"{BASE}/api/tsql/query/execute_async/{task_id}").mock(
+        return_value=httpx.Response(
+            200, json={"status": "SUCCESS", "result": [], "error": None}
+        )
+    )
+    seen = {}
+    real_get = MonitoringClient._get
+
+    def spy(self, path, _timeout=30.0, _attempts=3, **params):
+        seen["timeout"], seen["attempts"] = _timeout, _attempts
+        return real_get(self, path, _timeout=_timeout, _attempts=_attempts, **params)
+
+    monkeypatch.setattr(client_module.MonitoringClient, "_get", spy)
+    MonitoringClient(PROFILE).execute_query("select 1", 99, 45, poll_timeout=10)
+    assert seen["attempts"] == 1
+    assert seen["timeout"] <= 10
+
+
+@pytest.mark.parametrize(
+    ("seconds", "text"),
+    [(30, "30s"), (60, "1m"), (90, "90s"), (120, "2m"), (7.5, "7.5s")],
+)
+def test_timeout_message_names_the_real_window(monkeypatch, seconds, text):
+    from monitoring_cli import client as client_module
+
+    clock = iter([0.0] + [1e9] * 5)  # deadline set, then already past
+    monkeypatch.setattr(client_module.time, "monotonic", lambda: next(clock))
+    c = MonitoringClient(PROFILE)
+    monkeypatch.setattr(c, "cancel_query", lambda task_id: None)
+    with pytest.raises(TimeoutError, match=f"within {text}$"):
+        c._poll("t", 2.0, seconds, None)

@@ -30,7 +30,7 @@ Per-chain schema (`base.`, `ethereum.`, `arbitrum.`, `optimism.`, `polygon.`, `b
 
 | Table | PK | Purpose |
 |-------|----|---------|
-| `<chain>.outer_transaction` | `(block_number, tx_index)` | One row per **top-level tx**. `tx_hash`, `from_a`/`to_a`, `callvalue` (wei → ETH value), `status` (`false` = reverted), `input`. Entry-call / ETH-value detection. |
+| `<chain>.outer_transaction` | `(block_number, tx_index)` | One row per **top-level tx**. `tx_hash`, `from_a`/`to_a`, `callvalue` (wei → ETH value), `status` (`false` = reverted). **No `input` column and no index on `to_a`**: a transaction's input is the `calldata` of its `transaction_detail` frame at `vm_step_start = 0`, and the transactions sent to a contract are those frames. Entry-call / ETH-value detection. |
 | `<chain>.transaction_detail` | `(block_number, tx_index, vm_step_start)` | One row per executed call frame. `from_a` = caller, `to_a` = callee, `calldata` = input bytes. Also: `callvalue`, `error`, `call_opcode` (`'CALL'`/`'DELEGATECALL'`/`'STATICCALL'`/… — default-filter `'CALL'` for call monitoring, §8.10), and **`caller_vm_step_stack` (int[])** — the call-frame stack, so `coalesce(array_length(caller_vm_step_stack,1),0)` = **call depth** (0 = top-level/EOA-initiated, >0 = nested via router/bundler/contract). |
 | `<chain>.logs` | `(block_number, tx_index, vm_step)` | One row per emitted `LOG*`. `address` = emitter, `topic0..3`, `data`. |
 | `<chain>.token_ledger` | `(address, block_number, tx_index, vm_step_start, vm_step)` | Parsed token movements. Two rows per transfer, one per side, linked by `counterparty_address`. **Sign rule: `value_delta > 0` = `address` SENT the tokens; `value_delta < 0` = `address` RECEIVED them.** It is the amount sent, **not** a balance change (measured against `Transfer` logs on all 8 chains: every non-zero row agrees except self-transfers, where `address` is both sides; a mint is a `> 0` row on the zero address). Sender row → `value_delta > 0`; net inflow to `address` → `-SUM(value_delta)`. |
@@ -46,12 +46,12 @@ Per-chain schema (`base.`, `ethereum.`, `arbitrum.`, `optimism.`, `polygon.`, `b
 
 ### 1.1 Index inventory (use these as leading predicates)
 
-> **Per-chain caveat:** indexes vary by chain. **`logs.topic0` is indexed on most chains** (`(topic0, block_number, address)` btree → topic0-first is index-fast) but **Base was observed without it** — there, lead with the `address` index. Before assuming an index is present or missing, run `get-schema --network <chain> --table <t>` (or `\d+ <chain>.<t>`). Where the index exists, the matching §9 anti-pattern stops being one.
+> **Per-chain caveat:** indexes vary by chain. The `logs.topic0` index differs (2026-11-12): Ethereum `(topic0, block_number)`, Arbitrum `(topic0, block_number, address)`, **Base none** — there, lead with the `address` index or with the calls (`../../query-mode.md` §4 rule 6). Before assuming an index is present or missing, run `get-schema --network <chain> --table <t>` (or `\d+ <chain>.<t>`). Where the index exists, the matching §9 anti-pattern stops being one.
 
 | Table | Indexes (baseline, present on every chain) |
 |-------|--------------------------------------------|
 | `transaction_detail` | `(block_number)`, `(from_a, block_number)`, `(to_a, block_number)`, `(common.selector(calldata), block_number)`, **`(to_a, common.selector(calldata), block_number)`** ← workhorse |
-| `logs` | `(address, block_number DESC)`, `(block_number DESC)`, **`(topic0, block_number, address)`** — topic0 indexed on most chains, **not Base** (verify per chain) |
+| `logs` | `(address, block_number DESC)`, `(block_number DESC)`, **a topic0 index** — Ethereum `(topic0, block_number)`, Arbitrum `(topic0, block_number, address)`, **not Base** (verify per chain) |
 | `token_ledger` | `(address)`, `(address, block_number, tx_index, vm_step_start, vm_step)`, `(block_number)`, `(block_number, tx_index, vm_step_start, vm_step)` |
 | `contracts` | `(address)` [pkey], `(deployer)`, `(block_number)` |
 | `token_balance` | `(token_address, owner_address)` [pkey], `(owner_address)`, `(block_number)` — lead with `token_address` for holders-of-a-token, `owner_address` for balances-of-an-address |
@@ -85,7 +85,7 @@ Addresses in literals must be **lowercased** (no checksum casing) and prefixed `
 | Chain | Block time | Blocks per minute | Per hour | Per day | Per week |
 |-------|-----------|-------------------|----------|---------|----------|
 | Ethereum (1) | 12 s | 5 | 300 | 7,200 | 50,400 |
-| Base (8453) | 2 s | 30 | 1,800 | 43,200 | 302,400 |
+| Base (8453) | 0.2 s (measured 2026-11-12; was 2 s) | 300 | 18,000 | 432,000 | 3,024,000 |
 | Optimism (10) | 2 s | 30 | 1,800 | 43,200 | 302,400 |
 | Arbitrum One (42161) | ~0.25 s | 240 | 14,400 | 345,600 | 2,419,200 |
 | Polygon PoS (137) | ~2 s | 30 | 1,800 | 43,200 | 302,400 |
@@ -163,6 +163,9 @@ Full SQL templates in the sibling file. Index (pick via this table or §7, then 
 | P16 | Anomaly vs baseline | sudden drop / spike vs recent norm (window `LAG`/rolling `AVG`) |
 | P17 | Allowance exposure (`token_allowance`) | who can spend whose tokens; large / unlimited approvals to a spender |
 | P18 | Network health (`block` headers) | blocks/s, block time, TPS, gas/s, gas used %, base fee, head age — per chain, now or hourly |
+| P19 | Incident: who gained and who lost (`incidents.md`) | net token movement per address over an attacker's transactions |
+| P20 | Incident: who else runs the code (`incidents.md`) | contracts with the same bytecode up to constants, and their proxies, ranked by holdings |
+| P21 | Incident: where the money went (`incidents.md`) | hop-by-hop walk of the funds, stops at busy (exchange/bridge/pool) accounts |
 
 §4 primitives also stand alone as "patterns" for: holders/concentration (`token_balance`), live state
 (`eth_call`), mint/burn, price drift.
@@ -325,7 +328,8 @@ executes, not that the values it returns are right. Run the decode gate on the `
 5. **A hand-decoded amount matches an in-tx `token_ledger.value_delta` row** (§4 LATERAL recipe). Skip
    for wrapper-token seizes (cToken / eVault / aToken shares) and record the skip.
 6. **Every token amount carries `decimals` + `symbol`, or a scaled companion** —
-   `round(raw / pow(10::numeric, decimals), 6)`, `::numeric` base (§9). `120000007` is **120.000007
+   `raw / pow(10::numeric, decimals)` (unrounded, or 8 places or more — 6 places shows 23 WBTC sats as `0.0`),
+   `::numeric` base (§9). `120000007` is **120.000007
    USDC**, not a big number. A fix that **renames** a column needs a fresh `query-columns` before deploy.
 
 REJECTED → fix in place on the same id, re-run `validate-query` → `run-query` → `query-columns` → this

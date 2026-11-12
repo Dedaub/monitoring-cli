@@ -56,7 +56,9 @@ address — this branch does not apply.
   (`latest_token_info` / `contracts`, literal `chain_id` per branch) finds where the address lives; give
   the link for each chain it is on, then continue as above.
 
-1. **Auth:** `dedaub-monitoring entities` — if it fails, ask the user to `login` and stop. With no
+1. **Auth:** `dedaub-monitoring status` — exit 3 means not logged in (or the login expired): ask the
+   user to `login` and stop; a retry will not help. (A CLI older than 0.8.0 has no `status`: use
+   `dedaub-monitoring entities`, and a failure means the same.) With no
    browser (CI, container, remote agent), ask them instead to run `dedaub-monitoring token` where they
    are logged in and set the output as `DEDAUB_MONITORING_REFRESH_TOKEN` here. Never print the token yourself.
    Also run `dedaub-monitoring --version` once: it is the `v<version>` of the header comment (Step 5), and
@@ -69,11 +71,12 @@ address — this branch does not apply.
    `get-schema` is authoritative for tables/columns; refs supply *constants only*. Verify per chain
    (coverage varies). For money/token asks: `network_token_info` (PK `token_address`) carries
    `last_price`+`symbol`+`decimals`+`logo_*`+`presentation_symbol` — **the canonical USD-price source, kept
-   up to date; LEFT JOIN it for prices** (`latest_token_info` is metadata, no price), but `last_price` is
-   **NULL for stablecoins** (USDC/USDT/DAI are the USD quote unit → `to_usd_value` returns **0** for them;
-   pin to \$1 by address — §5 USD rule).
-   `logs.topic0` is indexed on most chains but **not Base** →
-   on Base lead with `address`, never bare `topic0`.
+   up to date; LEFT JOIN it for prices** (`latest_token_info` is metadata, no price). Stablecoins have a
+   price there (USDC/USDT/DAI ≈ 0.9998 on every chain, checked 2026-11-12), but `last_price` is the newest
+   point of a feed with **single outliers** — cross-check a USD figure that matters (§5 USD rule).
+   The `logs` topic0 index differs per chain: Ethereum `(topic0, block_number)`, Arbitrum
+   `(topic0, block_number, address)`, **Base none** → on Base lead with `address` (or with the calls,
+   `query-mode.md` §4 rule 6), never bare `topic0`.
 3. **Pick mode** (not for an address lookup — see above) — query (run + show) vs alert (deploy on
    schedule). **If the user didn't explicitly name the mode, ask via `AskUserQuestion` — do not infer it
    from phrasing.** "summarize …", "show me …",
@@ -136,6 +139,10 @@ _If no schema appears above, none is available in this environment — ask the u
 
 ## Step 1 — Read patterns, classify
 
+**Query mode — read `references/query-mode.md` first** (one page): explore through the shared probe
+query without storing anything, store only the final query; `--format tsv`; the query slots; the
+signature-macro traps (indexed flags, **signed ints decode wrongly**); the measured cost rules; prices.
+
 **Read first:** `common_query_patterns.md` — the hub (rulebook + index: §1 schema/indexes, §2 block-times,
 §3 perf rules, §5 P1–P18 index, §7 question→pattern, §8 edge cases, §9 anti-patterns, §10 checklist); skim
 `macros.md`. When writing SQL, open the two siblings it indexes: **`query_patterns.md`** (full P1–P18
@@ -158,7 +165,9 @@ Classify:
 
 Pattern menu: P1–P12 = event/call/value/aggregate; **P13** absence/staleness, **P14** drain (net USD
 out/tx), **P15** reentrancy (`is_ancestor`), **P16** anomaly (window drop/spike), **P17** allowance exposure
-(`token_allowance`), **P18** network health (block headers: blocks/s, TPS, gas, base fee). §4 primitives: holders
+(`token_allowance`), **P18** network health (block headers: blocks/s, TPS, gas, base fee), **P19–P21**
+incident (who gained and lost, who else runs the code, where the money went —
+`sample_queries/incidents.md`). §4 primitives: holders
 (`token_balance`), live state (`eth_call`), USD (`to_usd_value`), price drift.
 
 Needs protocol constants → Step 2. Protocol-agnostic → Step 4.
@@ -182,10 +191,11 @@ need the event/call identity, so look that up here.)
 
 **2b. Surgically grep** — never the whole file:
 ```bash
-grep -n -i "EventName"               references/protocols/<name>/<file>.md   # topic0
-grep -n -i "functionName\|SEL_"      references/protocols/<name>/<file>.md   # selector
-grep -n -i "<chain>\|FACTORY\|ROUTER" references/protocols/<name>/<file>.md  # address
+rg -n -i "EventName"                 references/protocols/<name>/<file>.md   # topic0
+rg -n -i "functionName|SEL_"         references/protocols/<name>/<file>.md   # selector
+rg -n -i "<chain>|FACTORY|ROUTER"    references/protocols/<name>/<file>.md   # address
 ```
+(No `rg` on the machine → `grep -n -i -E` with the same patterns.)
 The `## Quick-copy detection constants` block has topics/selectors/per-chain addresses as `\x`-literals —
 usually all you need, but it **drops `indexed` flags**: for any decoded param take the full flagged
 signature from the `## 1. Topics` table (indexed params fill `topic1..3` in declaration order; the rest are
@@ -214,7 +224,8 @@ or the event isn't listed. Dispatch `references/agents/web-fallback.md`. Never r
 |-------|-------|--------|----------|
 | Ethereum | 12s | **7d** | 50,400 |
 | BNB | 3s | **2d** | 57,600 |
-| Polygon / Optimism / Base / Avalanche | ~2s | **24h** | 43,200 |
+| Polygon / Optimism / Avalanche | ~2s | **24h** | 43,200 |
+| Base | ~0.2s (measured 2026-11-12) | **24h** | 432,000 — 10× the scan of a 2-s chain: start a busy contract at 3h in query mode |
 | Arbitrum | ~0.25s | **3h** | 43,200 |
 
 Alert mode: this is the macro `duration=`. Query mode: the `block_number BETWEEN MAX-N AND MAX` predicate (§2).
@@ -291,19 +302,27 @@ Write PG SQL from the §5 skeleton + grepped constants + scope guard + Step 4 st
 - **Exclude reverts:** `outer_transaction.status=true` or `committed AND error IS NULL` (unless reverts
   are the point).
 - Addresses lowercase `\x` bytea in WHERE; topics full 32-byte; even hex digits (40 addr / 64 word).
-- **Readable output:** `concat('0x', encode(col,'hex'))` for addresses/hashes (bare `encode` lacks `0x`;
-  WHERE literals stay `\x`).
+- **Readable output:** in the stored query, `concat('0x', encode(col,'hex'))` for addresses/hashes (bare
+  `encode` lacks `0x`; WHERE literals stay `\x`). While you explore, select them raw: the CLI already
+  prints `bytea`/address/hash columns as `0x…`.
+- **Every result column has its own name** — alias each aggregate (`max(a) AS max_a`). The API returns a
+  row as an object, so of two columns named `max` one value is lost.
 - **Signal identity — prefer signature form; annotate any raw literal.** Write event/call filters with the
   signature-string macro forms (`inputs='0x<addr>.Event(type indexed name,…)'`,
   `{{<chain>.transaction_detail("fnName(type name,…)")}}`) so the SQL names what it watches — `indexed`
   flags must be exact (macros.md footgun). Raw `\x` topic0/selector literals stay for **all-forks** scans
   (one topic0 = every fork) — but EVERY raw literal carries an inline `-- EventName(types)` /
   `-- fnName(types)` comment, no exceptions.
-- **SQL cannot compute a keccak hash** — never call `keccak(…)`/`keccak256(…)`/`digest(…)` (pgcrypto is
-  not installed; core `md5()`/`sha256()` exist but are not keccak). topic0/selectors are always
-  precomputed: hand the signature to the macro, or paste a literal from the ref or the fallback agent —
-  `WHERE l.topic0 = '\x<64hex>'::bytea  -- EventName(types)`. Full function surface in
-  `references/database/decode_primitives.md`.
+- **Signed ints (`intN`) in a signature form decode WRONGLY** (platform bug, 2026-11-12: the decimal value
+  is read as hex — positive values too). The CLI warns. Decode such a word by hand from `data`/`calldata`
+  (`query-mode.md` §3 recipe) — never with `hex_to_numeric`, which is not exact from 2^128 up.
+- **SQL cannot compute a keccak hash** — the server has no `keccak(…)`/`keccak256(…)`/`digest(…)`
+  (pgcrypto is not installed; core `md5()`/`sha256()` are not keccak). topic0/selectors are precomputed:
+  hand the signature to the macro, paste a literal from the ref or the fallback agent —
+  `WHERE l.topic0 = '\x<64hex>'::bytea  -- EventName(types)` — or, through CLI 0.8.0+, write
+  `selector('fn(types)')`, `topic0('Event(types)')` or `keccak256('text')` with a **string** argument: the
+  CLI replaces the call with the literal and keeps the call in a comment before it sends or stores the
+  SQL. Full function surface in `references/database/decode_primitives.md`.
 - **Call monitoring filters `call_opcode = 'CALL'`** by default (`transaction_detail` has one row per
   *frame*: a proxy call also yields a DELEGATECALL frame with the same calldata → double-counted proxies,
   implementation addresses matched). Drop it deliberately — and say so in the header comment — when the
@@ -339,14 +358,18 @@ Write PG SQL from the §5 skeleton + grepped constants + scope guard + Step 4 st
   amount, losing digits past `2^53`. LEFT JOIN so rows survive a missing
   price (NULL, not a silent 0). `<chain>.to_usd_value(raw, token)` is the one-call convenience (decimals +
   price internally) but **silently returns 0 for any unpriced token** — reserve it for quick one-offs where
-  every token is known-priced. **Stablecoins carry NO price** — `last_price` is **NULL** for USDC/USDT/DAI (the
-  USD quote unit), so `to_usd_value` returns **0** for them (silently zeroing the commonest collateral). Pin
-  stables to \$1 **by address**: `COALESCE(nti.last_price::numeric, CASE WHEN token = ANY(ARRAY['\x…usdc…'::bytea,
+  every token is known-priced. **Stablecoins are priced** — USDC/USDT/DAI `last_price` ≈ 0.9998 on every
+  chain (checked 2026-11-12), and `to_usd_value` works for them. Keep a \$1 pin **by address** only as the
+  fallback for a NULL price: `COALESCE(nti.last_price::numeric, CASE WHEN token = ANY(ARRAY['\x…usdc…'::bytea,
   '\x…usdt…'::bytea]) THEN 1.0 END)` — **never** a blanket `COALESCE(…, 1)` (misvalues a genuinely unpriced
   *volatile* token at \$1). Verify per chain which collaterals are NULL before trusting a USD sum.
+  **Outliers and spoofs:** `last_price` is the newest point of `common.historical_token_price`, and that
+  feed has single outlier points (AAVE 25.57 against ≈117 for about an hour on 2026-11-12); spoof tokens
+  get made-up prices too. For volume, price only the leg that is a known quote asset; for a USD figure
+  that matters, cross-check one row (decode gate Check 8).
   **Now vs then:** `last_price` is *current* price; for value **at the time of an event** or **over time**
   (historical/backtested USD, stablecoin depeg, mcap/supply trends) use `common.historical_token_price`
-  (as-of nearest-prior `ts`, §4) — which **does** price stablecoins.
+  (as-of nearest-prior `ts`, §4; for a past event in query mode take the nearest sample on either side — in a fast market the prior one can be an hour old, `query-mode.md` §5) — which **does** price stablecoins.
 - **Token not in the event** → resolve in-tx from `token_ledger` (the moved token's row whose
   `value_delta` = the event amount), not a registry. Prefer this over TABLE+ref.
 - Macros: `duration=` for the window; signature forms preferred (the signal-identity rule above; macro adds
@@ -366,8 +389,11 @@ Write PG SQL from the §5 skeleton + grepped constants + scope guard + Step 4 st
 dedaub-monitoring validate-query   --id <ID>     # instant compile check: syntax/columns/types/macros
 dedaub-monitoring explain-query    --id <ID>     # FREE real PG plan (plans, doesn't run) — verify index lead + no seq-scans BEFORE paying for a run
 dedaub-monitoring preprocess-query --id <ID>     # only if validate fails: macro→SQL expansion
-dedaub-monitoring run-query --id <ID> --duration <w> --limit 200 --timeout 30   # exec; killed at 30s
+dedaub-monitoring run-query --id <ID> --duration <w> --limit 200 --timeout 30 --format tsv   # exec; killed at 30s
 ```
+`--format tsv` (CLI 0.8.0+) prints the rows exact and uncut; the default table cuts cells to the terminal
+width. `run-query` waits by itself for one of the account's 3 query slots (`--wait`, exit 4 when none
+frees): never wrap it in sleep/retry loops, never cancel a task you did not start.
 Iterate `write-query` → `validate-query` on the **same id** until valid before paying for a run.
 **`explain-query --id <ID>` returns the real PG plan** (the same one app.dedaub.com shows) — run it in the
 gate right after `validate`: it's **free** (plans, doesn't execute) and catches the planner mistakes that
@@ -424,14 +450,24 @@ Checks 4 and 5 need a probe run, so they sit in Tier 2; the numbering is stable 
   float collapse; Check 1 clean ⇒ JOIN fan-out / aliasing. Passes only if the header comment declares the
   amount fixed.
 - **Check 6 — raw amount without its unit.** Every token amount ships `decimals` **and** `symbol`, or a
-  scaled companion: `round(raw / pow(10::numeric, lti.decimals), 6)` — the **`::numeric` base is
+  scaled companion: `raw / pow(10::numeric, lti.decimals)` (unrounded, or `round(…, 8)` or more — at 6
+  places 23 WBTC sats show as `0.0`) — the **`::numeric` base is
   load-bearing** (`pow(10, decimals)` returns `double precision` and re-floats the amount).
   `120000007` is **120.000007 USDC**; `958080000000000000` is **0.958080 USUAL**. A fix that **renames**
   a projected column invalidates the alert-column proof above — re-run `query-columns` and update
   `--unique-key` / `--alert-template`.
+- **Check 7 — signed int from a signature macro.** The CLI printed "signed int in a … signature" → every
+  such column is wrong. Hand-decode it (`query-mode.md` §3), and prove one row: its value equals the raw
+  word read from `data`/`calldata` (a known tx, or one value with an expected sign and size).
+- **Check 8 — USD that you cannot explain.** A USD column far from the economics (a pool with billions of
+  volume, a liquidation bonus far from 1.02–1.10, two legs of one swap far apart) is a price problem: an
+  outlier point or a spoof token — or round trips (V4 flash accounting: ±swaps in one `unlock` add gross
+  volume with no net flow; say so in the header). For volume, price only the quote-asset leg; else check one row against a
+  second source (the other leg, the protocol's oracle via `eth_call`, the 6-hour median of
+  `common.historical_token_price`).
 
-**Tier 2 — one probe query id `/<slug>/Probe`, four statements run in turn** (only if Tier 1 flags, or
-the SQL hand-decodes `log.data`). Each statement opens with the same `WITH probe AS (…)` prelude, and
+**Tier 2 — the shared probe query `/_cli/Probe` (`query-mode.md` §1), four statements run in turn**
+through stdin, nothing stored (only if Tier 1 flags, or the SQL hand-decodes `log.data`). Each statement opens with the same `WITH probe AS (…)` prelude, and
 the probe CTE **adds `block_number`, `tx_index`, `log_index` and the raw `bytea` token address** — the
 house style projects a readable `tx_hash` and a `symbol`, so those four are otherwise absent.
 
@@ -452,12 +488,16 @@ deploy with the limitation in the header comment.
 
 ### Mode tail
 
-**Query mode** — **own folder per query** (same discipline as alert mode; never dump into a shared
-`/_scratch`). Name the folder with the **same canonical slug** `<Signal>-<Subject>-<Chain>` as alert mode
+**Query mode** — **explore without storing, store only the final query** (`query-mode.md` §1). Every
+exploration, discovery and probe statement runs through the shared probe `/_cli/Probe` with the SQL on
+stdin (`run-query --id <PROBE_ID> --format tsv <<'SQL' … SQL`): nothing is stored, and no folder is made
+for a question you only explore. The final answer gets its **own folder** (same discipline as alert
+mode; never dump into a shared `/_scratch`). Name the folder with the **same canonical slug**
+`<Signal>-<Subject>-<Chain>` as alert mode
 (see the Alert-mode §1 slug rules below) — multiple protocols or chains join with `+` in Step 0(b) priority
 order (`Liquidations-AaveV3-Base+Arbitrum`). **The query inside takes a short role name only — never the
-slug:** a single query → `Query`; a P12 split → `Detail` (row VIEW) + `Summary` (reader); the decode
-gate's Tier 2 probe → `Probe`. The folder carries the identity; the SQL name stays short.
+slug:** a single query → `Query`; a P12 split → `Detail` (row VIEW) + `Summary` (reader). The folder
+carries the identity; the SQL name stays short.
 ```bash
 dedaub-monitoring create-folder "/<slug>"            # e.g. /Liquidations-AaveV3-Base+Arbitrum
 dedaub-monitoring create-query  "/<slug>/Query"      # role name only → /<slug>/Query; reuse the id all session (no deletes)
@@ -467,7 +507,7 @@ dedaub-monitoring write-query --id <ID> <<'SQL'
 <SQL>
 SQL
 dedaub-monitoring validate-query --id <ID>           # gate (above) — iterate write→validate on the same id
-dedaub-monitoring run-query      --id <ID> --limit 200 --timeout 30
+dedaub-monitoring run-query      --id <ID> --limit 200 --timeout 30 --format tsv
 dedaub-monitoring query-columns  --id <ID>           # decode gate (above) — verify the VALUES before you show them
 # REJECTED → write-query → validate-query → run-query → query-columns → gate again (≤2 rounds)
 ```
@@ -492,7 +532,7 @@ slug+folder. Show results + SQL + the query path/id + UI link (Step 6).
    `LargeTransfers-USDC-Ethereum`. Then `create-folder "/<slug>"` → `create-query "/<slug>/<Name>"` where
    **`<Name>` is the query's short role only — never the slug** (the folder already carries it): a single
    alert → `Alert`; a P12 split → `Detail` (row VIEW) + `Summary` (reader); the decode gate's Tier 2
-   probe → `Probe`; each `{{ref()}}` lookup → a short role noun (`View`/`Tbl`, or e.g. `Markets`). So `/Liquidations-MorphoBlue-Base/Alert`, not
+   probe runs through the shared `/_cli/Probe` (nothing stored); each `{{ref()}}` lookup → a short role noun (`View`/`Tbl`, or e.g. `Markets`). So `/Liquidations-MorphoBlue-Base/Alert`, not
    `/Liquidations-MorphoBlue-Base/Liquidations-MorphoBlue-Base`. `write-query`, run the gate
    (validate → run), iterate on the **same id** (no deletes). Before deploy, `query-columns --id <ID>` and
    confirm every `--unique-key` and every `--alert-template {{var}}` is in the output (most common deploy failure).
@@ -540,6 +580,8 @@ last widget is on the dashboard, run `arrange-dashboard --id <DID>`: it puts the
 | `…/sample_queries/common_query_patterns.md` | always (Step 1) — hub: schema, indexes, perf rules, pattern index, anti-patterns, checklist |
 | `…/database/query_patterns.md` | Step 5 — full P1–P18 SQL templates (indexed by the hub §5) |
 | `…/sample_queries/network_health.md` | Step 5 — validated 9-chain network-health set (P18): snapshot, hourly series, tx activity, tx-type mix, Ethereum builders, plus the dashboard recipe |
+| `…/query-mode.md` | **Query mode, first** — explore through the shared probe, store only the final query; `--format tsv`, query slots, signature-macro traps (signed ints), measured cost rules, prices |
+| `…/sample_queries/incidents.md` | Step 5 — incident set (P19–P21), each run on a real drain: who gained and lost, who else runs the code, where the money went |
 | `…/database/decode_primitives.md` | Step 5 — decode/enrich cheat-sheet (hub §4) |
 | `…/decode-verification.md` | **Step 5 — decode gate** (after the tuning loop, both modes): the numbered checks, the probe SQL, the fix recipes |
 | `…/database/macros.md` | Step 1/5 — macros, VIEW/`ref`/INCREMENTAL, CLI notes |

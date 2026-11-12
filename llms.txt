@@ -25,7 +25,8 @@
 - `tree` — show your query file tree
 - `create-folder` / `create-query` — create folders and queries
 - `write-query` / `read-query` — set or print a query's SQL
-- `run-query` — execute a query and print results
+- `status` — check the login (exit 3 when not logged in) and the query slots in use
+- `run-query` — execute a query and print results (`--format tsv|json` exact and uncut; waits for a query slot, exit 4 after `--wait`)
 - `get-schema` — show available tables, columns, and macros
 - `enable-alerts` / `disable-alerts` / `list-alerts` — manage alert notifications
 - `get-logs` / `get-alerts` — inspect execution logs and fired alerts

@@ -92,7 +92,7 @@ fan-out.
 
 ```sql
     repaid_assets::text                                      AS repaid_assets_raw,
-    round(repaid_assets / pow(10::numeric, lti.decimals), 6) AS repaid_assets_scaled,
+    repaid_assets / pow(10::numeric, lti.decimals)           AS repaid_assets_scaled,
     lti.symbol
 ```
 
@@ -102,6 +102,8 @@ double precision)` and returns `double precision`, which floats the amount again
 is `numeric`.
 
 Verified output: `120000007` → `120.000007` USDC; `958080000000000000` → `0.958080` USUAL.
+Do not round to 6 places: `round(…, 6)` shows 23 WBTC sats (8 decimals) as `0.0`. Leave the value
+unrounded, or round to 8 places or more.
 
 **This recipe renames the column.** `repaid_assets` becomes `repaid_assets_raw` plus
 `repaid_assets_scaled`. In alert mode the old name may sit in a `--unique-key` or an
@@ -110,15 +112,42 @@ Verified output: `120000007` → `120.000007` USDC; `958080000000000000` → `0.
 alert-column proof in `SKILL.md` Step 5 runs *before* this gate, so it does not cover a rename this
 gate causes. Keeping the original name on the scaled column avoids the problem altogether.
 
+### Check 7 — Signed int decoded by a signature macro (blocker)
+
+The signature forms of `logs(...)` and `transaction_detail(...)` decode every `intN` parameter wrongly
+(`database/macros.md`, "The second footgun"). CLI 0.8.0+ prints `Warning: … signed int in a …
+signature` for each such parameter. Every column it names is wrong, also when the value is positive.
+
+**Fix:** decode the word by hand with the `::bit(64)` recipe of `query-mode.md` §3. **Prove one row:**
+take a known transaction (or one row of the result) and compare the hand-decoded value with the raw
+word (`encode(substring(l.data FROM 32*k + 1 FOR 32), 'hex')`): the sign and the size must agree.
+Verified (Uniswap v4 `Swap`, tx `0x19c648d9…5041`): `amount0` 6374323655908029818, `amount1`
+-13038636581, `tick` -200092 from the recipe; the macro gave 29353607643129683548184, -1306616096129
+and -2097298.
+
+### Check 8 — A USD value that the economics do not explain (blocker)
+
+`network_token_info.last_price` is the newest point of a feed with single outliers (AAVE showed 25.57
+against about 117 for about an hour on 2026-11-12), and spoof tokens get made-up prices (one fake
+"Tether" pool showed 790 billion USD of volume). Look at the USD columns against what the event means:
+a liquidation's collateral USD over its debt USD is about 1.02 to 1.10; the two legs of one swap are
+within a few percent; no new pool has billions of volume.
+
+**Fix:** for volume, price only the leg that is a known quote asset (WETH, USDC, USDT, DAI, WBTC,
+cbBTC, wstETH, …). Else check one row against a second source — the other leg, the protocol's own
+oracle through `eth_call`, or the median of the last 6 hours of `common.historical_token_price` — and
+say in the header comment which price the query uses.
+
 ---
 
-## Tier 2 — one probe query id, four statements
+## Tier 2 — the shared probe query, four statements
 
 Run Tier 2 when Tier 1 flags, **or** when the SQL decodes `log.data` by hand.
 
-Create the probe with `create-query "/<slug>/Probe"` — a short role name in the query's own folder,
-like `Query`, `Alert`, `Detail` and `Summary`. Reuse its id for all four statements: `write-query`
-one statement, `run-query`, then overwrite with the next. Never delete it and never spawn siblings.
+Use the shared probe `/_cli/Probe` (`query-mode.md` §1): send each statement on stdin to
+`run-query --id <PROBE_ID> --format tsv`. That runs it without storing it, so nothing is written and
+no folder is made. (A CLI older than 0.8.0 or a session with no probe: `create-query "/<slug>/Probe"`
+in the query's own folder, `write-query` one statement, `run-query`, then overwrite with the next.)
 
 **Every statement below opens with the same prelude. Paste it at the head of each one:**
 
@@ -317,7 +346,7 @@ column naming.
 |---|---|
 | Re-decoding the ABI inside SQL | No keccak primitive exists in the documented schema. A placeholder check is worse than none. |
 | Cross-checking against an RPC | `eth_call` reads **current** state at tip and costs one RPC per row. It cannot re-read a historical amount. |
-| A USD plausibility threshold | Any figure is arbitrary, and `to_usd_value` **silently returns 0** for unpriced tokens, notably stablecoins. Check 4 gives an exact bound instead. |
+| A fixed USD plausibility threshold | Any figure is arbitrary, and `to_usd_value` **silently returns 0** for an unpriced token. Check 4 gives an exact bound; Check 8 compares USD with the economics of the event, not with a fixed number. |
 | Detecting wrong `indexed` flags | Wrong flags give **silent 0 rows** (`database/macros.md`), and the tuning loop already requires ≥1 row. The empirical gate covers it. |
 | Changing the CLI or the wire format | The precision loss happens **before** the CLI. The value arrives already floated. |
 | A new CLI subcommand | Every check runs on `query-columns` output, `run-query` output, or the probe query. |

@@ -6,6 +6,7 @@ import json
 import os
 import select
 import shutil
+import signal
 import sys
 import time
 from importlib.resources import as_file, files
@@ -17,7 +18,7 @@ import typer
 from rich.console import Console
 from rich.markup import escape
 
-from monitoring_cli import output, widgets
+from monitoring_cli import output, slots, sqltools, widgets
 from monitoring_cli.auth import (
     AuthError,
     DeviceFlowExpiredError,
@@ -31,6 +32,7 @@ from monitoring_cli.client import (
     ConflictError,
     MonitoringClient,
     NotFoundError,
+    QueryCapError,
     resolve_folder_id,
     resolve_query_id,
 )
@@ -52,6 +54,10 @@ from monitoring_cli.version import cli_version
 app = typer.Typer(help="Dedaub Monitoring CLI")
 err = Console(stderr=True)
 out = Console()
+
+# Exit codes that a harness can act on. Other failures exit 1; bad arguments 2.
+EXIT_NOT_LOGGED_IN = 3  # `status` only: log in first, a retry will not help
+EXIT_SLOTS_BUSY = 4  # run-query: no query slot became free within --wait
 
 
 def _print_version(value: bool) -> None:
@@ -107,7 +113,9 @@ def _exit_error(e: Exception) -> NoReturn:
     raise typer.Exit(1)
 
 
-def _load_client(profile_name: str | None) -> tuple[MonitoringClient, Profile]:
+def _load_client(
+    profile_name: str | None, not_logged_in_exit: int = 1
+) -> tuple[MonitoringClient, Profile]:
     env_token = os.environ.get(REFRESH_TOKEN_ENV)
     try:
         if env_token:
@@ -120,13 +128,170 @@ def _load_client(profile_name: str | None) -> tuple[MonitoringClient, Profile]:
         ), profile
     except NotLoggedInError:
         err.print("Not logged in. Run: dedaub-monitoring login")
-        raise typer.Exit(1)
+        raise typer.Exit(not_logged_in_exit)
     except ProfileNotFoundError as e:
         err.print(str(e))
-        raise typer.Exit(1)
+        raise typer.Exit(not_logged_in_exit)
     except ConfigError as e:
         err.print(f"{e}\nRun: dedaub-monitoring login")
-        raise typer.Exit(1)
+        raise typer.Exit(not_logged_in_exit)
+
+
+def _raise_interrupt(signum: int, frame: object) -> None:
+    raise KeyboardInterrupt
+
+
+def _revoke_on_termination() -> None:
+    """A harness that gives up on a command sends SIGTERM (or SIGHUP), not
+    Ctrl-C. Treat both like Ctrl-C, so the server task is revoked and does
+    not hold one of the account's query slots after the command is gone."""
+    for name in ("SIGTERM", "SIGHUP"):
+        sig = getattr(signal, name, None)
+        if sig is not None:
+            with contextlib.suppress(ValueError, OSError):
+                signal.signal(sig, _raise_interrupt)
+
+
+def _prepare_sql(query_text: str) -> str:
+    """Replace the SQL helpers the server does not have (selector('sig'),
+    topic0('sig'), keccak256('text')) with their hash, and warn about
+    signature parameters that the platform's macros decode wrongly."""
+    new_text, rewrites = sqltools.rewrite_helpers(query_text)
+    for r in rewrites:
+        err.print(
+            f"Rewrote {r.call} to {r.literal}",
+            markup=False,
+            highlight=False,
+            soft_wrap=True,
+        )
+    signed: dict[str, list[str]] = {}
+    for macro, param in sqltools.signed_int_params(new_text):
+        signed.setdefault(macro, []).append(param.text)
+    for macro, params in signed.items():
+        err.print(
+            f"Warning: {', '.join(params)}: signed int in a {macro}(...) signature. "
+            "The platform's signature macros decode signed ints wrongly (they read "
+            "the decimal value as hex), so these columns are wrong. Decode them "
+            "from the raw data/calldata words instead.",
+            markup=False,
+            highlight=False,
+            soft_wrap=True,
+        )
+    return new_text
+
+
+def _explain_empty_result(
+    client: MonitoringClient,
+    query_text: str,
+    query_id: int,
+    entity_id: int,
+    network: str | None,
+    duration: str,
+    end_time: str | None,
+) -> None:
+    """After an empty result, count the logs of each logs(...) signature's
+    topic0 in the same window, by any emitter (forks too), and print whether
+    the indexed flags or the address are the likely cause."""
+    for m in sqltools.macro_signatures(query_text)[:3]:
+        if m.macro != "logs" or m.signature is None:
+            continue
+        chain = m.chain or network
+        if chain is None:
+            continue
+        sig = m.signature
+        t0 = sqltools.topic0(sig)
+        args = f"duration='{m.duration}'" if m.duration else ""
+        check = _layout_count_sql("any", chain, args, t0, None)
+        if sig.address:
+            # A separate sample through the (address, block) index: in a
+            # sample of a busy topic0 the address can be missing.
+            check += "\nUNION ALL\n" + _layout_count_sql(
+                "address", chain, args, t0, sig.address
+            )
+        try:
+            rows = client.execute_query(
+                check,
+                query_id,
+                entity_id,
+                network=network,
+                default_duration=duration,
+                default_start_time=end_time,
+                limit=20,
+                poll_timeout=30,
+                cap_wait=30,
+                slot_dir=slots.STATE_DIR,
+            )
+        except Exception:
+            err.print(
+                f"(Could not count the logs of {sig.canonical} to explain the empty result.)"
+            )
+            continue
+        err.print(
+            _empty_result_note(sig, t0, rows),
+            markup=False,
+            highlight=False,
+            soft_wrap=True,
+        )
+
+
+_LAYOUT_SAMPLE = 10000
+
+
+def _layout_count_sql(
+    scope: str, chain: str, args: str, t0: str, address: str | None
+) -> str:
+    where = f"l0.topic0 = '\\x{t0[2:]}'::bytea"
+    if address:
+        where += f" AND l0.address = '\\x{address[2:]}'::bytea"
+    return (
+        f"(SELECT '{scope}' AS scope, (l.topic1 IS NOT NULL)::int"
+        " + (l.topic2 IS NOT NULL)::int + (l.topic3 IS NOT NULL)::int AS n_indexed,"
+        " count(*) AS n\n"
+        " FROM (SELECT l0.topic1, l0.topic2, l0.topic3"
+        f" FROM {{{{{chain}.logs({args})}}}} l0 WHERE {where}"
+        f" LIMIT {_LAYOUT_SAMPLE}) l GROUP BY 2)"
+    )
+
+
+def _layouts(rows: list[dict]) -> str:
+    total = sum(int(r["n"]) for r in rows)
+    sample = f" (a sample of {_LAYOUT_SAMPLE:,})" if total >= _LAYOUT_SAMPLE else ""
+    parts = ", ".join(
+        f"{int(r['n'])} with {int(r['n_indexed'])} indexed"
+        for r in sorted(rows, key=lambda r: -int(r["n"]))
+    )
+    return f"{total} logs{sample}: {parts}"
+
+
+def _empty_result_note(sig: sqltools.Signature, t0: str, rows: list[dict]) -> str:
+    written = sig.indexed_count
+    head = f"No rows. {sig.canonical} (topic0 {t0}) in this window:"
+    anywhere = [r for r in rows if r.get("scope") == "any"]
+    here = [r for r in rows if r.get("scope") == "address"]
+    if not any(int(r["n"]) for r in anywhere):
+        return (
+            f"{head} no log from any emitter either, so the window or the event "
+            "is the cause, not the indexed flags."
+        )
+    flags = (
+        f"Your signature marks {written} argument(s) as indexed. The macro matches "
+        "topics by these flags, so a wrong layout returns no rows: fix the flags."
+    )
+    if sig.address:
+        if not any(int(r["n"]) for r in here):
+            return (
+                f"{head} none from {sig.address}, but {_layouts(anywhere)} from other "
+                "emitters (forks or other deployments). Check the address, or drop "
+                "it and filter on topic0 to see them all."
+            )
+        if not any(int(r["n_indexed"]) == written for r in here):
+            return f"{head} {sig.address} emitted {_layouts(here)}. {flags}"
+    elif not any(int(r["n_indexed"]) == written for r in anywhere):
+        return f"{head} {_layouts(anywhere)}. {flags}"
+    return (
+        f"{head} logs with your indexed layout exist ({_layouts(here or anywhere)}), "
+        "so the flags are not the cause: check the other conditions."
+    )
 
 
 def _env_client(
@@ -274,6 +439,22 @@ def token(profile: ProfileOption = None) -> None:
         err.print("Not logged in. Run: dedaub-monitoring login")
         raise typer.Exit(1)
     typer.echo(stored)
+
+
+@app.command()
+def status(profile: ProfileOption = None) -> None:
+    """Check the login and the query slots in use. Exit 0 when logged in; exit 3 when not logged in or the login expired (run `dedaub-monitoring login`: a retry will not help)."""
+    client, _ = _load_client(profile, not_logged_in_exit=EXIT_NOT_LOGGED_IN)
+    try:
+        me = client.get_me()
+        active = client.get_active_queries()
+    except SessionExpiredError:
+        err.print(_session_expired_message())
+        raise typer.Exit(EXIT_NOT_LOGGED_IN)
+    except Exception as e:
+        _exit_error(e)
+    typer.echo(f"Logged in as {me['username']} (entity {me['entity_id']}).")
+    typer.echo(f"Query slots in use: {len(active)} of {slots.slot_count()}.")
 
 
 @app.command()
@@ -590,6 +771,7 @@ def write_query(
         if not query_text.strip():
             err.print("No query text provided. Pass as argument or pipe via stdin.")
             raise typer.Exit(1)
+    query_text = _prepare_sql(query_text)
     client, _ = _load_client(profile)
     try:
         qid = _resolve_query(client, id, path, entity_id)
@@ -651,7 +833,7 @@ def run_query(
     end_time: Annotated[
         str | None,
         typer.Option(
-            help="END of the window (ISO 8601), e.g. 2025-01-01T12:00:00Z. The query reads [end-time - duration, end-time]. Omit for now."
+            help="END of the window (ISO 8601), e.g. 2025-01-01T12:00:00Z. The query reads \\[end-time - duration, end-time]. Omit for now."
         ),
     ] = None,
     start_time: Annotated[
@@ -668,12 +850,29 @@ def run_query(
             help="Max seconds to wait before killing the query (the server task is revoked, not just local polling). Tuning budget: ~30 fast, 120 absolute max."
         ),
     ] = 1800.0,
+    fmt: Annotated[
+        str,
+        typer.Option(
+            "--format",
+            help="table (for a person; cut to the terminal width), tsv or json (one object per line): exact and uncut, for agents and scripts.",
+        ),
+    ] = "table",
+    wait: Annotated[
+        float,
+        typer.Option(
+            help="Max seconds to wait for a free query slot when the account already runs its limit of concurrent queries (exit 4 after that). Do not wrap run-query in retry loops."
+        ),
+    ] = 300.0,
 ) -> None:
-    """Execute a query and print results. Requires --id. Pass SQL as argument or via stdin; omit to run the stored query text. The window is [--end-time - --duration, --end-time]. Ctrl-C (or hitting --timeout) revokes the server-side task."""
+    """Execute a query and print results. Requires --id. Pass SQL as argument or via stdin; omit to run the stored query text. The window is \\[--end-time - --duration, --end-time]. Ctrl-C (or hitting --timeout) revokes the server-side task. Rows go to stdout; notes go to stderr."""
     if end_time is not None and start_time is not None:
         err.print(
             "Pass only --end-time. --start-time is a deprecated alias of it, not a window start."
         )
+        raise typer.Exit(2)
+    _revoke_on_termination()
+    if fmt not in output.RESULT_FORMATS:
+        err.print(f"--format must be one of: {', '.join(output.RESULT_FORMATS)}.")
         raise typer.Exit(2)
     end_time = end_time if end_time is not None else start_time
     client, _ = _load_client(profile)
@@ -681,6 +880,7 @@ def run_query(
         query_text, entity_id = _resolve_query_text_and_owner(
             client, id, query_text, entity_id
         )
+        query_text = _prepare_sql(query_text)
         results = client.execute_query(
             query_text,
             id,
@@ -692,7 +892,24 @@ def run_query(
             offset=offset,
             poll_timeout=timeout,
             on_start=lambda tid: err.print(f"task {tid} (Ctrl-C to cancel)"),
+            cap_wait=wait,
+            on_cap_wait=lambda: err.print(
+                f"All query slots are in use: waiting up to {wait:.0f}s for a free one."
+            ),
+            slot_dir=slots.STATE_DIR,
         )
+    except QueryCapError as e:
+        active: list[str] = []
+        with contextlib.suppress(Exception):
+            active = client.get_active_queries()
+        err.print(
+            f"{e} Running tasks: {', '.join(active) or 'none reported'}. "
+            "They can belong to other sessions of this account: do not cancel a "
+            "task you did not start. Try again later, or raise --wait.",
+            markup=False,
+            soft_wrap=True,
+        )
+        raise typer.Exit(EXIT_SLOTS_BUSY)
     except KeyboardInterrupt:
         err.print("Cancelled — server task revoked.")
         raise typer.Exit(130)
@@ -706,7 +923,21 @@ def run_query(
         raise typer.Exit(1)
     except Exception as e:
         _exit_error(e)
-    output.format_query_results(results)
+    lossy = output.format_query_results(results, fmt=fmt)
+    if fmt != "table":
+        err.print(f"{len(results)} row(s)", highlight=False)
+    if lossy:
+        err.print(
+            f"Note: {lossy} value(s) are 2^53 or larger. The API sends numbers as "
+            "JSON floats, so their last digits are lost. Select exact amounts as "
+            "text (amount::text).",
+            highlight=False,
+            soft_wrap=True,
+        )
+    if not results and offset == 0:
+        _explain_empty_result(
+            client, query_text, id, entity_id, network, duration, end_time
+        )
 
 
 @app.command()
@@ -1068,6 +1299,7 @@ def preprocess_query(
         query_text, entity_id = _resolve_query_text_and_owner(
             client, id, query_text, entity_id
         )
+        query_text = _prepare_sql(query_text)
         result = client.preview_query(query_text, id, entity_id, network)
     except NotFoundError as e:
         err.print(str(e))
@@ -1100,6 +1332,7 @@ def explain_query(
         query_text, entity_id = _resolve_query_text_and_owner(
             client, id, query_text, entity_id
         )
+        query_text = _prepare_sql(query_text)
         lines = client.explain_query(query_text, id, entity_id, network)
     except NotFoundError as e:
         err.print(str(e))
@@ -1129,6 +1362,7 @@ def validate_query(
         query_text, entity_id = _resolve_query_text_and_owner(
             client, id, query_text, entity_id
         )
+        query_text = _prepare_sql(query_text)
         client.validate_query(query_text, id, entity_id, network)
     except NotFoundError as e:
         err.print(str(e))
@@ -1158,6 +1392,7 @@ def query_columns(
         query_text, entity_id = _resolve_query_text_and_owner(
             client, id, query_text, entity_id
         )
+        query_text = _prepare_sql(query_text)
         columns = client.query_columns(query_text, id, entity_id, network)
     except NotFoundError as e:
         err.print(str(e))

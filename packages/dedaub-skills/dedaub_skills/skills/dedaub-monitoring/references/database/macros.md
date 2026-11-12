@@ -21,7 +21,7 @@ anti-patterns. Its two siblings hold the bulk: **`query_patterns.md`** (§5 P1�
 
 | Macro | Grain | Use for |
 |-------|-------|---------|
-| `{{<chain>.outer_transaction(duration=)}}` | 1 / top-level tx | `tx_hash`,`callvalue`,`status`,`from_a`/`to_a`,`input` — entry-call, ETH value |
+| `{{<chain>.outer_transaction(duration=)}}` | 1 / top-level tx | `tx_hash`,`callvalue`,`status`,`from_a`/`to_a` (no `input` column: the input is the step-0 frame's `calldata`) — entry-call, ETH value |
 | `{{<chain>.transaction_detail(duration=,inputs=)}}` | 1 / call frame | `from_a`/`to_a`/`calldata`/`callvalue`/`error`/`call_opcode`/`caller_vm_step_stack` — internal calls, selectors. Takes `duration=` + `inputs=` like `logs`, plus the signature-string forms (below). |
 | `{{<chain>.logs(duration=,inputs=)}}` | 1 / emitted log | events by topic0 + emitter |
 | `{{<chain>.token_ledger(...)}}` / `{{<chain>.token_transfers(...)}}` | parsed token deltas | value analytics (`value_delta` signed: `> 0` = `address` sent, `< 0` = received) > decoding `logs.data` |
@@ -52,6 +52,11 @@ anti-patterns. Its two siblings hold the bulk: **`query_patterns.md`** (§5 P1�
 - **`{{<chain>.eth_call("<addr>.fn(argtype arg)", outputs="( rettype output0 )")}}`** — live
   on-chain view call at tip → `<chain>.eth_call(addr,'sig(returns)',args_jsonb)`; returns a tuple
   (`output0`/`[0]`). **One RPC/row** → small sets only; for balances use `token_balance`.
+  The target contract is a `bytea` column (as text: "function eth_call(text, …) does not exist").
+  Arguments: an `address` goes as `'0x…'` text, a `uint` as a JSON **number** (a numeric column; a string
+  fails), and a `bytes32` cannot be passed at all ("Unable to complete eth_call" in every form). Write
+  bare column names (`"oracle.getAssetPrice(address asset)"`, not `t.oracle`/`t.asset` — that fails with
+  an empty error). A revert returns NULL. Several outputs → several columns: use it in `FROM … LATERAL`.
 - **`{{is_ancestor("a","b")}}` / `{{is_parent("a","b")}}`** — call-frame ancestry predicates joining two
   `transaction_detail` aliases in one tx (`a` is ancestor / direct parent of `b`). Reentrancy / nested-call
   (§5 P15). *Not incremental control.*
@@ -97,14 +102,15 @@ A raw topic0 catches a protocol **and all forks** at once (one `PoolCreated` top
 Arbitrum), skips the unused `decode_event` join, and sidesteps the `indexed` footgun — use it when you want
 **every fork** or only need presence, not decoded args:
 ```sql
-FROM {{arbirum.logs(duration='7d')}} l
+FROM {{arbitrum.logs(duration='7d')}} l
 WHERE l.topic0 = '\x<event_topic0>'::bytea  -- EventName(type,type,…)
 ```
 **Every raw `\x` topic0/selector literal carries an inline `-- EventName(types)` /
 `-- fnName(types)` comment — no exceptions.** An unannotated 32-byte literal is unreviewable.
 
-**topic0 index — verify per chain.** Most chains carry a `(topic0, block_number, address)` btree on `logs`
-(topic0-first is index-fast); **Base was observed without it** → on Base lead with `address`. Check with
+**topic0 index — verify per chain.** The layout differs (2026-11-12): Ethereum `(topic0, block_number)`,
+Arbitrum `(topic0, block_number, address)` (descending); **Base has none** → on Base lead with `address`,
+or with the calls (`../query-mode.md` §4 rule 6). Check with
 `get-schema --network <c> --table logs` (or §1.1). Pair topic0 with a `duration=`/block bound regardless.
 
 ### No usable identity anywhere → proxy event
@@ -121,7 +127,17 @@ WHERE l.topic0 = '\x<event_topic0>'::bytea  -- EventName(type,type,…)
 signature form is the preferred default, this is THE footgun to respect: take signatures verbatim from the
 protocol ref (which records the flags), and confirm with `preprocess-query` (render must show
 `topicN is not null` + `"indexed": true`). If the flags are uncertain and unverifiable, fall back to the
-annotated raw-`topic0` form — wrong flags lose silently, a raw topic0 can't.
+annotated raw-`topic0` form — wrong flags lose silently, a raw topic0 can't. CLI 0.8.0+ explains an empty
+result: it counts the logs of the topic0 by any emitter and names the cause (flags, address or window).
+
+**The second footgun — signed ints decode wrongly** (platform bug, measured 2026-11-12). For every `intN`
+parameter or output (`int24 tick`, `int128 amount0`, `int256 amountSpecified`, also inside a tuple) both
+signature forms render `hex_to_numeric(input->>'<param>')`, but the decoder returns signed ints as decimal
+strings: the column holds the decimal digits read as hex (`16202927503` → `1520461575427`; a Uniswap v4
+`tick` of `-200092` → `-2097298`). Address, bool and bytes parameters are correct; unsigned ones are correct below 2^128 (the macro reads
+them with `hex_to_numeric`, which loses the last digits from 2^128 up). CLI 0.8.0+
+warns. Decode the word by hand with the `::bit(64)` recipe in `../query-mode.md` §3, and prove one row
+(decode gate Check 7).
 
 ## Materialization (`set-config --materialize`)
 
@@ -149,7 +165,8 @@ annotated raw-`topic0` form — wrong flags lose silently, a raw topic0 can't.
   (measured: `logs(duration='1h', start_time='…T12:00:00Z')` → the same 11:00–12:00 blocks);
   `--start-time` survives only as a hidden, deprecated alias of `--end-time`. Not allowed in a scheduled run.
 - **No `delete-query`**; `delete-folder` (`--path`) refuses non-empty folders → can't clean up. Fix in place
-  via `write-query`; reuse one `/_scratch/probe` for probing. (`create-folder` = positional PATH;
+  via `write-query`; probe through the shared `/_cli/Probe` with SQL on stdin, which stores nothing
+  (`../query-mode.md` §1). (`create-folder` = positional PATH;
   `delete-folder`/`rename-folder` = `--path`/`--new-path`.)
 - Materialization/notify config is **per-network** (`--network` on `set-config`/`get-config`/`enable-alerts`/
   `disable-alerts`/`list-alerts`). For a **network-agnostic** query (no `network=` — slot injects the chain)
