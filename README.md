@@ -316,9 +316,10 @@ A widget is a saved chart, table or single value of one query; a dashboard is a 
 
 | Command | Description |
 |---------|-------------|
-| `check-widget` | Check a widget like the Visualize tab: config keys and values, the axes the type needs, the query's columns. Exits 1 with one line per problem |
-| `preview-widget` | Run the SQL the dashboard runs for the widget and print its rows (`--sql` prints the SQL only; Ctrl-C or `--timeout` revokes the task) |
-| `create-widget` | Save a widget of a query (`--query-id`, `--type`, `--x`/`--y`/`--y1`, `--series-by`, `--x-label`/`--y-label`, `--timeframe`, `--config FILE\|-`, `--dashboard-id`); runs the checks first |
+| `check-widget` | Check a widget like the Visualize tab: config keys and values, the options of the type, the axes the type needs, the query's columns and their types. Exits 1 with one line per problem |
+| `preview-widget` | Read the rows the dashboard reads for the widget, print sample rows and a summary of what the chart draws, with the web chart's notes (`--sql` prints the SQL only) |
+| `render-widget` | Draw the widget with the web app's own chart code in a headless browser and save a PNG (needs the `render` extra: Playwright). `--upload` stores the card picture of a saved widget |
+| `create-widget` | Save a widget of a query (`--query-id`, `--type`, `--x`/`--y`/`--y1`, `--series-by`, `--x-label`/`--y-label`, `--timeframe`, `--percent`, `--horizontal`, `--prefix`/`--suffix`, `--line-style` (also `stacked`), `--config FILE\|-`, `--dashboard-id`); runs the checks first |
 | `update-widget` | Change a widget on every dashboard that has it; the flags merge into the saved config, `--clear KEY` removes a key |
 | `get-widget` / `list-widgets` | Show a widget (JSON), or list your widgets (`--query-id`, `--dashboard-id`) |
 | `delete-widget` | Delete a widget (it leaves every dashboard) |
@@ -328,13 +329,26 @@ A widget is a saved chart, table or single value of one query; a dashboard is a 
 | `delete-dashboard` | Delete a dashboard; its widgets stay saved unless `--delete-widgets` |
 | `set-layout` | Set the place and size of widgets on the 12-column grid (`--layout FILE\|-`, a JSON list of `{widget_id, x, y, width, height}`) |
 | `set-default-dashboard` | Set the dashboard that `/dashboard` opens (`--id`), or `--clear` it |
+| `share-widget` / `widget-private-queries` | Share a widget with everyone (`--public`, it makes its private queries public too) or `--private`; list those queries first (`--dry-run` lists them and changes nothing) |
+| `publish-dashboard` | Make a dashboard and its private queries public in one step (`--dry-run` lists them) |
+| `widget-picture` / `dashboard-picture` | Download the stored picture (`--theme dark\|light`) and say whether it is stale |
 
 ```bash
 dedaub-monitoring check-widget   --query-id 123 --type line --x day --y volume_usd --y-label 'Volume (\$)'
 dedaub-monitoring preview-widget --query-id 123 --type line --x day --y volume_usd --timeframe 7d
+dedaub-monitoring render-widget  --query-id 123 --type line --x day --y volume_usd   # widget-draft-dark.png
 dedaub-monitoring create-widget  --query-id 123 --type line --x day --y volume_usd --label '**Daily volume**'
 dedaub-monitoring add-widget     --id 456 --dashboard-id 78
 ```
+
+`render-widget` needs Playwright and a browser:
+
+```bash
+uv tool install --force --with-executables-from playwright 'monitoring-cli[render] @ git+https://github.com/Dedaub/monitoring-cli'
+playwright install chromium        # or use an installed Chrome: --browser-channel chrome
+```
+
+`--with-executables-from playwright` puts the `playwright` command on your PATH: `uv tool install` links only the executables of the main package. `make install` and `make setup` install without the render extra: use the line above, or `make install-render`, when you need `render-widget`.
 
 The widget types and every config key are in the skill's [`references/widgets.md`](packages/dedaub-skills/dedaub_skills/skills/dedaub-monitoring/references/widgets.md).
 

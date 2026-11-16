@@ -4,21 +4,24 @@ import contextlib
 import datetime
 import json
 import os
+import re
 import select
 import shutil
 import signal
 import sys
 import time
+from collections.abc import Iterator
 from importlib.resources import as_file, files
 from pathlib import Path, PurePosixPath
 from typing import Annotated, Any, NamedTuple, NoReturn
+from urllib.parse import urlsplit
 
 import httpx
 import typer
 from rich.console import Console
 from rich.markup import escape
 
-from monitoring_cli import output, slots, sqltools, widgets
+from monitoring_cli import chartdata, output, render, slots, sqltools, widgets
 from monitoring_cli.auth import (
     AuthError,
     DeviceFlowExpiredError,
@@ -30,6 +33,7 @@ from monitoring_cli.auth import (
 )
 from monitoring_cli.client import (
     ConflictError,
+    ForbiddenError,
     MonitoringClient,
     NotFoundError,
     QueryCapError,
@@ -58,6 +62,9 @@ out = Console()
 # Exit codes that a harness can act on. Other failures exit 1; bad arguments 2.
 EXIT_NOT_LOGGED_IN = 3  # `status` only: log in first, a retry will not help
 EXIT_SLOTS_BUSY = 4  # run-query: no query slot became free within --wait
+EXIT_NO_PICTURE = 5  # widget-picture, dashboard-picture: no picture is stored yet
+EXIT_RENDER_FAILED = 6  # render-widget: the page said "error", timed out, or is missing
+EXIT_NO_BROWSER = 7  # render-widget: Playwright is not installed, or no browser starts
 
 
 def _print_version(value: bool) -> None:
@@ -109,7 +116,7 @@ def _exit_error(e: Exception) -> NoReturn:
     if isinstance(e, SessionExpiredError):
         err.print(_session_expired_message())
     else:
-        err.print(f"Error: {e}")
+        err.print(f"Error: {escape(str(e))}")  # server text can hold "[/x]"
     raise typer.Exit(1)
 
 
@@ -1823,26 +1830,40 @@ def _config_input(source: str | None) -> dict:
     return widgets.normalize_config(data)
 
 
-def _flag_config(
-    x: str | None,
-    y: str | None,
-    y1: str | None,
-    series_by: str | None,
-    x_label: str | None,
-    y_label: str | None,
-    timeframe: str | None,
-) -> dict:
-    """The config keys that the flags set. An empty value clears the key."""
-    pairs = {
-        "x_axis_name": x,
-        "y_axis_name": y,
-        "y1_axis_name": y1,
-        "series_by": series_by,
-        "x_label": x_label,
-        "y_label": y_label,
-        "timeframe": timeframe,
+# The config flags of check-widget, preview-widget, create-widget and
+# update-widget: the parameter name of each one and the config key it sets.
+_FLAG_KEYS = {
+    "x": "x_axis_name",
+    "y": "y_axis_name",
+    "y1": "y1_axis_name",
+    "series_by": "series_by",
+    "x_label": "x_label",
+    "y_label": "y_label",
+    "timeframe": "timeframe",
+    "combine": "combine",
+    "order_by": "order_by",
+    "sorting_order": "sorting_order",
+    "scale": "scale",
+    "number_format": "number_format",
+    "prefix": "prefix",
+    "suffix": "suffix",
+    "decimals": "decimals",
+    "line_style": "line_style",
+    "transform": "transform",
+    "percent": "percent",
+    "horizontal": "horizontal",
+}
+
+
+def _flag_config(params: dict[str, Any]) -> dict:
+    """The config keys that the flags set, from the parameters of a widget
+    command (call it with `locals()` first thing). An empty value clears the
+    key. config_problems checks the values."""
+    return {
+        key: params[name]
+        for name, key in _FLAG_KEYS.items()
+        if params.get(name) is not None
     }
-    return {k: v for k, v in pairs.items() if v is not None}
 
 
 _ALERT_CATEGORY = "ALERT"
@@ -1921,25 +1942,35 @@ def _widget_columns(client: MonitoringClient, query: dict) -> list[dict]:
     ]
 
 
+class _Checked(NamedTuple):
+    """The checks of a draft: problems (each one blocks a save), notes, and
+    the facts that the column types tell about the chart."""
+
+    problems: list[str]
+    notes: list[str]
+    facts: list[str]
+
+
 def _widget_problems(
     client: MonitoringClient, draft: _Draft, check_columns: bool = True
-) -> tuple[list[str], list[str]]:
-    """The problems (each one blocks a save) and the notes of a draft."""
+) -> _Checked:
+    """The problems, the notes and the facts of a draft."""
     problems = widgets.config_problems(draft.widget_type, draft.config)
+    problems += widgets.draw_problems(draft.widget_type, draft.config)
     notes = widgets.config_notes(draft.widget_type, draft.config)
     axis = widgets.missing_axis(draft.widget_type, draft.config)
     if axis:
         problems.append(axis)
     if not check_columns:
-        return problems, notes
+        return _Checked(problems, notes, [])
     if draft.query is None:
         notes.append("The widget reads no query, so the column check was skipped.")
-        return problems, notes
+        return _Checked(problems, notes, [])
     try:
         columns = _widget_columns(client, draft.query)
     except (httpx.HTTPStatusError, PermissionError) as e:
         problems.append(f"Cannot read the query columns: {e}")
-        return problems, notes
+        return _Checked(problems, notes, [])
     if not columns:
         notes.append(
             "The query metadata has no columns, so the column check was skipped."
@@ -1947,7 +1978,10 @@ def _widget_problems(
     names = [c["name"] for c in columns]
     for name in widgets.columns_not_in_query(draft.config, names, draft.widget_type):
         problems.append(f"The query has no column {name!r}.")
-    return problems, notes
+    facts, type_notes = widgets.column_type_notes(
+        draft.widget_type, draft.config, columns
+    )
+    return _Checked(problems, notes + type_notes, facts)
 
 
 def _print_problems(problems: list[str], notes: list[str]) -> None:
@@ -2027,6 +2061,80 @@ _TimeframeOpt = Annotated[
     str | None,
     typer.Option(
         "--timeframe", help="Time range the widget reads: 24h, 7d, 30d or 60d"
+    ),
+]
+_CombineOpt = Annotated[
+    str | None,
+    typer.Option(
+        "--combine",
+        help="Rows that share an X become one point by: sum, mean, median, min, max, count (combine; lines and bars)",
+    ),
+]
+_OrderByOpt = Annotated[
+    str | None,
+    typer.Option(
+        "--order-by",
+        help="x (default) or y: put the X categories in the order of Y (order_by; lines and bars)",
+    ),
+]
+_SortingOrderOpt = Annotated[
+    str | None,
+    typer.Option("--sorting-order", help="ASC or DESC (sorting_order)"),
+]
+_ScaleOpt = Annotated[
+    str | None, typer.Option("--scale", help="Y scale: linear or log (scale)")
+]
+_NumberFormatOpt = Annotated[
+    str | None,
+    typer.Option(
+        "--number-format",
+        help="compact, full, currency or percent (number_format)",
+    ),
+]
+_PrefixOpt = Annotated[
+    str | None,
+    typer.Option(
+        "--prefix",
+        help="Unit text before each value: tile, axis, tooltip (prefix), e.g. '$'",
+    ),
+]
+_SuffixOpt = Annotated[
+    str | None,
+    typer.Option(
+        "--suffix",
+        help="Unit text after each value: tile, axis, tooltip (suffix); type the space: ' ETH'",
+    ),
+]
+_DecimalsOpt = Annotated[
+    str | None,
+    typer.Option("--decimals", help="Digits after the decimal point, 0-20 (decimals)"),
+]
+_LineStyleOpt = Annotated[
+    str | None,
+    typer.Option(
+        "--line-style",
+        help="line, area, step or stacked (stacked areas, one per --series-by value) (line_style; line only)",
+    ),
+]
+_PercentOpt = Annotated[
+    bool | None,
+    typer.Option(
+        "--percent/--no-percent",
+        help="A 100% stack: each series as its share of the total (percent; stackedbar, or line with --line-style stacked)",
+    ),
+]
+_HorizontalOpt = Annotated[
+    bool | None,
+    typer.Option(
+        "--horizontal/--no-horizontal",
+        help="Bars on their side, categories down the left: for long labels (horizontal; bar, stackedbar)",
+    ),
+]
+_TransformOpt = Annotated[
+    str | None,
+    typer.Option(
+        "--transform",
+        help="none, ma7, mean, ewma, bollinger (line only), cum, index or pct (transform; lines and bars)",
     ),
 ]
 _ConfigOpt = Annotated[
@@ -2170,6 +2278,17 @@ def update_dashboard(
     except NotFoundError as e:
         err.print(str(e))
         raise typer.Exit(1)
+    except httpx.HTTPStatusError as e:
+        if e.response.status_code == 400 and _PRIVATE_QUERIES.search(str(e)):
+            # dashboard.py update_dashboard: a public dashboard cannot read a
+            # private query. The publish route makes them public together.
+            err.print(
+                f"Error: {escape(str(e))}\nRun `dedaub-monitoring publish-dashboard --id {id}`: it lists"
+                " the private queries and makes them public with the dashboard"
+                " (--dry-run lists them only)."
+            )
+            raise typer.Exit(1)
+        _exit_error(e)
     except Exception as e:
         _exit_error(e)
     typer.echo(f"Updated dashboard {id}.")
@@ -2370,20 +2489,32 @@ def check_widget(
     x_label: _XLabelOpt = None,
     y_label: _YLabelOpt = None,
     timeframe: _TimeframeOpt = None,
+    combine: _CombineOpt = None,
+    order_by: _OrderByOpt = None,
+    sorting_order: _SortingOrderOpt = None,
+    scale: _ScaleOpt = None,
+    number_format: _NumberFormatOpt = None,
+    prefix: _PrefixOpt = None,
+    suffix: _SuffixOpt = None,
+    decimals: _DecimalsOpt = None,
+    line_style: _LineStyleOpt = None,
+    transform: _TransformOpt = None,
+    percent: _PercentOpt = None,
+    horizontal: _HorizontalOpt = None,
     config: _ConfigOpt = None,
     clear: _ClearOpt = None,
 ) -> None:
-    """Check a widget like the web Visualize tab: config keys and values, the axes the type needs, and the columns of the query. Prints each problem and exits 1 when there is one. Takes --id, or --query-id and --type."""
+    """Check a widget like the web Visualize tab: config keys and values, the options of the type, the axes the type needs, and the columns of the query and their types. Does not run the query. Prints each problem and exits 1 when there is one. Takes --id, or --query-id and --type."""
+    flags = _flag_config(locals())
     if id is None:
         _require_new_widget_args(query_id, widget_type)
     config_input = _config_input(config)
-    flags = _flag_config(x, y, y1, series_by, x_label, y_label, timeframe)
     client, _ = _load_client(profile)
     try:
         draft = _widget_draft(
             client, id, query_id, widget_type, label, config_input, flags, clear
         )
-        problems, notes = _widget_problems(client, draft)
+        problems, notes, facts = _widget_problems(client, draft)
     except typer.Exit:
         raise
     except NotFoundError as e:
@@ -2395,6 +2526,8 @@ def check_widget(
     if problems:
         raise typer.Exit(1)
     out.print("[green]✓[/] valid")
+    for fact in facts:
+        typer.echo(fact)
     output.format_query_metadata(
         {
             "type": draft.widget_type,
@@ -2421,56 +2554,64 @@ def preview_widget(
     x_label: _XLabelOpt = None,
     y_label: _YLabelOpt = None,
     timeframe: _TimeframeOpt = None,
+    combine: _CombineOpt = None,
+    order_by: _OrderByOpt = None,
+    sorting_order: _SortingOrderOpt = None,
+    scale: _ScaleOpt = None,
+    number_format: _NumberFormatOpt = None,
+    prefix: _PrefixOpt = None,
+    suffix: _SuffixOpt = None,
+    decimals: _DecimalsOpt = None,
+    line_style: _LineStyleOpt = None,
+    transform: _TransformOpt = None,
+    percent: _PercentOpt = None,
+    horizontal: _HorizontalOpt = None,
     config: _ConfigOpt = None,
     clear: _ClearOpt = None,
     limit: Annotated[
         int | None,
         typer.Option(
-            help=f"Max rows (max 500). Default: {widgets.CHART_ROWS} for a chart, {widgets.TABLE_ROWS} for a table"
+            help=f"Max rows to read. Default and max for a chart: {widgets.CHART_ROWS}; for a table: {widgets.TABLE_ROWS} (max {widgets.PAGE_ROWS})"
         ),
     ] = None,
+    show_rows: Annotated[
+        int | None,
+        typer.Option(
+            "--show-rows",
+            help=f"Rows to print (0: none). Default: {_SHOWN_ROWS} for a chart, all for a table. The summary counts all the rows read",
+        ),
+    ] = None,
+    refresh: Annotated[
+        bool,
+        typer.Option(
+            "--refresh",
+            help="A chart reads its rows through the API's shared 15-minute cache, as the dashboard does; read the database again",
+        ),
+    ] = False,
     timeout: Annotated[
         float,
-        typer.Option(help="Max seconds to wait; then the server task is revoked"),
+        typer.Option(help="Max seconds to wait for the rows"),
     ] = 120.0,
     sql: Annotated[
         bool,
         typer.Option("--sql", help="Print the SQL the widget runs, and do not run it"),
     ] = False,
 ) -> None:
-    """Run the SQL that the dashboard runs for a widget and print its rows: the query's table through ref(), or the query text when ref() cannot find the query. Takes --id, or --query-id and --type. Ctrl-C (or --timeout) revokes the server task."""
+    """Read the rows that the dashboard reads for a widget, and print a summary of what the chart draws (the X axis, the series, the rows it cannot draw) and the web chart's notes. A chart reads the query's table through ref() (or the query text when ref() cannot find the query) with the dashboard's row cap and cache; a table reads one page. Takes --id, or --query-id and --type."""
+    flags = _flag_config(locals())
     if id is None:
         _require_new_widget_args(query_id, widget_type)
+    _check_limit(limit, widget_type)
     config_input = _config_input(config)
-    flags = _flag_config(x, y, y1, series_by, x_label, y_label, timeframe)
     client, _ = _load_client(profile)
-    try:
+    # Known for sure after the draft (a saved widget has its own type).
+    kind = {"table": widget_type == "table"}
+    with _read_errors(kind):
         draft = _widget_draft(
             client, id, query_id, widget_type, label, config_input, flags, clear
         )
-        problems, notes = _widget_problems(client, draft, check_columns=False)
-        if draft.query is None:
-            problems.append("The widget reads no query, so it has no rows to preview.")
-        if problems:
-            _print_problems(problems, notes)
-            raise typer.Exit(1)
-        assert draft.query is not None
-        query = draft.query
-        try:
-            columns = _widget_columns(client, query)
-        except (httpx.HTTPStatusError, PermissionError) as e:
-            # The dashboard reads the rows without the columns too.
-            err.print(
-                f"[yellow]Note:[/] cannot read the query columns: {escape(str(e))}"
-            )
-            columns = []
-        ref_sql, text_sql = widgets.widget_sqls_of(
-            query=query,
-            columns=columns,
-            widget_type=draft.widget_type,
-            config=draft.config,
-            timeframe=draft.config.get("timeframe"),
-        )
+        kind["table"] = draft.widget_type == "table"
+        columns, ref_sql, text_sql = _checked_sqls(client, draft, limit)
         if sql:
             typer.echo(ref_sql)
             if text_sql is not None:
@@ -2478,10 +2619,80 @@ def preview_widget(
                 typer.echo(text_sql)
             return
         rows_limit = limit or (
-            widgets.TABLE_ROWS if draft.widget_type == "table" else widgets.CHART_ROWS
+            widgets.TABLE_ROWS if kind["table"] else widgets.CHART_ROWS
         )
+        rows, read = _read_rows(
+            client, draft, ref_sql, text_sql, rows_limit, refresh, timeout
+        )
+    _print_preview(draft, rows, rows_limit, show_rows, read)
 
-        def run(statement: str) -> list[dict]:
+
+def _check_limit(limit: int | None, widget_type: str | None) -> None:
+    """Exit 2 on a --limit out of range. With no known type, the widest range
+    (a table's page, or a chart) is the bound; _checked_sqls checks again with
+    the type of the draft."""
+    if limit is None:
+        return
+    if widget_type is None:
+        max_rows = max(widgets.PAGE_ROWS, widgets.CHART_ROWS)
+    else:
+        max_rows = widgets.PAGE_ROWS if widget_type == "table" else widgets.CHART_ROWS
+    if not 1 <= limit <= max_rows:
+        what = f"for a {widget_type}" if widget_type else "for a widget"
+        err.print(f"--limit must be from 1 to {max_rows} {what}.")
+        raise typer.Exit(2)
+
+
+def _checked_sqls(
+    client: MonitoringClient, draft: _Draft, limit: int | None
+) -> tuple[list[dict], str, str | None]:
+    """Check the draft as preview-widget does (exit 1 on a problem, 2 on a bad
+    --limit), then its columns and its SQL in the two forms."""
+    _check_limit(limit, draft.widget_type)
+    problems, notes, _ = _widget_problems(client, draft, check_columns=False)
+    if draft.query is None:
+        problems.append("The widget reads no query, so it has no rows to preview.")
+    _print_problems(problems, notes)
+    if problems:
+        raise typer.Exit(1)
+    assert draft.query is not None
+    try:
+        columns = _widget_columns(client, draft.query)
+    except (httpx.HTTPStatusError, PermissionError) as e:
+        # The dashboard reads the rows without the columns too.
+        err.print(f"[yellow]Note:[/] cannot read the query columns: {escape(str(e))}")
+        columns = []
+    ref_sql, text_sql = widgets.widget_sqls_of(
+        query=draft.query,
+        columns=columns,
+        widget_type=draft.widget_type,
+        config=draft.config,
+        timeframe=draft.config.get("timeframe"),
+    )
+    return columns, ref_sql, text_sql
+
+
+def _read_rows(
+    client: MonitoringClient,
+    draft: _Draft,
+    ref_sql: str,
+    text_sql: str | None,
+    rows_limit: int,
+    refresh: bool,
+    timeout: float,
+) -> tuple[list[dict], dict[str, Any]]:
+    """The rows of the widget as the dashboard reads them, and how they were
+    read ({"cached", "read_at"} for a chart). When ref() cannot find the
+    query, the rows come from the query text (widgetRows.ts:99-119)."""
+    query = draft.query
+    assert query is not None
+    is_table = draft.widget_type == "table"
+    read: dict[str, Any] = {}
+
+    def run(statement: str) -> list[dict]:
+        if is_table:
+            # A table reads pages, as the Results tab does: a task that
+            # Ctrl-C revokes.
             return client.execute_query(
                 statement,
                 query["query_id"],
@@ -2490,36 +2701,99 @@ def preview_widget(
                 poll_timeout=timeout,
                 on_start=lambda tid: err.print(f"task {tid} (Ctrl-C to cancel)"),
             )
+        # A chart reads its rows as the dashboard does (widgetRows.ts:73-97).
+        answer = client.widget_rows(
+            statement,
+            query["query_id"],
+            query["owner"]["entity_id"],
+            limit=rows_limit,
+            refresh=refresh,
+            timeout=timeout,
+        )
+        read.update(cached=answer.get("cached"), read_at=answer.get("read_at"))
+        return answer.get("rows") or []
 
-        try:
-            rows = run(ref_sql)
-        except (RuntimeError, httpx.HTTPStatusError) as e:
-            if text_sql is None or not widgets.NOT_REFERABLE.search(str(e)):
-                raise
-            err.print(
-                "ref() cannot find the query (it has no run settings): reading the query text."
-            )
-            try:
-                rows = run(text_sql)
-            except (RuntimeError, httpx.HTTPStatusError) as text_error:
-                raise RuntimeError(
-                    f"Read from the query text (the query has no run settings): {text_error}"
-                ) from text_error
+    try:
+        return run(ref_sql), read
+    except (RuntimeError, httpx.HTTPStatusError) as e:
+        if text_sql is None or not widgets.NOT_REFERABLE.search(str(e)):
+            raise
+    err.print(
+        "ref() cannot find the query (it has no run settings): reading the query text."
+    )
+    try:
+        return run(text_sql), read
+    except (RuntimeError, httpx.HTTPStatusError) as text_error:
+        raise RuntimeError(
+            f"Read from the query text (the query has no run settings): {text_error}"
+        ) from text_error
+
+
+@contextlib.contextmanager
+def _read_errors(kind: dict[str, bool]) -> Iterator[None]:
+    """The errors of a widget read, as messages and exit codes. `kind["table"]`
+    says whether the read was a task that Ctrl-C revokes."""
+    try:
+        yield
     except typer.Exit:
         raise
     except KeyboardInterrupt:
-        err.print("Cancelled — server task revoked.")
+        # A chart's read has no task: the server stops it at its own timeout.
+        err.print("Cancelled — server task revoked." if kind["table"] else "Cancelled.")
         raise typer.Exit(130)
     except TimeoutError as e:
-        err.print(f"{e} — task revoked. Shorten --timeframe, or raise --timeout.")
+        revoked = " — task revoked." if kind["table"] else "."
+        err.print(f"{escape(str(e))}{revoked} Shorten --timeframe, or raise --timeout.")
         raise typer.Exit(1)
     except NotFoundError as e:
-        err.print(str(e))
+        err.print(escape(str(e)))
         raise typer.Exit(1)
     except Exception as e:
         _exit_error(e)
-    output.format_query_results(rows)
-    _print_problems([], widgets.series_notes(draft.widget_type, draft.config, rows))
+
+
+# preview-widget prints this many rows of a chart by default: the summary
+# counts all of them, and 10,000 rows would flood the terminal.
+_SHOWN_ROWS = 20
+
+
+def _print_preview(
+    draft: _Draft,
+    rows: list[dict],
+    rows_limit: int,
+    show_rows: int | None,
+    read: dict[str, Any],
+) -> None:
+    """The sample rows, then the summary of the chart (stdout) and its notes (stderr)."""
+    if show_rows is None:
+        count = len(rows) if draft.widget_type == "table" else _SHOWN_ROWS
+    else:
+        count = max(0, show_rows)
+    shown = rows[:count]
+    if shown or not rows:
+        output.format_query_results(shown)
+    if shown and len(shown) < len(rows):
+        typer.echo(
+            f"Printed {len(shown)} of {len(rows)} rows (--show-rows N prints more)."
+        )
+    if read.get("cached"):
+        typer.echo(
+            f"The rows come from the shared 15-minute cache, read at {read.get('read_at')}"
+            " (--refresh reads the database again)."
+        )
+    try:
+        summary = chartdata.summarize(
+            draft.widget_type, draft.config, rows, limit=rows_limit
+        )
+    except (OverflowError, ValueError):
+        # A number past the float range: the summary is a help, not a gate.
+        summary = chartdata.Summary(
+            notes=["The summary is not available for these values."]
+        )
+    for fact in summary.facts:
+        typer.echo(fact)
+    notes = summary.notes + widgets.series_notes(draft.widget_type, draft.config, rows)
+    _print_problems([], notes)
 
 
 @app.command()
@@ -2543,6 +2817,18 @@ def create_widget(
     x_label: _XLabelOpt = None,
     y_label: _YLabelOpt = None,
     timeframe: _TimeframeOpt = None,
+    combine: _CombineOpt = None,
+    order_by: _OrderByOpt = None,
+    sorting_order: _SortingOrderOpt = None,
+    scale: _ScaleOpt = None,
+    number_format: _NumberFormatOpt = None,
+    prefix: _PrefixOpt = None,
+    suffix: _SuffixOpt = None,
+    decimals: _DecimalsOpt = None,
+    line_style: _LineStyleOpt = None,
+    transform: _TransformOpt = None,
+    percent: _PercentOpt = None,
+    horizontal: _HorizontalOpt = None,
     config: _ConfigOpt = None,
     dashboard_id: Annotated[
         list[int] | None,
@@ -2565,14 +2851,14 @@ def create_widget(
     ] = False,
 ) -> None:
     """Save a chart, table or value widget of a query, with the checks of check-widget first. Prints the widget ID and link."""
+    flags = _flag_config(locals())
     config_input = _config_input(config)
-    flags = _flag_config(x, y, y1, series_by, x_label, y_label, timeframe)
     client, p = _load_client(profile)
     try:
         draft = _widget_draft(
             client, None, query_id, widget_type, label, config_input, flags
         )
-        problems, notes = _widget_problems(client, draft, check_columns=not force)
+        problems, notes, _ = _widget_problems(client, draft, check_columns=not force)
         _print_problems(problems, notes)
         if problems:
             raise typer.Exit(1)
@@ -2618,6 +2904,18 @@ def update_widget(
     x_label: _XLabelOpt = None,
     y_label: _YLabelOpt = None,
     timeframe: _TimeframeOpt = None,
+    combine: _CombineOpt = None,
+    order_by: _OrderByOpt = None,
+    sorting_order: _SortingOrderOpt = None,
+    scale: _ScaleOpt = None,
+    number_format: _NumberFormatOpt = None,
+    prefix: _PrefixOpt = None,
+    suffix: _SuffixOpt = None,
+    decimals: _DecimalsOpt = None,
+    line_style: _LineStyleOpt = None,
+    transform: _TransformOpt = None,
+    percent: _PercentOpt = None,
+    horizontal: _HorizontalOpt = None,
     config: _ConfigOpt = None,
     clear: _ClearOpt = None,
     force: Annotated[
@@ -2628,14 +2926,14 @@ def update_widget(
     ] = False,
 ) -> None:
     """Change a widget on every dashboard that has it. The flags and --config merge into the saved config; --clear removes a key. Runs the checks of check-widget first. Its places stay."""
+    flags = _flag_config(locals())
     config_input = _config_input(config)
-    flags = _flag_config(x, y, y1, series_by, x_label, y_label, timeframe)
     client, p = _load_client(profile)
     try:
         draft = _widget_draft(
             client, id, query_id, widget_type, label, config_input, flags, clear
         )
-        problems, notes = _widget_problems(client, draft, check_columns=not force)
+        problems, notes, _ = _widget_problems(client, draft, check_columns=not force)
         _print_problems(problems, notes)
         if problems:
             raise typer.Exit(1)
@@ -2741,6 +3039,686 @@ def remove_widget(
     except Exception as e:
         _exit_error(e)
     typer.echo(f"Removed widget {id} from dashboard {dashboard_id}.")
+
+
+# --- render-widget: a real picture, drawn by the web app ---------------------------
+
+# The card picture of the Widgets tab (widgetPreview.ts:24-25 and :61): a JPEG of
+# 640 x 360 at quality 0.85.
+_CARD_WIDTH = 640
+_CARD_HEIGHT = 360
+_CARD_QUALITY = 85
+# backend routers/utils.py MAX_UPLOAD_FILE_SIZE
+_MAX_UPLOAD_BYTES = 2 * 1024 * 1024
+# The PNG for the agent is drawn at 2 device pixels per CSS pixel: small axis
+# labels stay readable.
+_PNG_SCALE = 2.0
+_LOCAL_HOSTS = ("localhost", "127.0.0.1", "::1")
+
+
+def _check_theme(theme: str) -> None:
+    """Exit 2 on a theme other than dark or light, before any network call."""
+    if theme not in ("dark", "light"):
+        err.print("--theme must be dark or light.")
+        raise typer.Exit(2)
+
+
+def _render_page_url(app_url: str | None, base_url: str) -> str:
+    """The render page of the web app: the app of the profile's API, or
+    --app-url (https, or http on this machine for a dev server)."""
+    url = (app_url or widgets.app_url(base_url)).rstrip("/")
+    parts = urlsplit(url)
+    local = parts.hostname in _LOCAL_HOSTS
+    if not parts.hostname or not (
+        parts.scheme == "https" or (parts.scheme == "http" and local)
+    ):
+        err.print(
+            "--app-url must be https://…, or http://localhost:<port> for a dev server."
+        )
+        raise typer.Exit(2)
+    app_host = urlsplit(widgets.app_url(base_url)).hostname
+    if not local and parts.hostname != app_host:
+        # The page gets the rows of the query: say where they go.
+        err.print(f"Warning: The rows of the query go to {escape(parts.hostname)}.")
+    return url + render.PAGE_PATH
+
+
+def _check_upload(draft: _Draft, limit: int | None = None) -> None:
+    """--upload stores the picture of the saved widget only, as the owner's
+    browser makes it: a chart, with no change from the flags, all its rows
+    (no --limit) and the query that it reads."""
+    stored = draft.stored
+    if stored is None:
+        err.print("--upload needs --id: it stores the picture of a saved widget.")
+        raise typer.Exit(2)
+    if limit is not None:
+        err.print(
+            "--upload draws all the rows that the widget reads: do not use --limit"
+            " with it."
+        )
+        raise typer.Exit(2)
+    query_id = (draft.query or {}).get("query_id")
+    if query_id is not None and query_id not in (stored.get("query_ids") or []):
+        err.print(
+            f"--upload draws the query of the saved widget, not query {query_id}."
+            " Save the change first (update-widget), or render without --upload."
+        )
+        raise typer.Exit(2)
+    saved = widgets.clean_config(widgets.normalize_config(stored.get("config") or {}))
+    if draft.config != saved or draft.widget_type != stored.get("type"):
+        err.print(
+            "--upload draws the saved widget only. Save the changes first"
+            " (update-widget), or render without --upload."
+        )
+        raise typer.Exit(2)
+    if draft.widget_type not in widgets.CHART_TYPES:
+        # widgetPreview.ts:11: a widget with no chart has no picture.
+        err.print(f"A {draft.widget_type} widget has no card picture in the web app.")
+        raise typer.Exit(2)
+
+
+@app.command()
+def render_widget(
+    profile: ProfileOption = None,
+    id: Annotated[
+        int | None, typer.Option(help="Saved widget ID (the flags change it)")
+    ] = None,
+    query_id: _WidgetQueryOpt = None,
+    widget_type: _WidgetTypeOpt = None,
+    label: _WidgetLabelOpt = None,
+    x: _XOpt = None,
+    y: _YOpt = None,
+    y1: _Y1Opt = None,
+    series_by: _SeriesByOpt = None,
+    x_label: _XLabelOpt = None,
+    y_label: _YLabelOpt = None,
+    timeframe: _TimeframeOpt = None,
+    combine: _CombineOpt = None,
+    order_by: _OrderByOpt = None,
+    sorting_order: _SortingOrderOpt = None,
+    scale: _ScaleOpt = None,
+    number_format: _NumberFormatOpt = None,
+    prefix: _PrefixOpt = None,
+    suffix: _SuffixOpt = None,
+    decimals: _DecimalsOpt = None,
+    line_style: _LineStyleOpt = None,
+    transform: _TransformOpt = None,
+    percent: _PercentOpt = None,
+    horizontal: _HorizontalOpt = None,
+    config: _ConfigOpt = None,
+    clear: _ClearOpt = None,
+    limit: Annotated[
+        int | None,
+        typer.Option(help=f"Max rows to read. Default and max: {widgets.CHART_ROWS}"),
+    ] = None,
+    refresh: Annotated[
+        bool,
+        typer.Option(
+            "--refresh",
+            help="Read the database again, not the API's shared 15-minute cache",
+        ),
+    ] = False,
+    theme: Annotated[str, typer.Option("--theme", help="dark or light")] = "dark",
+    width: Annotated[
+        int,
+        typer.Option(
+            help=f"Card width in CSS pixels, {render.MIN_SIZE}-{render.MAX_SIZE}"
+        ),
+    ] = render.DEFAULT_WIDTH,
+    height: Annotated[
+        int,
+        typer.Option(
+            help=f"Card height in CSS pixels, {render.MIN_SIZE}-{render.MAX_SIZE}"
+        ),
+    ] = render.DEFAULT_HEIGHT,
+    out_path: Annotated[
+        Path | None,
+        typer.Option(
+            "--out",
+            help="PNG file to write. Default: widget-<id or draft>-<theme>.png in the current directory",
+        ),
+    ] = None,
+    app_url: Annotated[
+        str | None,
+        typer.Option(
+            "--app-url",
+            help="Web app that draws the widget. Default: the app of the profile's API. http://localhost:<port> for a dev server",
+        ),
+    ] = None,
+    browser_channel: Annotated[
+        str | None,
+        typer.Option(
+            "--browser-channel",
+            help="chrome, msedge or chromium (the browser of `playwright install chromium`). Default: chrome, then chromium",
+        ),
+    ] = None,
+    upload: Annotated[
+        bool,
+        typer.Option(
+            "--upload",
+            help="Also store the picture as the widget's card picture of --theme (a 640x360 JPEG, as the web app makes it). Saved widget (--id) that you own, with no flag changes",
+        ),
+    ] = False,
+    timeout: Annotated[
+        float,
+        typer.Option(help="Max seconds for each step: the rows, then the page"),
+    ] = 60.0,
+) -> None:
+    """Draw a widget with the web app's own chart code in a headless browser, and save it as a PNG. It reads the rows as preview-widget does, runs the same checks and prints the same summary, then draws them on the web app's /render/widget page. Open the PNG and check it: labels, an empty plot, too many series. Takes --id, or --query-id and --type. Needs the render extra (Playwright). Exits 1 on a problem of the checks, 6 when the page cannot draw the widget, 7 when Playwright or a browser is missing."""
+    flags = _flag_config(locals())
+    if id is None:
+        _require_new_widget_args(query_id, widget_type)
+    _check_theme(theme)
+    _check_limit(limit, "chart")
+    for name, size in (("--width", width), ("--height", height)):
+        if not render.MIN_SIZE <= size <= render.MAX_SIZE:
+            err.print(f"{name} must be from {render.MIN_SIZE} to {render.MAX_SIZE}.")
+            raise typer.Exit(2)
+    config_input = _config_input(config)
+    client, p = _load_client(profile)
+    page_url = _render_page_url(app_url, p.base_url)
+    kind = {"table": False}
+    with _read_errors(kind):
+        draft = _widget_draft(
+            client, id, query_id, widget_type, label, config_input, flags, clear
+        )
+        if draft.widget_type == "table":
+            err.print("A table widget has no chart to draw: use preview-widget.")
+            raise typer.Exit(2)
+        if upload:
+            _check_upload(draft, limit)
+        columns, ref_sql, text_sql = _checked_sqls(client, draft, limit)
+        rows_limit = limit or widgets.CHART_ROWS
+        rows, read = _read_rows(
+            client, draft, ref_sql, text_sql, rows_limit, refresh, timeout
+        )
+    _print_preview(draft, rows, rows_limit, 0, read)
+    query = draft.query or {}
+    page_input: dict[str, Any] = {
+        "type": draft.widget_type,
+        "config": draft.config,
+        "rows": rows,
+        "label": draft.label or query.get("query_name") or "",
+        "theme": theme,
+        "width": width,
+        "height": height,
+    }
+    if columns:
+        page_input["columns"] = [c["name"] for c in columns]
+    shots = [render.Shot(page_input, "png", scale=_PNG_SCALE)]
+    if upload:
+        # The card of the Widgets tab shows the chart with no title.
+        card = {
+            **page_input,
+            "label": "",
+            "width": _CARD_WIDTH,
+            "height": _CARD_HEIGHT,
+        }
+        shots.append(render.Shot(card, "jpeg", scale=1.0, quality=_CARD_QUALITY))
+    try:
+        pictures = render.render(
+            page_url, shots, channel=browser_channel, timeout=timeout
+        )
+    except render.PlaywrightMissing as e:
+        err.print(escape(str(e)))
+        raise typer.Exit(EXIT_NO_BROWSER)
+    except render.RenderFailed as e:
+        err.print(f"{escape(str(e))} (page: {escape(page_url)})")
+        raise typer.Exit(EXIT_RENDER_FAILED)
+    name = draft.stored.get("widget_id") if draft.stored else "draft"
+    path = out_path or Path(f"widget-{name}-{theme}.png")
+    _write_file(path, pictures[0].data)
+    pixels = f"{round(width * _PNG_SCALE)}x{round(height * _PNG_SCALE)} px"
+    typer.echo(f"Saved {path} ({len(pictures[0].data)} bytes, PNG, {pixels}).")
+    if pictures[0].message is not None:
+        # WidgetRender.tsx: the widget shows a message, not a chart. The picture
+        # is saved so that the agent can see it; it is not uploaded.
+        err.print(
+            f"✗ The widget shows a message, not a chart: {escape(pictures[0].message)}"
+        )
+        raise typer.Exit(1)
+    if upload:
+        _upload_card(client, draft, theme, pictures[1].data)
+
+
+def _upload_card(
+    client: MonitoringClient, draft: _Draft, theme: str, picture: bytes
+) -> None:
+    assert draft.stored is not None
+    widget_id = draft.stored["widget_id"]
+    if len(picture) > _MAX_UPLOAD_BYTES:
+        err.print(
+            f"The card picture has {len(picture)} bytes; the API takes at most {_MAX_UPLOAD_BYTES}."
+        )
+        raise typer.Exit(1)
+    try:
+        url = client.upload_widget_picture(widget_id, theme, picture)
+    except ForbiddenError as e:
+        err.print(
+            f"Refused: {escape(str(e.detail or e))}. Only the owner of the widget can store its picture."
+        )
+        raise typer.Exit(1)
+    except Exception as e:
+        _exit_error(e)
+    typer.echo(
+        f"Uploaded the {theme} card picture of widget {widget_id}"
+        f" ({len(picture)} bytes, JPEG, {_CARD_WIDTH}x{_CARD_HEIGHT} px): {url}"
+    )
+
+
+# --- sharing, publishing and the stored pictures ---------------------------------
+
+# dashboard.py update_dashboard: the 400 when a public dashboard reads a private query.
+_PRIVATE_QUERIES = re.compile(r"contains private queries")
+
+
+def _query_list(queries: list[dict], ids: list[int]) -> str:
+    """`id (name)` for each of `ids`, with the names from `queries`."""
+    names = {q.get("query_id"): q.get("query_name") for q in queries}
+    return ", ".join(f"{i} ({names[i]})" if names.get(i) else str(i) for i in ids)
+
+
+def _refuse_blocked(queries: list[dict], what: str) -> None:
+    """Exit 1 when a private query cannot be made public: the server would
+    answer 403 and change nothing."""
+    blocked = [q for q in queries if not q.get("can_edit")]
+    if blocked:
+        err.print(
+            f"{len(blocked)} of the private queries cannot be made public, so the {what}"
+            " cannot be public. Nothing changed."
+        )
+        raise typer.Exit(1)
+
+
+def _publish_error(e: ConflictError | ForbiddenError, command: str) -> NoReturn:
+    """The 409 and 403 of a share or a publish (dashboard.py make_queries_public)."""
+    if isinstance(e, ConflictError):
+        err.print(
+            f"{escape(str(e.detail or 'The private queries changed.'))} Nothing changed:"
+            f" run `dedaub-monitoring {command}` again to see the new list."
+        )
+    else:
+        err.print(
+            f"Refused: {escape(str(e.detail or e))}. Only the owner can do this, and each private"
+            " query must be one that you can edit. Nothing changed."
+        )
+    raise typer.Exit(1)
+
+
+@app.command()
+def widget_private_queries(
+    id: Annotated[int, typer.Option(help="Widget ID")],
+    profile: ProfileOption = None,
+) -> None:
+    """List the private queries that a widget reads (also through ref()): share-widget --public makes them public. Owner only."""
+    client, _ = _load_client(profile)
+    try:
+        queries = client.widget_private_queries(id)
+    except NotFoundError as e:
+        err.print(escape(str(e)))
+        raise typer.Exit(1)
+    except Exception as e:
+        _exit_error(e)
+    output.format_private_queries(queries)
+
+
+@app.command()
+def share_widget(
+    id: Annotated[int, typer.Option(help="Widget ID")],
+    public: Annotated[
+        bool | None,
+        typer.Option(
+            "--public/--private",
+            help="--public: everyone who is signed in can open the widget, and its private queries become public. --private: only the owner",
+        ),
+    ] = None,
+    dry_run: Annotated[
+        bool,
+        typer.Option(
+            "--dry-run",
+            help="With --public: list the private queries that would become public; change nothing",
+        ),
+    ] = False,
+    profile: ProfileOption = None,
+) -> None:
+    """Share a widget with everyone who is signed in (--public), or make it private again (--private). --public also makes public each private query that the widget reads, also through ref(): their text, rows and alerts. It prints them first. All or nothing."""
+    if public is None:
+        err.print("Provide --public or --private.")
+        raise typer.Exit(2)
+    if dry_run and not public:
+        err.print(
+            "--dry-run needs --public: it lists the queries that would be published."
+        )
+        raise typer.Exit(2)
+    client, p = _load_client(profile)
+    queries: list[dict] = []
+    try:
+        if public:
+            queries = client.widget_private_queries(id)
+            if queries:
+                output.format_private_queries(queries)
+            _refuse_blocked(queries, "widget")
+            if dry_run:
+                if not queries:
+                    typer.echo("No private query would become public.")
+                typer.echo("Dry run: nothing changed.")
+                return
+        result = client.share_widget(id, public, [q["query_id"] for q in queries])
+    except typer.Exit:
+        raise
+    except (ConflictError, ForbiddenError) as e:
+        _publish_error(e, f"share-widget --id {id} --public")
+    except NotFoundError as e:
+        err.print(escape(str(e)))
+        raise typer.Exit(1)
+    except Exception as e:
+        _exit_error(e)
+    if not public:
+        typer.echo(f"Widget {id} is private: only its owner can open it.")
+        return
+    typer.echo(f"Widget {id} is public: everyone who is signed in can open it.")
+    made_public = result.get("public_query_ids") or []
+    if made_public:
+        typer.echo(f"These queries are public now: {_query_list(queries, made_public)}")
+    _echo_links(p.base_url, {"widget_id": id}, [])
+
+
+@app.command()
+def publish_dashboard(
+    id: Annotated[int, typer.Option(help="Dashboard ID")],
+    unlisted: Annotated[
+        bool | None,
+        typer.Option(
+            "--unlisted/--listed",
+            help="Hide the dashboard from the public list, or show it. Default: as it is",
+        ),
+    ] = None,
+    dry_run: Annotated[
+        bool,
+        typer.Option(
+            "--dry-run",
+            help="List the private queries that would become public; change nothing",
+        ),
+    ] = False,
+    profile: ProfileOption = None,
+) -> None:
+    """Make a dashboard public, and make public each private query that its widgets read (also through ref()), in one step: their text, rows and alerts. It prints them first. On an unlisted dashboard, those queries are unlisted too. All or nothing. Use this, not update-dashboard --public, when the dashboard reads a private query."""
+    client, p = _load_client(profile)
+    try:
+        stored = client.get_dashboard(id)
+        queries = client.dashboard_private_queries(id)
+        output.format_private_queries(queries)
+        _refuse_blocked(queries, "dashboard")
+        if dry_run:
+            typer.echo("Dry run: nothing changed.")
+            return
+        is_unlisted = bool(stored.get("is_unlisted")) if unlisted is None else unlisted
+        result = client.publish_dashboard(
+            id,
+            {
+                "name": stored.get("name"),
+                "description": stored.get("description"),
+                "is_public": True,
+                "is_unlisted": is_unlisted,
+                "entity_id": stored.get("entity_id"),
+                "query_ids": [q["query_id"] for q in queries],
+            },
+        )
+    except typer.Exit:
+        raise
+    except (ConflictError, ForbiddenError) as e:
+        _publish_error(e, f"publish-dashboard --id {id}")
+    except NotFoundError as e:
+        err.print(escape(str(e)))
+        raise typer.Exit(1)
+    except Exception as e:
+        _exit_error(e)
+    visibility = "public, unlisted" if is_unlisted else "public"
+    typer.echo(f"Dashboard {id} is {visibility}.")
+    made_public = result.get("public_query_ids") or []
+    if made_public:
+        typer.echo(f"These queries are public now: {_query_list(queries, made_public)}")
+    _echo_links(p.base_url, None, [id])
+
+
+# The picture columns of each theme (backend dashboard.py PREVIEW_COLUMNS): the
+# URL, the time of its upload, and the other theme's time.
+_PICTURE_KEYS = {
+    "dark": ("preview_url", "preview_updated_at", "preview_light_updated_at"),
+    "light": ("preview_url_light", "preview_light_updated_at", "preview_updated_at"),
+}
+_PICTURE_TYPES = {
+    "image/jpeg": ".jpg",
+    "image/png": ".png",
+    "image/webp": ".webp",
+    "image/svg+xml": ".svg",
+}
+# How the web app makes each picture (DashboardClient.tsx canCapture: the
+# owner's dashboard page, 1000 px wide or more, in the theme of the picture).
+_PICTURE_HOW = {
+    "widget": "The owner's visit of a dashboard that has the widget makes the picture of"
+    " the page's theme. A table or value widget has none (widgetPreview.ts:11).",
+    "dashboard": "The owner's visit of the dashboard (a window 1000 px wide or more)"
+    " makes the picture of the page's theme.",
+}
+_PICTURE_AGAIN = {
+    # widgetPreview.ts:14-15 WIDGET_PREVIEW_FRESH_MS
+    "widget": "A dashboard visit makes a new picture only when the old one is more"
+    " than 24 hours old.",
+    "dashboard": "The owner's next visit of the dashboard makes a new picture.",
+}
+# Two writes of one transaction have the same now(): a picture upload also
+# sets the row's _ts (the trigger common.updated_timestamp_func).
+_SAME_WRITE = datetime.timedelta(seconds=2)
+_ThemeOpt = Annotated[
+    str, typer.Option("--theme", help="dark or light: the picture of this theme")
+]
+_OutOpt = Annotated[
+    Path | None,
+    typer.Option(
+        "--out",
+        help="File to write. Default: <kind>-<id>-<theme>.jpg in the current directory",
+    ),
+]
+
+
+def _parse_time(value: Any) -> datetime.datetime | None:
+    if not isinstance(value, str) or not value:
+        return None
+    try:
+        moment = datetime.datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return moment if moment.tzinfo else moment.replace(tzinfo=datetime.UTC)
+
+
+def _age(moment: datetime.datetime, now: datetime.datetime) -> str:
+    seconds = max(0, int((now - moment).total_seconds()))
+    days, rest = divmod(seconds, 86_400)
+    hours, rest = divmod(rest, 3_600)
+    if days:
+        return f"{days}d {hours}h"
+    return f"{hours}h {rest // 60}m" if hours else f"{rest // 60}m"
+
+
+def _stale(
+    taken: datetime.datetime | None,
+    other: datetime.datetime | None,
+    changed: datetime.datetime | None,
+) -> str:
+    """Whether the row changed after the picture. The row's _ts also moves on
+    a share and on the upload of the other theme's picture, so a change at
+    that upload's time is not known to be a config change."""
+    if taken is None or changed is None:
+        return "unknown (no time of the picture or of the last change)"
+    if changed - taken <= _SAME_WRITE:
+        return "no"
+    if other is not None and abs(changed - other) <= _SAME_WRITE:
+        return "unknown (the last change is the upload of the other theme's picture)"
+    return (
+        f"yes: changed {_age(taken, changed)} after the picture"
+        " (a share also counts as a change)"
+    )
+
+
+def _write_file(path: Path, data: bytes) -> None:
+    """Write a picture, or stop with a clear message (exit 1), not a traceback."""
+    try:
+        path.write_bytes(data)
+    except OSError as e:
+        err.print(f"Cannot write {escape(str(path))}: {escape(str(e.strerror or e))}")
+        raise typer.Exit(1)
+
+
+def _save_picture(
+    client: MonitoringClient,
+    kind: str,
+    item_id: int,
+    record: dict,
+    theme: str,
+    out_path: Path | None,
+    changed: datetime.datetime | None,
+    unknown: str | None = None,
+) -> None:
+    """Save the stored picture of a widget or a dashboard and print its facts.
+    The commands check --theme before any network call."""
+    url_key, time_key, other_key = _PICTURE_KEYS[theme]
+    url = record.get(url_key)
+    if not url:
+        err.print(
+            f"No picture yet: only the owner's browser makes it. {_PICTURE_HOW[kind]}"
+        )
+        raise typer.Exit(EXIT_NO_PICTURE)
+    data, content_type = client.download_public(str(url))
+    extension = _PICTURE_TYPES.get(content_type, ".jpg")
+    path = out_path or Path(f"{kind}-{item_id}-{theme}{extension}")
+    _write_file(path, data)
+    now = datetime.datetime.now(datetime.UTC)
+    taken = _parse_time(record.get(time_key))
+    typer.echo(f"Saved {path} ({len(data)} bytes, {content_type or 'unknown type'}).")
+    if taken is not None:
+        utc = taken.astimezone(datetime.UTC)
+        typer.echo(f"Taken: {utc:%Y-%m-%d %H:%M} UTC ({_age(taken, now)} ago)")
+    if changed is not None:
+        utc = changed.astimezone(datetime.UTC)
+        typer.echo(f"Last change: {utc:%Y-%m-%d %H:%M} UTC")
+    stale = unknown or _stale(taken, _parse_time(record.get(other_key)), changed)
+    typer.echo(f"Stale: {stale}")
+    if stale.startswith("yes"):
+        typer.echo(_PICTURE_AGAIN[kind])
+
+
+# After the dashboard picture, the owner's browser uploads the card picture of
+# each widget it owns, one after the other (DashboardClient.tsx:420-431).
+_CARD_UPLOADS_AFTER = datetime.timedelta(minutes=10)
+
+
+def _widget_change(widget: dict) -> tuple[datetime.datetime | None, bool]:
+    """The widget's last change, and whether that change is the upload of its
+    own card picture. That upload moves the widget's _ts too
+    (common.updated_timestamp_func), so an edit before it cannot be seen."""
+    changed = _parse_time(widget.get("_ts"))
+    if changed is None:
+        return None, False
+    for key in ("preview_updated_at", "preview_light_updated_at"):
+        picture = _parse_time(widget.get(key))
+        if picture is not None and abs(changed - picture) <= _SAME_WRITE:
+            return changed, True
+    return changed, False
+
+
+def _dashboard_change(
+    dashboard: dict, dashboard_widgets: list[dict], taken: datetime.datetime | None
+) -> tuple[datetime.datetime | None, str | None]:
+    """The last change of a dashboard and its widgets, and why it is unknown.
+    A card upload in the minutes after the dashboard picture is part of the
+    same visit: it is not a change. A later card upload (the widget page,
+    the Widgets tab, `render-widget --upload`) can hide an edit."""
+    times = [_parse_time(dashboard.get("_ts"))]
+    hidden: list[tuple[datetime.datetime, int]] = []
+    for widget in dashboard_widgets:
+        changed, card = _widget_change(widget)
+        if changed is None:
+            continue
+        if not card:
+            times.append(changed)
+        elif taken is None or not (
+            taken - _SAME_WRITE <= changed <= taken + _CARD_UPLOADS_AFTER
+        ):
+            hidden.append((changed, int(widget.get("widget_id") or 0)))
+    known = max((t for t in times if t is not None), default=None)
+    late = max(hidden, default=None)
+    if (
+        late is not None
+        and taken is not None
+        and late[0] > taken + _SAME_WRITE
+        and (known is None or late[0] > known)
+    ):
+        return late[0], (
+            f"unknown (the last change of widget {late[1]} is the upload of its "
+            "card picture: an edit before it cannot be told apart)"
+        )
+    return known, None
+
+
+@app.command()
+def widget_picture(
+    id: Annotated[int, typer.Option(help="Widget ID")],
+    theme: _ThemeOpt = "dark",
+    out_path: _OutOpt = None,
+    profile: ProfileOption = None,
+) -> None:
+    """Download the stored picture of a widget (the card of the Widgets tab) and print its path, its age, and whether the widget changed after it. Only the owner's browser makes the picture; a table or value widget has none. Exits 5 when there is no picture."""
+    _check_theme(theme)
+    client, _ = _load_client(profile)
+    try:
+        widget = client.get_widget(id)
+        _save_picture(
+            client,
+            "widget",
+            id,
+            widget,
+            theme,
+            out_path,
+            _parse_time(widget.get("_ts")),
+        )
+    except typer.Exit:
+        raise
+    except NotFoundError as e:
+        err.print(escape(str(e)))
+        raise typer.Exit(1)
+    except Exception as e:
+        _exit_error(e)
+
+
+@app.command()
+def dashboard_picture(
+    id: Annotated[int, typer.Option(help="Dashboard ID")],
+    theme: _ThemeOpt = "dark",
+    out_path: _OutOpt = None,
+    profile: ProfileOption = None,
+) -> None:
+    """Download the stored picture of a dashboard (the preview of its link) and print its path, its age, and whether the dashboard or one of its widgets changed after it. Only the owner's browser makes the picture. Exits 5 when there is no picture."""
+    _check_theme(theme)
+    client, _ = _load_client(profile)
+    try:
+        dashboard = client.get_dashboard(id)
+        # The last change of a dashboard is the later of its own change and its
+        # newest widget change (dashboard.py list_dashboards updated_at).
+        taken = _parse_time(dashboard.get(_PICTURE_KEYS[theme][1]))
+        changed, unknown = _dashboard_change(
+            dashboard, client.list_widgets(dashboard_id=id), taken
+        )
+        _save_picture(
+            client, "dashboard", id, dashboard, theme, out_path, changed, unknown
+        )
+    except typer.Exit:
+        raise
+    except NotFoundError as e:
+        err.print(escape(str(e)))
+        raise typer.Exit(1)
+    except Exception as e:
+        _exit_error(e)
 
 
 # --- webhook sub-app ---

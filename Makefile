@@ -1,4 +1,4 @@
-.PHONY: setup setup-local install install-local login token format lint typecheck test check
+.PHONY: setup setup-local install install-local install-render login token format lint typecheck test check
 
 REPO := https://github.com/Dedaub/monitoring-cli
 
@@ -18,6 +18,12 @@ setup-local: install-local
 # --reinstall makes uv fetch and build again, also when the version is the same.
 install:
 	uv tool install --force --reinstall "git+$(REPO)"
+	dedaub-monitoring --version
+
+# The latest main with the render extra. --with-executables-from puts the
+# playwright command on PATH (run `playwright install chromium` after it).
+install-render:
+	uv tool install --force --reinstall --with-executables-from playwright "monitoring-cli[render] @ git+$(REPO)"
 	dedaub-monitoring --version
 
 # The CLI of this working tree, built again.

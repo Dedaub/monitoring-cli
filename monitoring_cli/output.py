@@ -423,6 +423,40 @@ def format_dashboards(
     c.print(table)
 
 
+# backend models/dashboard.py PrivateQueryReason: why a query cannot be made public.
+_PRIVATE_REASONS = {
+    "example": "an example query: it stays private",
+    "no_write": "you cannot edit it: ask its owner",
+}
+
+
+def format_private_queries(
+    queries: list[dict],
+    *,
+    console: Console | None = None,
+) -> None:
+    """The private queries that a share or a publish makes public."""
+    c = console or _console
+    if not queries:
+        c.print("No private queries.")
+        return
+    table = Table(show_header=True)
+    table.add_column("ID")
+    table.add_column("Query")
+    table.add_column("Can be made public")
+    for q in queries:
+        reason = q.get("reason")
+        can = (
+            "yes"
+            if q.get("can_edit")
+            else _PRIVATE_REASONS.get(str(reason), f"no ({reason})")
+        )
+        table.add_row(
+            str(q.get("query_id", "")), escape(str(q.get("query_name", ""))), can
+        )
+    c.print(table)
+
+
 def format_widgets(
     widgets: list[dict],
     *,
