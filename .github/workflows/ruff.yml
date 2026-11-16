@@ -25,5 +25,5 @@ jobs:
         with:
           python-version: "3.13"
           enable-cache: true
-      - run: uv run ruff check monitoring_cli tests
-      - run: uv run ruff format --check monitoring_cli tests
+      - run: uv run ruff check monitoring_cli packages/dedaub-auth tests
+      - run: uv run ruff format --check monitoring_cli packages/dedaub-auth tests

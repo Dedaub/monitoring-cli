@@ -1,19 +1,20 @@
 import stat
 
 import pytest
-
-from monitoring_cli.config import (
+from dedaub_auth.config import (
     Config,
+    ConfigError,
     NotLoggedInError,
     Profile,
     ProfileNotFoundError,
+    persist_refresh_token,
 )
 
 
 @pytest.fixture
 def config_path(tmp_path, monkeypatch):
     path = tmp_path / ".config" / "dedaub" / "monitoring.json"
-    monkeypatch.setattr("monitoring_cli.config.CONFIG_PATH", path)
+    monkeypatch.setenv("DEDAUB_CONFIG", str(path))
     return path
 
 
@@ -148,3 +149,63 @@ def test_remove_profile_raises_when_not_found(config_path):
     config = Config.load()
     with pytest.raises(ProfileNotFoundError):
         config.remove_profile("nonexistent")
+
+
+def _tok_profile(tok: str | None) -> Profile:
+    return Profile(
+        base_url="https://api.dedaub.com",
+        oidc_host="https://auth.dedaub.com",
+        client_id="watchdog-client",
+        refresh_token=tok,
+    )
+
+
+def test_dedaub_config_env_overrides_path(tmp_path, monkeypatch):
+    target = tmp_path / "elsewhere" / "cfg.json"
+    monkeypatch.setenv("DEDAUB_CONFIG", str(target))
+    Config(default="prod", profiles={"prod": _tok_profile("tok")}).save()
+    assert target.exists()
+    assert Config.load().get_profile().refresh_token == "tok"
+    # 0700 dir / 0600 file hold under the override too.
+    assert stat.S_IMODE(target.stat().st_mode) == 0o600
+    assert stat.S_IMODE(target.parent.stat().st_mode) == 0o700
+
+
+def test_default_path_without_env(tmp_path, monkeypatch):
+    monkeypatch.delenv("DEDAUB_CONFIG", raising=False)
+    target = tmp_path / "default.json"
+    monkeypatch.setattr("dedaub_auth.config.CONFIG_PATH", target)
+    Config(default="prod", profiles={}).save()
+    assert target.exists()
+
+
+def test_load_raises_config_error_when_corrupt(config_path):
+    config_path.parent.mkdir(parents=True)
+    config_path.write_text("{not json")
+    with pytest.raises(ConfigError):
+        Config.load()
+
+
+def test_persist_refresh_token_updates_only_matching(config_path):
+    Config(
+        default="prod",
+        profiles={"prod": _tok_profile("old"), "staging": _tok_profile("s")},
+    ).save()
+    assert persist_refresh_token("prod", "old", "new") is True
+    loaded = Config.load()
+    assert loaded.profiles["prod"].refresh_token == "new"
+    assert loaded.profiles["staging"].refresh_token == "s"
+    # A stale rotation (file already holds a newer login) is not written.
+    assert persist_refresh_token("prod", "old", "newer") is False
+    assert Config.load().profiles["prod"].refresh_token == "new"
+
+
+def test_persist_refresh_token_without_profile_is_noop(config_path):
+    Config(default="staging", profiles={"staging": _tok_profile("s")}).save()
+    assert persist_refresh_token("prod", "s", "y") is False
+    assert Config.load().profiles["staging"].refresh_token == "s"
+
+
+def test_persist_refresh_token_without_config_is_noop(config_path):
+    assert persist_refresh_token("prod", "a", "b") is False
+    assert not config_path.exists()

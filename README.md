@@ -67,6 +67,8 @@ This opens a browser-based OAuth2 device flow. Your credentials are stored local
 
 Login asks for an offline token, and every command stores the refreshed token it gets back, so a CLI (or an agent driving it) that runs regularly stays logged in without another browser round-trip. You only log in again after the token sits unused past the server's idle limit, or after `logout`.
 
+Credentials live in `~/.config/dedaub/monitoring.json` (mode 0600); set `DEDAUB_CONFIG` to use another file. Other Dedaub CLIs read the same file, so one login serves them all; they share the login code through the [`dedaub-auth`](packages/dedaub-auth/) package in this repository.
+
 ### Headless (CI, containers, remote agents)
 
 Log in once on a machine with a browser, then hand the token to the headless environment:

@@ -8,15 +8,11 @@ from pathlib import Path, PurePosixPath
 from typing import Any
 
 import httpx
+from dedaub_auth.auth import SessionExpiredError, TokenManager
+from dedaub_auth.config import Profile
 
 from monitoring_cli import slots
-from monitoring_cli.auth import SessionExpiredError, refresh_tokens
-from monitoring_cli.config import Profile
 from monitoring_cli.version import cli_version
-
-# Refresh the access token this many seconds before it expires, so a request
-# never leaves with a token that dies in flight.
-_EXPIRY_MARGIN = 30
 
 # Retry a GET this many times in all, after a timeout, a failed connection, or
 # one of these statuses (request timeout, bad gateway, unavailable, gateway
@@ -35,27 +31,17 @@ class MonitoringClient:
     def __init__(
         self,
         profile: Profile,
-        on_refresh_token: Callable[[str], None] | None = None,
+        on_rotate: Callable[[str | None, str], object] | None = None,
+        tokens: TokenManager | None = None,
     ) -> None:
         self._profile = profile
         self._base = profile.base_url
-        self._on_refresh_token = on_refresh_token
-        self._access_token: str | None = None
-        self._access_expires_at = 0.0
+        # Caches the access token; on_rotate(old, new) gets each new refresh
+        # token Keycloak hands back.
+        self._tokens = tokens or TokenManager(profile, on_rotate=on_rotate)
 
     def _headers(self) -> dict[str, str]:
-        if self._access_token is None or time.monotonic() >= self._access_expires_at:
-            tokens = refresh_tokens(self._profile)
-            self._access_token = tokens.access_token
-            self._access_expires_at = (
-                time.monotonic() + tokens.expires_in - _EXPIRY_MARGIN
-            )
-            rotated = tokens.refresh_token
-            if rotated and rotated != self._profile.refresh_token:
-                self._profile.refresh_token = rotated
-                if self._on_refresh_token is not None:
-                    self._on_refresh_token(rotated)
-        return {"Authorization": f"Bearer {self._access_token}"}
+        return {"Authorization": f"Bearer {self._tokens.get()}"}
 
     def _get(
         self,

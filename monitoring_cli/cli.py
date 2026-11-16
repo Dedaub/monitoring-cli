@@ -15,11 +15,7 @@ from typing import Annotated, Any, NamedTuple, NoReturn
 
 import httpx
 import typer
-from rich.console import Console
-from rich.markup import escape
-
-from monitoring_cli import output, slots, sqltools, widgets
-from monitoring_cli.auth import (
+from dedaub_auth.auth import (
     AuthError,
     DeviceFlowExpiredError,
     SessionExpiredError,
@@ -28,15 +24,7 @@ from monitoring_cli.auth import (
     start_device_flow,
     token_type,
 )
-from monitoring_cli.client import (
-    ConflictError,
-    MonitoringClient,
-    NotFoundError,
-    QueryCapError,
-    resolve_folder_id,
-    resolve_query_id,
-)
-from monitoring_cli.config import (
+from dedaub_auth.config import (
     DEFAULT_BASE_URL,
     DEFAULT_CLIENT_ID,
     DEFAULT_OIDC_HOST,
@@ -48,6 +36,19 @@ from monitoring_cli.config import (
     NotLoggedInError,
     Profile,
     ProfileNotFoundError,
+    persist_refresh_token,
+)
+from rich.console import Console
+from rich.markup import escape
+
+from monitoring_cli import output, slots, sqltools, widgets
+from monitoring_cli.client import (
+    ConflictError,
+    MonitoringClient,
+    NotFoundError,
+    QueryCapError,
+    resolve_folder_id,
+    resolve_query_id,
 )
 from monitoring_cli.version import cli_version
 
@@ -124,7 +125,7 @@ def _load_client(
         key = profile_name or config.default
         profile = config.get_profile(key)
         return MonitoringClient(
-            profile, on_refresh_token=lambda t: _store_refresh_token(key, t)
+            profile, on_rotate=lambda old, new: _store_refresh_token(key, old, new)
         ), profile
     except NotLoggedInError:
         err.print("Not logged in. Run: dedaub-monitoring login")
@@ -312,15 +313,12 @@ def _env_client(
     return MonitoringClient(profile), profile
 
 
-def _store_refresh_token(profile_name: str, refresh_token: str) -> None:
-    # Reload first so a concurrent login/logout of another profile is kept.
-    # A failed write only costs the rotation, so warn and continue.
+def _store_refresh_token(profile_name: str, old: str | None, new: str) -> None:
+    # Skipped when the file no longer holds `old` (a newer login, or the other
+    # CLI already stored its rotation). A failed write only costs the
+    # rotation, so warn and continue.
     try:
-        config = Config.load()
-        config.get_profile(profile_name).refresh_token = refresh_token
-        config.save()
-    except (NotLoggedInError, ProfileNotFoundError):
-        pass
+        persist_refresh_token(profile_name, old, new)
     except (ConfigError, OSError) as e:
         err.print(
             f"Warning: could not save the renewed login token ({e}). "
