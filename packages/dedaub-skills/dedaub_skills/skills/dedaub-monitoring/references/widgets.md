@@ -83,6 +83,9 @@ Note: 12 rows have no number or no day: they are not drawn.
 Note: A log scale needs values above 0: the linear scale is shown.
 ```
 
+The command prints the facts to stdout. It prints the `Note:` lines to stderr. Read both. Do not
+hide stderr (for example, do not use `2>/dev/null`), or you will miss the notes.
+
 | Line | Meaning |
 |------|---------|
 | `rows: N (the cap of 10000 …)` | The read hit the cap: the chart shows only part of the range. Aggregate in the query, or narrow `--timeframe` |
@@ -120,7 +123,7 @@ and then draws the widget on the web app's `/render/widget` page in a headless b
 | 0 | The PNG is saved |
 | 1 | A problem of the checks, the rows cannot be read, or the widget shows a message in place of a chart (a column left the query, an unsupported type): the PNG is saved so you can see it, and the message is printed |
 | 2 | A bad flag (a table, a size out of range, `--upload` without `--id`, or with changes, `--limit` or another `--query-id`) |
-| 6 | The page cannot draw the widget: it said "error", it timed out (`--timeout`, default 60 s each step), or the web app has no `/render/widget` page yet (give `--app-url`) |
+| 6 | The page cannot draw the widget: it said "error", it timed out (`--timeout`, default 60 s for each step; with `--upload` there are two picture steps), or the web app has no `/render/widget` page yet (give `--app-url`) |
 | 7 | Playwright or a browser is not installed: install them as above |
 
 ## Limits: what goes into "Other"

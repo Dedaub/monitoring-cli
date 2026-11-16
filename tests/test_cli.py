@@ -11,13 +11,14 @@ import base64
 import contextlib
 import io
 import json
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, create_autospec
 
 import pytest
 from typer.testing import CliRunner
 
 from monitoring_cli import cli
 from monitoring_cli.cli import app
+from monitoring_cli.client import MonitoringClient
 
 runner = CliRunner()
 
@@ -522,7 +523,8 @@ def test_login_silent_with_offline_token(config_path, monkeypatch):
 
 
 def _widget_client(monkeypatch, *, scheduled=False, notify=False, columns=None):
-    client = MagicMock()
+    # An autospec checks each call against the real MonitoringClient signature.
+    client = create_autospec(MonitoringClient, instance=True)
     client.get_query.return_value = {
         "query_id": 9,
         "query_name": "Fees",
@@ -1409,6 +1411,38 @@ def _fee_rows(n: int) -> list[dict]:
     return [{"day": f"2026-10-{1 + i % 28:02d}", "fee": i} for i in range(n)]
 
 
+def _preview_args(*extra: str) -> list[str]:
+    return ["preview-widget", "--query-id", "9", "--type", "line", "--x", "day"] + [
+        "--y",
+        "fee",
+        *extra,
+    ]
+
+
+def test_preview_widget_with_huge_values_does_not_raise(monkeypatch):
+    client = _widget_client(monkeypatch)
+    client.widget_rows.return_value = _rows_answer(
+        [{"day": "2026-10-01", "fee": 1e308}, {"day": "2026-10-01", "fee": 1e308}]
+        + [{"day": "2026-10-02", "fee": 1.0}]
+    )
+    result = runner.invoke(app, _preview_args("--transform", "bollinger"))
+    assert result.exit_code == 0, _all_output(result)
+    assert "rows: 3" in result.output
+
+
+def test_preview_widget_says_when_the_summary_is_not_available(monkeypatch):
+    client = _widget_client(monkeypatch)
+    client.widget_rows.return_value = _rows_answer(_fee_rows(2))
+
+    def overflow(*args, **kwargs):
+        raise OverflowError("int too large to convert to float")
+
+    monkeypatch.setattr(cli.chartdata, "summarize", overflow)
+    result = runner.invoke(app, _preview_args())
+    assert result.exit_code == 0, _all_output(result)
+    assert "The summary is not available for these values." in _all_output(result)
+
+
 def test_preview_widget_prints_a_sample_and_the_summary(monkeypatch):
     client = _widget_client(monkeypatch)
     client.widget_rows.return_value = _rows_answer(_fee_rows(50), cached=True)
@@ -1552,6 +1586,19 @@ def test_share_widget_explains_409_and_403(monkeypatch, error, text):
     assert text in " ".join(_all_output(result).split())
 
 
+def test_server_text_with_markup_is_printed_as_text(monkeypatch):
+    client = _widget_client(monkeypatch)
+    client.widget_private_queries.return_value = []
+    client.share_widget.side_effect = cli.ForbiddenError("/x", "No [/x] here")
+    result = runner.invoke(app, ["share-widget", "--id", "12", "--public"])
+    assert result.exit_code == 1
+    assert "Refused: No [/x] here." in " ".join(_all_output(result).split())
+    client.widget_private_queries.side_effect = RuntimeError("Server [/bold] failed")
+    result = runner.invoke(app, ["widget-private-queries", "--id", "12"])
+    assert result.exit_code == 1
+    assert "Error: Server [/bold] failed" in _all_output(result)
+
+
 def test_widget_private_queries_lists_them(monkeypatch):
     client = _widget_client(monkeypatch)
     client.widget_private_queries.return_value = [
@@ -1652,6 +1699,20 @@ def test_widget_picture_saves_the_file_and_says_it_is_fresh(monkeypatch, tmp_pat
     client.download_public.assert_called_once_with(
         "https://bucket.s3.amazonaws.com/widget-12-preview-a"
     )
+
+
+def test_widget_picture_prints_the_time_in_utc(monkeypatch, tmp_path):
+    client = _widget_client(monkeypatch)
+    client.get_widget.return_value = _picture_widget(
+        _ts="2026-11-15T12:00:00+02:00",
+        preview_updated_at="2026-11-15T12:00:00+02:00",
+    )
+    client.download_public.return_value = (b"png", "image/png")
+    monkeypatch.chdir(tmp_path)
+    result = runner.invoke(app, ["widget-picture", "--id", "12"])
+    assert result.exit_code == 0, _all_output(result)
+    assert "Taken: 2026-11-15 10:00 UTC" in result.output
+    assert "Last change: 2026-11-15 10:00 UTC" in result.output
 
 
 @pytest.mark.parametrize(

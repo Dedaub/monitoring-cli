@@ -13,6 +13,7 @@ when a picture is drawn.
 
 from __future__ import annotations
 
+import contextlib
 import importlib
 import json
 import time
@@ -35,8 +36,9 @@ DEFAULT_HEIGHT = 360
 MIN_SIZE = 200
 MAX_SIZE = 2560
 # The only hosts other than the app that the page may reach: the fonts of the
-# chart text. Every other request (analytics, ads, a tag manager) is blocked,
-# because the page holds the rows of the query.
+# chart text. Every other HTTP request (analytics, ads, a tag manager) is
+# blocked, and a WebSocket to another host is closed, because the page holds
+# the rows of the query.
 FONT_HOSTS = frozenset({"fonts.googleapis.com", "fonts.gstatic.com"})
 
 
@@ -48,6 +50,14 @@ def allowed(url: str, page_url: str) -> bool:
     if (target.scheme, target.netloc) == (app.scheme, app.netloc):
         return True
     return target.scheme == "https" and target.hostname in FONT_HOSTS
+
+
+def socket_allowed(url: str, page_url: str) -> bool:
+    """Whether the render page may open the WebSocket `url`: only to the app
+    itself (a Next dev server loads its code over one)."""
+    target, app = urlsplit(url), urlsplit(page_url)
+    scheme = {"ws": "http", "wss": "https"}.get(target.scheme)
+    return (scheme, target.netloc) == (app.scheme, app.netloc)
 
 
 # The page puts the card in a 16 px padding (p-4): the viewport has room for it.
@@ -136,7 +146,14 @@ def render(
     """The pictures of `shots`, one page load each, in one browser. The
     browser gets no token and no cookie: a new context for each picture."""
     api = _playwright()
-    with api.sync_playwright() as pw:
+    with contextlib.ExitStack() as stack:
+        try:
+            pw = stack.enter_context(api.sync_playwright())
+        except (api.Error, OSError) as e:  # a broken driver
+            reason = str(e).splitlines()[0] if str(e) else repr(e)
+            raise PlaywrightMissing(
+                f"Playwright could not start ({reason}). {INSTALL_HINT}"
+            ) from e
         browser = _launch(pw, channel, api.Error)
         try:
             return [_shoot(api, browser, page_url, shot, timeout) for shot in shots]
@@ -169,6 +186,15 @@ def _shoot(
                 else route.abort("blockedbyclient")
             ),
         )
+        # context.route does not see a WebSocket: close each one to another host.
+        context.route_web_socket(
+            "**/*",
+            lambda ws: (
+                ws.connect_to_server()
+                if socket_allowed(ws.url, page_url)
+                else ws.close()
+            ),
+        )
         page = context.new_page()
         try:
             script = init_script(shot.input)
@@ -185,7 +211,11 @@ def _shoot(
             )
         page.wait_for_selector(READY_SELECTOR, state="attached", timeout=ms())
         if page.get_attribute("html", READY_ATTR) != "1":
-            raise RenderFailed("The render page could not read the widget input.")
+            detail = page.get_attribute("html", MESSAGE_ATTR)
+            raise RenderFailed(
+                "The render page could not read the widget input"
+                + (f": {detail}" if detail else ".")
+            )
         options: dict[str, Any] = {
             "type": shot.kind,
             "timeout": ms(),

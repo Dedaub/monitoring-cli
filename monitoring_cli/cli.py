@@ -116,7 +116,7 @@ def _exit_error(e: Exception) -> NoReturn:
     if isinstance(e, SessionExpiredError):
         err.print(_session_expired_message())
     else:
-        err.print(f"Error: {e}")
+        err.print(f"Error: {escape(str(e))}")  # server text can hold "[/x]"
     raise typer.Exit(1)
 
 
@@ -2283,7 +2283,7 @@ def update_dashboard(
             # dashboard.py update_dashboard: a public dashboard cannot read a
             # private query. The publish route makes them public together.
             err.print(
-                f"Error: {e}\nRun `dedaub-monitoring publish-dashboard --id {id}`: it lists"
+                f"Error: {escape(str(e))}\nRun `dedaub-monitoring publish-dashboard --id {id}`: it lists"
                 " the private queries and makes them public with the dashboard"
                 " (--dry-run lists them only)."
             )
@@ -2743,10 +2743,10 @@ def _read_errors(kind: dict[str, bool]) -> Iterator[None]:
         raise typer.Exit(130)
     except TimeoutError as e:
         revoked = " — task revoked." if kind["table"] else "."
-        err.print(f"{e}{revoked} Shorten --timeframe, or raise --timeout.")
+        err.print(f"{escape(str(e))}{revoked} Shorten --timeframe, or raise --timeout.")
         raise typer.Exit(1)
     except NotFoundError as e:
-        err.print(str(e))
+        err.print(escape(str(e)))
         raise typer.Exit(1)
     except Exception as e:
         _exit_error(e)
@@ -2781,9 +2781,15 @@ def _print_preview(
             f"The rows come from the shared 15-minute cache, read at {read.get('read_at')}"
             " (--refresh reads the database again)."
         )
-    summary = chartdata.summarize(
-        draft.widget_type, draft.config, rows, limit=rows_limit
-    )
+    try:
+        summary = chartdata.summarize(
+            draft.widget_type, draft.config, rows, limit=rows_limit
+        )
+    except (OverflowError, ValueError):
+        # A number past the float range: the summary is a help, not a gate.
+        summary = chartdata.Summary(
+            notes=["The summary is not available for these values."]
+        )
     for fact in summary.facts:
         typer.echo(fact)
     notes = summary.notes + widgets.series_notes(draft.widget_type, draft.config, rows)
@@ -3254,10 +3260,10 @@ def render_widget(
             page_url, shots, channel=browser_channel, timeout=timeout
         )
     except render.PlaywrightMissing as e:
-        err.print(str(e))
+        err.print(escape(str(e)))
         raise typer.Exit(EXIT_NO_BROWSER)
     except render.RenderFailed as e:
-        err.print(f"{e} (page: {page_url})")
+        err.print(f"{escape(str(e))} (page: {escape(page_url)})")
         raise typer.Exit(EXIT_RENDER_FAILED)
     name = draft.stored.get("widget_id") if draft.stored else "draft"
     path = out_path or Path(f"widget-{name}-{theme}.png")
@@ -3267,7 +3273,9 @@ def render_widget(
     if pictures[0].message is not None:
         # WidgetRender.tsx: the widget shows a message, not a chart. The picture
         # is saved so that the agent can see it; it is not uploaded.
-        err.print(f"✗ The widget shows a message, not a chart: {pictures[0].message}")
+        err.print(
+            f"✗ The widget shows a message, not a chart: {escape(pictures[0].message)}"
+        )
         raise typer.Exit(1)
     if upload:
         _upload_card(client, draft, theme, pictures[1].data)
@@ -3287,7 +3295,7 @@ def _upload_card(
         url = client.upload_widget_picture(widget_id, theme, picture)
     except ForbiddenError as e:
         err.print(
-            f"Refused: {e.detail or e}. Only the owner of the widget can store its picture."
+            f"Refused: {escape(str(e.detail or e))}. Only the owner of the widget can store its picture."
         )
         raise typer.Exit(1)
     except Exception as e:
@@ -3326,12 +3334,12 @@ def _publish_error(e: ConflictError | ForbiddenError, command: str) -> NoReturn:
     """The 409 and 403 of a share or a publish (dashboard.py make_queries_public)."""
     if isinstance(e, ConflictError):
         err.print(
-            f"{e.detail or 'The private queries changed.'} Nothing changed:"
+            f"{escape(str(e.detail or 'The private queries changed.'))} Nothing changed:"
             f" run `dedaub-monitoring {command}` again to see the new list."
         )
     else:
         err.print(
-            f"Refused: {e.detail or e}. Only the owner can do this, and each private"
+            f"Refused: {escape(str(e.detail or e))}. Only the owner can do this, and each private"
             " query must be one that you can edit. Nothing changed."
         )
     raise typer.Exit(1)
@@ -3347,7 +3355,7 @@ def widget_private_queries(
     try:
         queries = client.widget_private_queries(id)
     except NotFoundError as e:
-        err.print(str(e))
+        err.print(escape(str(e)))
         raise typer.Exit(1)
     except Exception as e:
         _exit_error(e)
@@ -3401,7 +3409,7 @@ def share_widget(
     except (ConflictError, ForbiddenError) as e:
         _publish_error(e, f"share-widget --id {id} --public")
     except NotFoundError as e:
-        err.print(str(e))
+        err.print(escape(str(e)))
         raise typer.Exit(1)
     except Exception as e:
         _exit_error(e)
@@ -3461,7 +3469,7 @@ def publish_dashboard(
     except (ConflictError, ForbiddenError) as e:
         _publish_error(e, f"publish-dashboard --id {id}")
     except NotFoundError as e:
-        err.print(str(e))
+        err.print(escape(str(e)))
         raise typer.Exit(1)
     except Exception as e:
         _exit_error(e)
@@ -3558,7 +3566,7 @@ def _write_file(path: Path, data: bytes) -> None:
     try:
         path.write_bytes(data)
     except OSError as e:
-        err.print(f"Cannot write {path}: {e.strerror or e}")
+        err.print(f"Cannot write {escape(str(path))}: {escape(str(e.strerror or e))}")
         raise typer.Exit(1)
 
 
@@ -3572,7 +3580,8 @@ def _save_picture(
     changed: datetime.datetime | None,
     unknown: str | None = None,
 ) -> None:
-    _check_theme(theme)
+    """Save the stored picture of a widget or a dashboard and print its facts.
+    The commands check --theme before any network call."""
     url_key, time_key, other_key = _PICTURE_KEYS[theme]
     url = record.get(url_key)
     if not url:
@@ -3588,9 +3597,11 @@ def _save_picture(
     taken = _parse_time(record.get(time_key))
     typer.echo(f"Saved {path} ({len(data)} bytes, {content_type or 'unknown type'}).")
     if taken is not None:
-        typer.echo(f"Taken: {taken:%Y-%m-%d %H:%M} UTC ({_age(taken, now)} ago)")
+        utc = taken.astimezone(datetime.UTC)
+        typer.echo(f"Taken: {utc:%Y-%m-%d %H:%M} UTC ({_age(taken, now)} ago)")
     if changed is not None:
-        typer.echo(f"Last change: {changed:%Y-%m-%d %H:%M} UTC")
+        utc = changed.astimezone(datetime.UTC)
+        typer.echo(f"Last change: {utc:%Y-%m-%d %H:%M} UTC")
     stale = unknown or _stale(taken, _parse_time(record.get(other_key)), changed)
     typer.echo(f"Stale: {stale}")
     if stale.startswith("yes"):
@@ -3674,7 +3685,7 @@ def widget_picture(
     except typer.Exit:
         raise
     except NotFoundError as e:
-        err.print(str(e))
+        err.print(escape(str(e)))
         raise typer.Exit(1)
     except Exception as e:
         _exit_error(e)
@@ -3704,7 +3715,7 @@ def dashboard_picture(
     except typer.Exit:
         raise
     except NotFoundError as e:
-        err.print(str(e))
+        err.print(escape(str(e)))
         raise typer.Exit(1)
     except Exception as e:
         _exit_error(e)

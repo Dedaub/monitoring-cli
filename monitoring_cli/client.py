@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import contextlib
+import math
 import random
 import time
 from collections.abc import Callable
@@ -33,6 +34,16 @@ _sleep = time.sleep
 # The wait after a 503 with no Retry-After header (widget rows: the same read
 # runs for another viewer; the server sends 5).
 _RETRY_AFTER_SECONDS = 5.0
+# The least wait between two tries: a Retry-After of 0 (or below) must not make
+# the loop send requests with no pause until the timeout.
+_MIN_RETRY_AFTER_SECONDS = 1.0
+# The file extension of each picture type that the API takes.
+_PICTURE_EXTENSIONS = {
+    "image/jpeg": "jpg",
+    "image/png": "png",
+    "image/webp": "webp",
+    "image/svg+xml": "svg",
+}
 # The largest picture that download_public reads. The API takes uploads of at
 # most MAX_UPLOAD_FILE_SIZE (backend routers/utils.py); this is a guard.
 _MAX_PICTURE_BYTES = 20 * 1024 * 1024
@@ -985,9 +996,7 @@ class MonitoringClient:
         at most 2 MB (backend routers/utils.py check_image_file). Owner only,
         else 403. Returns the picture's URL."""
         path = f"/api/profile/widget/{widget_id}/preview"
-        extension = (
-            "jpg" if content_type == "image/jpeg" else content_type.split("/")[-1]
-        )
+        extension = _PICTURE_EXTENSIONS.get(content_type, "jpg")
         resp = httpx.post(
             f"{self._base}{path}",
             headers=self._headers(),
@@ -998,7 +1007,10 @@ class MonitoringClient:
             timeout=60.0,
         )
         _raise_for_status(resp, path)
-        return resp.json()
+        url = resp.json()
+        if not isinstance(url, str):
+            raise ValueError(f"The API returned no picture URL: {url!r}")
+        return url
 
     def download_public(
         self, url: str, max_bytes: int = _MAX_PICTURE_BYTES
@@ -1040,11 +1052,16 @@ def _detail(resp: httpx.Response) -> str:
 
 
 def _retry_after(resp: httpx.Response) -> float:
-    """The Retry-After seconds of a 503, or the default wait."""
+    """The Retry-After seconds of a 503, or the default wait. A value that is
+    not a finite number (a date, "nan", "inf") gives the default; a value
+    below the minimum (0, a negative number) gives the minimum."""
     try:
-        return max(0.0, float(resp.headers.get("retry-after", "")))
+        seconds = float(resp.headers.get("retry-after", ""))
     except ValueError:
         return _RETRY_AFTER_SECONDS
+    if not math.isfinite(seconds):
+        return _RETRY_AFTER_SECONDS
+    return max(_MIN_RETRY_AFTER_SECONDS, seconds)
 
 
 def _raise_for_status(resp: httpx.Response, path: str) -> None:

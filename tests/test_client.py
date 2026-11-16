@@ -974,6 +974,24 @@ def test_widget_rows_waits_while_the_same_read_runs(no_sleep):
     assert no_sleep == [1.0]
 
 
+@pytest.mark.parametrize(
+    ("header", "wait"),
+    [("0", 1.0), ("-3", 1.0), ("0.2", 1.0), ("nan", 5.0), ("inf", 5.0), ("7", 7.0)],
+)
+@respx.mock
+def test_widget_rows_never_waits_less_than_a_second(no_sleep, header, wait):
+    mock_token(respx)
+    route = respx.post(f"{BASE}/api/tsql/query/widget_rows").mock(
+        side_effect=[
+            httpx.Response(503, headers={"Retry-After": header}),
+            httpx.Response(200, json={"rows": [], "read_at": "x", "cached": False}),
+        ]
+    )
+    MonitoringClient(PROFILE).widget_rows("SELECT 1", 9, 7, limit=5)
+    assert route.call_count == 2
+    assert no_sleep == [wait]
+
+
 @respx.mock
 def test_widget_rows_stops_at_the_timeout(no_sleep):
     mock_token(respx)
@@ -1090,3 +1108,24 @@ def test_upload_widget_picture_sends_a_multipart_jpeg():
     assert b'name="file"; filename="widget-12-light.jpg"' in body
     assert b"Content-Type: image/jpeg" in body
     assert b"\xff\xd8jpeg" in body
+
+
+@respx.mock
+def test_upload_widget_picture_names_each_type_by_its_extension():
+    mock_token(respx)
+    route = respx.post(f"{BASE}/api/profile/widget/12/preview").mock(
+        return_value=httpx.Response(200, json="https://bucket/x")
+    )
+    client = MonitoringClient(PROFILE)
+    client.upload_widget_picture(12, "dark", b"<svg/>", "image/svg+xml")
+    assert b'filename="widget-12-dark.svg"' in route.calls.last.request.content
+
+
+@respx.mock
+def test_upload_widget_picture_needs_a_url_in_the_answer():
+    mock_token(respx)
+    respx.post(f"{BASE}/api/profile/widget/12/preview").mock(
+        return_value=httpx.Response(200, json={"url": "https://bucket/x"})
+    )
+    with pytest.raises(ValueError, match="no picture URL"):
+        MonitoringClient(PROFILE).upload_widget_picture(12, "dark", b"x")

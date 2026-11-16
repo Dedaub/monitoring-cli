@@ -16,6 +16,7 @@ import re
 from collections import deque
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
+from decimal import Decimal
 from typing import Any
 
 from monitoring_cli import widgets
@@ -30,7 +31,8 @@ Y_AXIS_TYPES = ("line", "bar", "stackedbar", "linebar")
 
 # JavaScript `Number(text)` reads a decimal, an exponent, or a 0x / 0o / 0b
 # integer. It does not read "1_000" (Python float does).
-_JS_DECIMAL = re.compile(r"[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?")
+# `\d` is ASCII only, as in JavaScript (a str pattern matches Unicode digits).
+_JS_DECIMAL = re.compile(r"[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?", re.ASCII)
 _JS_RADIX = re.compile(r"0(?:[xX][0-9a-fA-F]+|[oO][0-7]+|[bB][01]+)")
 
 
@@ -39,7 +41,10 @@ def to_number(value: Any) -> float | None:
     if isinstance(value, bool):
         return None
     if isinstance(value, int | float):
-        number = float(value)
+        try:
+            number = float(value)
+        except OverflowError:  # an int past the float range is Infinity in JS
+            return None
         return number if math.isfinite(number) else None
     if isinstance(value, str) and value.strip():
         text = value.strip()
@@ -47,14 +52,18 @@ def to_number(value: Any) -> float | None:
             number = float(text)
             return number if math.isfinite(number) else None
         if _JS_RADIX.fullmatch(text):
-            return float(int(text, 0))
+            try:
+                return float(int(text, 0))
+            except OverflowError:
+                return None
     return None
 
 
 # data.ts:47-48 ISO_DATE, with a group for each part.
 _ISO_PARTS = re.compile(
     r"(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2})(?::(\d{2})(?:\.(\d+))?)?"
-    r"(?:(Z)|([+-])(\d{2}):?(\d{2}))?)?"
+    r"(?:(Z)|([+-])(\d{2}):?(\d{2}))?)?",
+    re.ASCII,  # `\d` is ASCII only, as in JavaScript
 )
 _DAY_MS = 86_400_000
 
@@ -110,14 +119,50 @@ def x_kind_of(values: Sequence[Any]) -> str:
     return "category"
 
 
+def _js_number_string(number: float) -> str:
+    """ECMAScript Number::toString: the shortest round-trip digits, in decimal
+    form for 1e-6 <= |x| < 1e21 and in exponent form ("1e-7", "1.23e+22")
+    outside it. Python `repr` has the same digits but a different layout."""
+    if math.isnan(number):
+        return "NaN"
+    if math.isinf(number):
+        return "Infinity" if number > 0 else "-Infinity"
+    if number == 0:
+        return "0"  # also -0.0
+    sign = "-" if number < 0 else ""
+    _, digit_tuple, exponent = Decimal(repr(abs(number))).as_tuple()
+    assert isinstance(exponent, int)
+    digits = list(digit_tuple)
+    while len(digits) > 1 and digits[-1] == 0:
+        digits.pop()
+        exponent += 1
+    text = "".join(map(str, digits))
+    k = len(text)
+    n = k + exponent  # the value is 0.<text> * 10**n
+    if k <= n <= 21:
+        return sign + text + "0" * (n - k)
+    if 0 < n <= 21:
+        return f"{sign}{text[:n]}.{text[n:]}"
+    if -6 < n <= 0:
+        return f"{sign}0.{'0' * -n}{text}"
+    power = n - 1
+    mantissa = text if k == 1 else f"{text[0]}.{text[1:]}"
+    return f"{sign}{mantissa}e{'+' if power >= 0 else '-'}{abs(power)}"
+
+
 def js_string(value: Any) -> str:
     """JavaScript `String(value)` for the JSON values of a row."""
     if value is None:
         return "null"
     if isinstance(value, bool):
         return "true" if value else "false"
-    if isinstance(value, float) and value.is_integer() and abs(value) < 1e21:
-        return str(int(value))
+    if isinstance(value, int) and abs(value) < 2**53:
+        return str(value)
+    if isinstance(value, int | float):
+        try:
+            return _js_number_string(float(value))
+        except OverflowError:  # JSON.parse gives Infinity for such an int
+            return "Infinity" if value > 0 else "-Infinity"
     if isinstance(value, list):
         return ",".join("" if v is None else js_string(v) for v in value)
     if isinstance(value, dict):
@@ -188,11 +233,12 @@ def _mean(values: Sequence[float]) -> float:
 
 
 def _sd(values: Sequence[float]) -> float:
-    """data.ts:81-85"""
+    """data.ts:81-85. A product that passes the float range is Infinity (the
+    `**` operator of Python raises an error instead)."""
     if len(values) < 2:
         return 0.0
     m = _mean(values)
-    return math.sqrt(sum((v - m) ** 2 for v in values) / (len(values) - 1))
+    return math.sqrt(sum((v - m) * (v - m) for v in values) / (len(values) - 1))
 
 
 def _quantile(ordered: Sequence[float], p: float) -> float:
@@ -354,14 +400,20 @@ class _Sliding:
     key, in O(1) for each step. The floats become integers (a common power of
     two as the unit), so a value that leaves the window leaves no rounding
     error behind: a running float sum would keep one when a huge value
-    (a wei amount) is followed by small ones. A None counts as missing."""
+    (a wei amount) is followed by small ones. A None counts as missing.
+    A value that is Infinity or NaN has no integer form: the window then
+    uses plain float sums, as JavaScript does."""
 
     def __init__(self, values: Sequence[float | None], window: int) -> None:
-        self._unit = max(
-            (v.as_integer_ratio()[1] for v in values if v is not None), default=1
+        self._exact = all(v is None or math.isfinite(v) for v in values)
+        self._unit = (
+            max((v.as_integer_ratio()[1] for v in values if v is not None), default=1)
+            if self._exact
+            else 1
         )
         self._window = window
         self._items: deque[int | None] = deque()
+        self._floats: deque[float | None] = deque()
         self._total = 0
         self._squares = 0
         self._missing = 0
@@ -378,6 +430,11 @@ class _Sliding:
             self._squares += sign * item * item
 
     def push(self, value: float | None) -> None:
+        if not self._exact:
+            self._floats.append(value)
+            if len(self._floats) > self._window:
+                self._floats.popleft()
+            return
         item = None if value is None else self._scaled(value)
         self._items.append(item)
         self._add(item, 1)
@@ -386,17 +443,27 @@ class _Sliding:
 
     def mean(self) -> float | None:
         """The mean of the window, or None when one value is missing."""
+        if not self._exact:
+            floats = [v for v in self._floats if v is not None]
+            if len(floats) < len(self._floats):
+                return None
+            return _mean(floats)
         if self._missing:
             return None
         return self._total / (len(self._items) * self._unit)
 
     def sd(self) -> float:
         """data.ts:83-88 `sd` of the window (the sample standard deviation)."""
+        if not self._exact:
+            return _sd([v for v in self._floats if v is not None])
         n = len(self._items)
         if n < 2:
             return 0.0
         spread = n * self._squares - self._total**2  # n(n-1) times the variance
-        return math.sqrt(spread / (n * (n - 1) * self._unit**2))
+        try:
+            return math.sqrt(spread / (n * (n - 1) * self._unit**2))
+        except OverflowError:  # a variance past the float range
+            return math.inf
 
 
 def _rolling_mean(points: list[Point], window: int) -> list[Point]:
@@ -616,9 +683,10 @@ def _axis(
     transform = config.get("transform") or "none"
     if transform == "bollinger" and widget_type != "line":  # option.ts:455-456
         transform = "none"
+    configured = number_of(config.get("window"))
     window = max(
-        3, _js_round(number_of(config.get("window")) or DEFAULT_WINDOW)
-    )  # option.ts:457
+        3, _js_round(DEFAULT_WINDOW if configured is None else configured)
+    )  # option.ts:457: `spec.window ?? DEFAULT_WINDOW`, so 0 gives 3
     band_dropped = False
     series = []
     for name, points in built.series:

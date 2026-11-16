@@ -30,8 +30,16 @@ class _FakeApi:
     TimeoutError = _Timeout
 
     def __init__(
-        self, *, state="1", status=200, fail_channels=(), wait_error=None, message=None
+        self,
+        *,
+        state="1",
+        status=200,
+        fail_channels=(),
+        wait_error=None,
+        message=None,
+        start_error=None,
     ):
+        self.start_error = start_error
         self.state = state
         self.message = message
         self.status = status
@@ -42,6 +50,8 @@ class _FakeApi:
     @contextlib.contextmanager
     def sync_playwright(self):
         api = self
+        if api.start_error is not None:
+            raise api.start_error
 
         class Response:
             status = api.status
@@ -81,6 +91,10 @@ class _FakeApi:
             def route(self, pattern, handler):
                 api.calls.append(("route", pattern))
                 api.handler = handler
+
+            def route_web_socket(self, pattern, handler):
+                api.calls.append(("route-web-socket", pattern))
+                api.ws_handler = handler
 
             def new_page(self):
                 return Page()
@@ -181,7 +195,11 @@ def test_no_browser_is_playwright_missing(monkeypatch):
 @pytest.mark.parametrize(
     ("api", "message"),
     [
-        (_FakeApi(state="error"), "could not read the widget input"),
+        (_FakeApi(state="error"), "could not read the widget input\\.$"),
+        (
+            _FakeApi(state="error", message="Bad config: x is not a column"),
+            "could not read the widget input: Bad config: x is not a column",
+        ),
         (_FakeApi(wait_error=_Timeout("t")), "not drawn within 60s"),
         (_FakeApi(status=404), "answered HTTP 404"),
     ],
@@ -226,7 +244,8 @@ def test_render_a_line_chart_on_a_dev_server():
         config={"x_axis_name": "day", "y_axis_name": "fee"}, rows=rows, label="Fees"
     )
     [picture] = render.render(url, [render.Shot(page_input, "png")])
-    assert picture.startswith(b"\x89PNG")
+    assert picture.data.startswith(b"\x89PNG")
+    assert picture.message is None
 
 
 def test_the_page_reaches_only_the_app_and_its_fonts():
@@ -267,6 +286,50 @@ def test_each_context_blocks_the_other_hosts(monkeypatch):
     api.handler(chunk)
     assert tag.done == "abort:blockedbyclient"
     assert chunk.done == "continue"
+
+
+def test_each_context_closes_a_web_socket_to_another_host(monkeypatch):
+    api = _FakeApi()
+    monkeypatch.setattr(render, "_playwright", lambda: api)
+    render.render("https://app.dedaub.com/render/widget", [render.Shot(input=_input())])
+    assert ("route-web-socket", "**/*") in api.calls
+
+    class Socket:
+        def __init__(self, url):
+            self.url = url
+            self.done = None
+
+        def close(self):
+            self.done = "closed"
+
+        def connect_to_server(self):
+            self.done = "connected"
+
+    other = Socket("wss://tracker.example/x")
+    own = Socket("wss://app.dedaub.com/_next/webpack-hmr")
+    api.ws_handler(other)
+    api.ws_handler(own)
+    assert other.done == "closed"
+    assert own.done == "connected"
+
+
+def test_a_web_socket_may_reach_only_the_app():
+    page = "https://app.dedaub.com/render/widget"
+    assert render.socket_allowed("wss://app.dedaub.com/_next/hmr", page)
+    assert not render.socket_allowed("ws://app.dedaub.com/_next/hmr", page)
+    assert not render.socket_allowed("wss://app.dedaub.com.evil.example/x", page)
+    assert not render.socket_allowed("wss://fonts.gstatic.com/x", page)
+    dev = "http://localhost:3000/render/widget"
+    assert render.socket_allowed("ws://localhost:3000/_next/webpack-hmr", dev)
+    assert not render.socket_allowed("ws://localhost:8000/x", dev)
+
+
+@pytest.mark.parametrize("failure", [_Error("driver not found\ndetails"), OSError("x")])
+def test_a_broken_driver_is_playwright_missing(monkeypatch, failure):
+    api = _FakeApi(start_error=failure)
+    monkeypatch.setattr(render, "_playwright", lambda: api)
+    with pytest.raises(render.PlaywrightMissing, match="could not start"):
+        render.render("https://app/render/widget", [render.Shot(_input())])
 
 
 def test_a_widget_message_comes_back_with_the_picture(monkeypatch):

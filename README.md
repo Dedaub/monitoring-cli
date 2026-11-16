@@ -319,7 +319,7 @@ A widget is a saved chart, table or single value of one query; a dashboard is a 
 | `check-widget` | Check a widget like the Visualize tab: config keys and values, the options of the type, the axes the type needs, the query's columns and their types. Exits 1 with one line per problem |
 | `preview-widget` | Read the rows the dashboard reads for the widget, print sample rows and a summary of what the chart draws, with the web chart's notes (`--sql` prints the SQL only) |
 | `render-widget` | Draw the widget with the web app's own chart code in a headless browser and save a PNG (needs the `render` extra: Playwright). `--upload` stores the card picture of a saved widget |
-| `create-widget` | Save a widget of a query (`--query-id`, `--type`, `--x`/`--y`/`--y1`, `--series-by`, `--x-label`/`--y-label`, `--timeframe`, `--config FILE\|-`, `--dashboard-id`); runs the checks first |
+| `create-widget` | Save a widget of a query (`--query-id`, `--type`, `--x`/`--y`/`--y1`, `--series-by`, `--x-label`/`--y-label`, `--timeframe`, `--percent`, `--horizontal`, `--prefix`/`--suffix`, `--line-style` (also `stacked`), `--config FILE\|-`, `--dashboard-id`); runs the checks first |
 | `update-widget` | Change a widget on every dashboard that has it; the flags merge into the saved config, `--clear KEY` removes a key |
 | `get-widget` / `list-widgets` | Show a widget (JSON), or list your widgets (`--query-id`, `--dashboard-id`) |
 | `delete-widget` | Delete a widget (it leaves every dashboard) |

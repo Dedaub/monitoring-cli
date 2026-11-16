@@ -29,6 +29,10 @@ from monitoring_cli import chartdata
         (2.5, 2.5),
         ("-0x1F", None),
         ("1_000", None),
+        ("٣", None),  # an Arabic-Indic digit: JavaScript reads ASCII digits only
+        (10**400, None),  # JSON.parse gives Infinity for it
+        (-(10**400), None),
+        ("0x" + "f" * 300, None),  # Infinity in JavaScript
         ("Infinity", None),
         ("", None),
         ("-", None),
@@ -63,6 +67,7 @@ def test_to_number_matches_javascript(value, number):
         ("2026-10-01T24:00:01Z", None),
         ("2026-10-01T12:34+24:00", None),
         ("2026-1-01", None),
+        ("٢٠٢٦-١٠-٠١", None),  # Arabic-Indic digits are not an ISO date
         (5, None),
         (None, None),
     ],
@@ -264,6 +269,30 @@ def test_rolling_mean_of_huge_values_does_not_lose_the_small_ones():
     assert [p.y for p in drawn][3:] == [6.0, 8.0, 10.0]
 
 
+def test_huge_values_give_infinity_not_an_error():
+    # JavaScript has Infinity and NaN here; Python `**` and as_integer_ratio raise.
+    inf = float("inf")
+    assert chartdata._sd([1e200, -1e200]) == inf
+    # A point can hold Infinity when a sum of finite values passes the float range.
+    drawn = _transform(_line([1.0, inf, 3.0, 5.0]), "mean", 2)
+    assert [p.y for p in drawn] == [1.0, inf, inf, 4.0]
+    bands = _transform(_line([1.0, inf, 3.0, 5.0]), "bollinger", 2, 2)
+    assert bands[1].y == inf
+    assert bands[1].lo != bands[1].lo  # inf - inf is NaN, as in JavaScript
+    assert bands[3].hi == pytest.approx(4 + 2 * (2**0.5))
+    # The variance of finite values can pass the float range too.
+    spread = _transform(_line([1e200, -1e200]), "bollinger", 2, 2)
+    assert (spread[1].y, spread[1].hi) == (0.0, inf)
+
+
+def test_summary_of_a_sum_past_the_float_range_does_not_raise():
+    rows = [{"d": 1, "v": 1e308}, {"d": 1, "v": 1e308}, {"d": 2, "v": 1.0}]
+    config = {"x_axis_name": "d", "y_axis_name": "v", "combine": "sum"}
+    for transform in ("mean", "bollinger", "ewma", "cum"):
+        s = _summary("line", {**config, "transform": transform}, rows)
+        assert s.facts[0] == "rows: 3"
+
+
 def _golden_rows():
     rows = [
         ("2026-10-01", 2, 0.3),
@@ -405,6 +434,28 @@ def test_band_notes_of_the_web():
     )
 
 
+@pytest.mark.parametrize(
+    ("window", "drawn"),
+    [(None, 20), (0, 3), ("0", 3), (1, 3), (7.5, 8), ("", 20), ("x", 20)],
+)
+def test_window_zero_is_a_window_not_a_missing_one(monkeypatch, window, drawn):
+    # widgetConfig.ts `window: number(config.window)`; option.ts:560
+    # `Math.max(3, Math.round(spec.window ?? DEFAULT_WINDOW))`.
+    seen = []
+    real = chartdata.apply_transform
+
+    def spy(points, transform, size, k):
+        seen.append(size)
+        return real(points, transform, size, k)
+
+    monkeypatch.setattr(chartdata, "apply_transform", spy)
+    config = {"x_axis_name": "d", "y_axis_name": "v", "transform": "mean"}
+    if window is not None:
+        config["window"] = window
+    _summary("line", config, [{"d": 1, "v": 1}])
+    assert seen == [drawn]
+
+
 def test_order_by_y_keeps_a_time_order():
     rows = [{"d": "2026-10-01", "v": 1}]
     s = _summary("bar", {"x_axis_name": "d", "y_axis_name": "v", "order_by": "y"}, rows)
@@ -515,3 +566,42 @@ def test_value_tile_shows_the_first_row():
     assert s.notes == [
         "The first row's v is not a number: the tile shows 'n/a' as text."
     ]
+
+
+# --- JavaScript String(number) -------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("value", "text"),
+    [
+        (1e-7, "1e-7"),
+        (1.5e-7, "1.5e-7"),
+        (0.00001, "0.00001"),
+        (0.000001, "0.000001"),
+        (3.0000000000000004e-05, "0.000030000000000000004"),
+        (12345678901234567890.0, "12345678901234567000"),
+        (12345678901234567890, "12345678901234567000"),
+        (10**20, "100000000000000000000"),
+        (1e21, "1e+21"),
+        (123e20, "1.23e+22"),
+        (1.7976931348623157e308, "1.7976931348623157e+308"),
+        (5e-324, "5e-324"),
+        (-1e-7, "-1e-7"),
+        (-0.0, "0"),
+        (0.0, "0"),
+        (100.0, "100"),
+        (1.5, "1.5"),
+        (-2, "-2"),
+        (2**53, "9007199254740992"),
+        (float("nan"), "NaN"),
+        (float("inf"), "Infinity"),
+        (-float("inf"), "-Infinity"),
+        (10**400, "Infinity"),
+        (-(10**400), "-Infinity"),
+        (True, "true"),
+        (None, "null"),
+        ([1, None, 1e-7], "1,,1e-7"),
+    ],
+)
+def test_js_string_matches_string_of_a_number(value, text):
+    assert chartdata.js_string(value) == text
