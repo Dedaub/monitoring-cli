@@ -123,7 +123,7 @@ and then draws the widget on the web app's `/render/widget` page in a headless b
 | 0 | The PNG is saved |
 | 1 | A problem of the checks, the rows cannot be read, or the widget shows a message in place of a chart (a column left the query, an unsupported type): the PNG is saved so you can see it, and the message is printed |
 | 2 | A bad flag (a table, a size out of range, `--upload` without `--id`, or with changes, `--limit` or another `--query-id`) |
-| 6 | The page cannot draw the widget: it said "error", it timed out (`--timeout`, default 60 s for each step; with `--upload` there are two picture steps), or the web app has no `/render/widget` page yet (give `--app-url`) |
+| 6 | The page cannot draw the widget: it said "error", it timed out (`--timeout`, default 60 s for each step; with `--upload` there are two picture steps), the web app has no `/render/widget` page yet (HTTP 404), or the web app refused the headless browser (HTTP 401 or 403). Give `--app-url` of another web app, or skip the picture |
 | 7 | Playwright or a browser is not installed: install them as above |
 
 ## Limits: what goes into "Other"

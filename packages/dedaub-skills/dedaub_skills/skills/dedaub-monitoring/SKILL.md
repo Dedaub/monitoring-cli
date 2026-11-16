@@ -570,7 +570,8 @@ labels in TeX (`widgets.md`, "Labels"), run `check-widget` and `preview-widget`,
 that they print (the facts go to stdout and the Notes go to stderr: read both; `widgets.md`, "What preview-widget tells you"). When you can read images, run
 `render-widget` and open the PNG to see the chart (`widgets.md`, "See the chart"); exit 7 means that
 Playwright is not installed: skip it. Exit 6 with HTTP 404 means that the web app has no
-`/render/widget` page: skip it too. Create it with `create-widget`, and
+`/render/widget` page, and exit 6 with HTTP 401 or 403 means that the web app refused the browser:
+skip it too. Create it with `create-widget`, and
 give the `/widget/<id>` link. Then ask the user whether to add it to a dashboard (`list-dashboards`,
 then `add-widget` or `create-dashboard`). After the last widget is on the dashboard, run
 `arrange-dashboard --id <DID>`: it puts the widgets in a clean grid. Share or publish (`share-widget`,

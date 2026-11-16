@@ -201,7 +201,10 @@ def test_no_browser_is_playwright_missing(monkeypatch):
             "could not read the widget input: Bad config: x is not a column",
         ),
         (_FakeApi(wait_error=_Timeout("t")), "not drawn within 60s"),
-        (_FakeApi(status=404), "answered HTTP 404"),
+        (_FakeApi(status=404), "answered HTTP 404: this web app has no render page"),
+        (_FakeApi(status=403), "answered HTTP 403: the web app refused the headless"),
+        (_FakeApi(status=401), "answered HTTP 401: the web app refused the headless"),
+        (_FakeApi(status=502), "answered HTTP 502\\. Try again later"),
     ],
 )
 def test_render_failures(monkeypatch, api, message):

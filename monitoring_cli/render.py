@@ -60,6 +60,22 @@ def socket_allowed(url: str, page_url: str) -> bool:
     return (scheme, target.netloc) == (app.scheme, app.netloc)
 
 
+def _page_status_text(page_url: str, status: int) -> str:
+    """The error text for an HTTP error of the render page."""
+    head = f"{page_url} answered HTTP {status}"
+    if status == 404:
+        return (
+            f"{head}: this web app has no render page yet."
+            " Give --app-url of a web app that has it."
+        )
+    if status in (401, 403):
+        return (
+            f"{head}: the web app refused the headless browser."
+            " Give --app-url of a web app that lets it in."
+        )
+    return f"{head}. Try again later, or give --app-url of another web app."
+
+
 # The page puts the card in a 16 px padding (p-4): the viewport has room for it.
 _MARGIN = 64
 
@@ -205,10 +221,7 @@ def _shoot(
         page.add_init_script(script=script)
         response = page.goto(page_url, wait_until="domcontentloaded", timeout=ms())
         if response is not None and response.status >= 400:
-            raise RenderFailed(
-                f"{page_url} answered HTTP {response.status}: this web app has no"
-                " render page yet. Give --app-url of a web app that has it."
-            )
+            raise RenderFailed(_page_status_text(page_url, response.status))
         page.wait_for_selector(READY_SELECTOR, state="attached", timeout=ms())
         if page.get_attribute("html", READY_ATTR) != "1":
             detail = page.get_attribute("html", MESSAGE_ATTR)
