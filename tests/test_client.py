@@ -3,8 +3,9 @@ import json
 import httpx
 import pytest
 import respx
+from dedaub_auth.auth import SessionExpiredError, TokenManager
+from dedaub_auth.config import Profile
 
-from monitoring_cli.auth import SessionExpiredError
 from monitoring_cli.client import (
     ConflictError,
     ForbiddenError,
@@ -13,7 +14,6 @@ from monitoring_cli.client import (
     resolve_folder_id,
     resolve_query_id,
 )
-from monitoring_cli.config import Profile
 
 BASE = "https://api.dedaub.com"
 
@@ -514,9 +514,8 @@ def test_access_token_is_reused_until_expiry():
 
 
 @respx.mock
-def test_access_token_is_refreshed_after_expiry(monkeypatch):
+def test_access_token_is_refreshed_after_expiry():
     now = [1000.0]
-    monkeypatch.setattr("monitoring_cli.client.time.monotonic", lambda: now[0])
     token_route = respx.post(TOKEN_URL).mock(
         return_value=httpx.Response(
             200, json={"access_token": "acc", "expires_in": 300}
@@ -525,7 +524,9 @@ def test_access_token_is_refreshed_after_expiry(monkeypatch):
     respx.get(f"{BASE}/api/auth/me").mock(
         return_value=httpx.Response(200, json={"username": "u", "entity_id": 1})
     )
-    client = MonitoringClient(PROFILE)
+    client = MonitoringClient(
+        PROFILE, tokens=TokenManager(PROFILE, clock=lambda: now[0])
+    )
     client.get_me()
     now[0] += 300
     client.get_me()
@@ -549,9 +550,11 @@ def test_rotated_refresh_token_is_reported_and_used():
     respx.get(f"{BASE}/api/auth/me").mock(
         return_value=httpx.Response(200, json={"username": "u", "entity_id": 1})
     )
-    seen: list[str] = []
-    MonitoringClient(profile, on_refresh_token=seen.append).get_me()
-    assert seen == ["new"]
+    seen: list[tuple[str | None, str]] = []
+    MonitoringClient(
+        profile, on_rotate=lambda old, new: seen.append((old, new))
+    ).get_me()
+    assert seen == [("old", "new")]
     assert profile.refresh_token == "new"
 
 

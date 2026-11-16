@@ -344,7 +344,7 @@ def test_install_skill_empty_selection_installs_nothing(tmp_path, monkeypatch):
 @pytest.fixture
 def config_path(tmp_path, monkeypatch):
     path = tmp_path / "monitoring.json"
-    monkeypatch.setattr("monitoring_cli.config.CONFIG_PATH", path)
+    monkeypatch.setenv("DEDAUB_CONFIG", str(path))
     monkeypatch.delenv(cli.REFRESH_TOKEN_ENV, raising=False)
     return path
 
@@ -378,12 +378,18 @@ def test_env_token_overrides_stored_token(config_path, monkeypatch):
 
 def test_store_refresh_token_persists_rotation(config_path):
     _save_profile()
-    cli._store_refresh_token("prod", "rotated")
+    cli._store_refresh_token("prod", "stored", "rotated")
     assert cli.Config.load().get_profile("prod").refresh_token == "rotated"
 
 
+def test_store_refresh_token_keeps_newer_login(config_path):
+    _save_profile("newer-login")
+    cli._store_refresh_token("prod", "stored", "rotated")
+    assert cli.Config.load().get_profile("prod").refresh_token == "newer-login"
+
+
 def test_store_refresh_token_ignores_missing_profile(config_path):
-    cli._store_refresh_token("prod", "rotated")  # no config: no error
+    cli._store_refresh_token("prod", "stored", "rotated")  # no config: no error
     assert not config_path.exists()
 
 
@@ -465,14 +471,14 @@ def test_store_refresh_token_warns_on_write_failure(config_path, monkeypatch, ca
         raise OSError("read-only")
 
     monkeypatch.setattr(cli.Config, "save", boom)
-    cli._store_refresh_token("prod", "rotated")
+    cli._store_refresh_token("prod", "stored", "rotated")
     err_text = capsys.readouterr().err
     assert "could not save" in err_text
     assert "rotated" not in err_text
 
 
 def test_store_refresh_token_silent_when_logged_out(config_path, capsys):
-    cli._store_refresh_token("prod", "rotated")
+    cli._store_refresh_token("prod", "stored", "rotated")
     assert capsys.readouterr().err == ""
 
 
@@ -1241,7 +1247,7 @@ def test_status_logged_in(monkeypatch):
 
 
 def test_status_session_expired_exits_3(monkeypatch):
-    from monitoring_cli.auth import SessionExpiredError
+    from dedaub_auth.auth import SessionExpiredError
 
     client = MagicMock()
     client.get_me.side_effect = SessionExpiredError()
@@ -1253,7 +1259,7 @@ def test_status_session_expired_exits_3(monkeypatch):
 
 
 def test_status_not_logged_in_exits_3(monkeypatch):
-    from monitoring_cli.config import NotLoggedInError
+    from dedaub_auth.config import NotLoggedInError
 
     monkeypatch.delenv(cli.REFRESH_TOKEN_ENV, raising=False)
 
@@ -2200,3 +2206,26 @@ def test_render_widget_warns_when_the_rows_go_to_another_host(
     text = "The rows of the query go to evil.example."
     assert (text in _all_output(result)) is warned
     assert ("The rows of the query go to" in _all_output(result)) is warned
+
+
+def test_login_replaces_a_corrupt_config(config_path, monkeypatch):
+    config_path.write_text("{not json")
+    token = _jwt({"typ": "Offline"})
+    _patch_login(monkeypatch, token)
+    result = runner.invoke(app, ["login"])
+    assert result.exit_code == 0
+    out = result.output
+    with contextlib.suppress(ValueError, AttributeError):
+        out += result.stderr
+    assert "Writing a new config file" in out
+    assert cli.Config.load().get_profile("prod").refresh_token == token
+
+
+def test_logout_with_a_corrupt_config_names_the_fix(config_path):
+    config_path.write_text("{not json")
+    result = runner.invoke(app, ["logout"])
+    assert result.exit_code == 1
+    out = result.output
+    with contextlib.suppress(ValueError, AttributeError):
+        out += result.stderr
+    assert "dedaub-monitoring login" in out

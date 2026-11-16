@@ -4,6 +4,7 @@ requires-python = "==3.13.*"
 
 [manifest]
 members = [
+    "dedaub-auth",
     "dedaub-skills",
     "monitoring-cli",
 ]
@@ -60,8 +61,19 @@ wheels = [
 ]
 
 [[package]]
+name = "dedaub-auth"
+version = "0.1.0"
+source = { editable = "packages/dedaub-auth" }
+dependencies = [
+    { name = "httpx" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "httpx", specifier = ">=0.27.0,<0.28" }]
+
+[[package]]
 name = "dedaub-skills"
-version = "0.2.0"
+version = "0.3.0"
 source = { editable = "packages/dedaub-skills" }
 
 [[package]]
@@ -161,10 +173,11 @@ wheels = [
 
 [[package]]
 name = "monitoring-cli"
-version = "0.9.0"
+version = "0.10.0"
 source = { editable = "." }
 default-groups = ["dev", "lint"]
 dependencies = [
+    { name = "dedaub-auth" },
     { name = "dedaub-skills" },
     { name = "httpx" },
     { name = "prompt-toolkit" },
@@ -190,6 +203,7 @@ lint = [
 
 [package.metadata]
 requires-dist = [
+    { name = "dedaub-auth", editable = "packages/dedaub-auth" },
     { name = "dedaub-skills", editable = "packages/dedaub-skills" },
     { name = "httpx", specifier = ">=0.27.0,<0.28" },
     { name = "playwright", marker = "extra == 'render'", specifier = ">=1.48,<2" },

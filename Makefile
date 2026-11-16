@@ -41,15 +41,15 @@ token:
 	@dedaub-monitoring token
 
 format:
-	uv run ruff check --fix monitoring_cli tests
-	uv run ruff format monitoring_cli tests
+	uv run ruff check --fix monitoring_cli packages/dedaub-auth tests
+	uv run ruff format monitoring_cli packages/dedaub-auth tests
 
 lint:
-	uv run ruff check monitoring_cli tests
-	uv run ruff format --check monitoring_cli tests
+	uv run ruff check monitoring_cli packages/dedaub-auth tests
+	uv run ruff format --check monitoring_cli packages/dedaub-auth tests
 
 typecheck:
-	uv run ty check monitoring_cli
+	uv run ty check monitoring_cli packages/dedaub-auth
 
 test:
 	uv run pytest

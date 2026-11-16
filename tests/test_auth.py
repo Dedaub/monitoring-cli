@@ -4,18 +4,19 @@ import json
 import httpx
 import pytest
 import respx
-
-from monitoring_cli.auth import (
+from dedaub_auth.auth import (
+    EXPIRY_SKEW,
     AuthError,
     DeviceFlowExpiredError,
     SessionExpiredError,
+    TokenManager,
     poll_token,
     refresh_tokens,
     revoke_token,
     start_device_flow,
     token_type,
 )
-from monitoring_cli.config import Profile
+from dedaub_auth.config import Profile
 
 PROFILE = Profile(
     base_url="https://api.dedaub.com",
@@ -53,7 +54,7 @@ def test_start_device_flow_returns_device_info():
 
 @respx.mock
 def test_poll_token_returns_refresh_token_on_success(monkeypatch):
-    monkeypatch.setattr("monitoring_cli.auth.time.sleep", lambda _: None)
+    monkeypatch.setattr("dedaub_auth.auth.time.sleep", lambda _: None)
     respx.post(TOKEN_URL).mock(
         return_value=httpx.Response(
             200,
@@ -70,7 +71,7 @@ def test_poll_token_returns_refresh_token_on_success(monkeypatch):
 
 @respx.mock
 def test_poll_token_raises_on_expired(monkeypatch):
-    monkeypatch.setattr("monitoring_cli.auth.time.sleep", lambda _: None)
+    monkeypatch.setattr("dedaub_auth.auth.time.sleep", lambda _: None)
     respx.post(TOKEN_URL).mock(
         return_value=httpx.Response(
             400,
@@ -83,7 +84,7 @@ def test_poll_token_raises_on_expired(monkeypatch):
 
 @respx.mock
 def test_poll_token_keeps_polling_on_authorization_pending(monkeypatch):
-    monkeypatch.setattr("monitoring_cli.auth.time.sleep", lambda _: None)
+    monkeypatch.setattr("dedaub_auth.auth.time.sleep", lambda _: None)
     responses = [
         httpx.Response(400, json={"error": "authorization_pending"}),
         httpx.Response(400, json={"error": "authorization_pending"}),
@@ -121,7 +122,7 @@ def test_refresh_tokens_raises_session_expired():
 
 @respx.mock
 def test_poll_token_raises_on_network_error(monkeypatch):
-    monkeypatch.setattr("monitoring_cli.auth.time.sleep", lambda _: None)
+    monkeypatch.setattr("dedaub_auth.auth.time.sleep", lambda _: None)
     respx.post(TOKEN_URL).mock(side_effect=httpx.ConnectError("connection refused"))
     with pytest.raises(AuthError):
         poll_token(PROFILE, "dev-code-123", interval=1)
@@ -213,3 +214,114 @@ def test_token_type_missing_claim():
 @pytest.mark.parametrize("token", ["opaque", "a.!!!.c", "a.bm90LWpzb24.c"])
 def test_token_type_not_a_jwt(token):
     assert token_type(token) is None
+
+
+@respx.mock
+def test_refresh_tokens_without_expires_in():
+    respx.post(TOKEN_URL).mock(
+        return_value=httpx.Response(200, json={"access_token": "acc"})
+    )
+    assert refresh_tokens(PROFILE).expires_in is None
+
+
+@respx.mock
+def test_refresh_tokens_rejects_missing_access_token():
+    respx.post(TOKEN_URL).mock(return_value=httpx.Response(200, json={}))
+    with pytest.raises(AuthError):
+        refresh_tokens(PROFILE)
+
+
+def test_refresh_tokens_without_refresh_token_is_session_expired():
+    profile = Profile(
+        base_url="https://api.dedaub.com",
+        oidc_host="https://auth.dedaub.com",
+        client_id="watchdog-client",
+    )
+    with pytest.raises(SessionExpiredError):
+        refresh_tokens(profile)
+
+
+# --- TokenManager: in-memory cache + refresh-token rotation ------------------
+
+
+def _profile(tok: str | None = "rt-1") -> Profile:
+    return Profile(
+        base_url="https://api.dedaub.com",
+        oidc_host="https://auth.dedaub.com",
+        client_id="watchdog-client",
+        realm="dedaub",
+        refresh_token=tok,
+    )
+
+
+@respx.mock
+def test_token_manager_caches_until_expiry():
+    route = respx.post(TOKEN_URL).mock(
+        return_value=httpx.Response(
+            200, json={"access_token": "acc", "expires_in": 300}
+        )
+    )
+    now = [1000.0]
+    tm = TokenManager(_profile(), clock=lambda: now[0])
+    assert [tm.get(), tm.get(), tm.get()] == ["acc", "acc", "acc"]
+    assert route.call_count == 1
+    now[0] += 300 - EXPIRY_SKEW - 1  # still inside the window
+    tm.get()
+    assert route.call_count == 1
+    now[0] += 2  # within EXPIRY_SKEW of expiry -> refresh
+    tm.get()
+    assert route.call_count == 2
+
+
+@respx.mock
+def test_token_manager_uses_jwt_exp_without_expires_in():
+    route = respx.post(TOKEN_URL).mock(
+        return_value=httpx.Response(200, json={"access_token": _jwt({"exp": 2000})})
+    )
+    now = [1000.0]
+    tm = TokenManager(_profile(), clock=lambda: now[0])
+    tm.get()
+    now[0] = 1900.0
+    tm.get()
+    assert route.call_count == 1
+    now[0] = 1980.0
+    tm.get()
+    assert route.call_count == 2
+
+
+@respx.mock
+def test_token_manager_reports_rotated_refresh_token():
+    respx.post(TOKEN_URL).mock(
+        return_value=httpx.Response(
+            200,
+            json={"access_token": "acc", "expires_in": 0, "refresh_token": "rt-2"},
+        )
+    )
+    rotations = []
+    profile = _profile("rt-1")
+    tm = TokenManager(profile, on_rotate=lambda old, new: rotations.append((old, new)))
+    tm.get()
+    assert rotations == [("rt-1", "rt-2")]
+    assert profile.refresh_token == "rt-2"
+    tm.get()  # same refresh token returned again -> no second rotation
+    assert rotations == [("rt-1", "rt-2")]
+
+
+@respx.mock
+def test_token_manager_sends_current_refresh_token():
+    route = respx.post(TOKEN_URL).mock(
+        return_value=httpx.Response(
+            200,
+            json={"access_token": "acc", "expires_in": 0, "refresh_token": "rt-2"},
+        )
+    )
+    tm = TokenManager(_profile("rt-1"))
+    tm.get()
+    tm.get()
+    assert b"refresh_token=rt-1" in route.calls[0].request.content
+    assert b"refresh_token=rt-2" in route.calls[1].request.content
+
+
+def test_token_manager_without_refresh_token_is_session_expired():
+    with pytest.raises(SessionExpiredError):
+        TokenManager(_profile(None)).get()

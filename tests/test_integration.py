@@ -1,10 +1,10 @@
 import os
 
 import pytest
+from dedaub_auth.config import Config, Profile
 from typer.testing import CliRunner
 
 from monitoring_cli.cli import app
-from monitoring_cli.config import Config, Profile
 
 runner = CliRunner()
 
@@ -17,7 +17,7 @@ requires_integration = pytest.mark.skipif(
 @pytest.fixture(autouse=True)
 def prod_config(tmp_path, monkeypatch):
     config_path = tmp_path / ".config" / "dedaub" / "monitoring.json"
-    monkeypatch.setattr("monitoring_cli.config.CONFIG_PATH", config_path)
+    monkeypatch.setenv("DEDAUB_CONFIG", str(config_path))
 
     profile = Profile(
         base_url=os.environ.get("DEDAUB_TEST_BASE_URL", "https://api.dedaub.com"),
