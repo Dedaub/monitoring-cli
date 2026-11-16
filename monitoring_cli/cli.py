@@ -39,6 +39,7 @@ from dedaub_auth.config import (
     NotLoggedInError,
     Profile,
     ProfileNotFoundError,
+    locked,
     persist_refresh_token,
 )
 from rich.console import Console
@@ -384,13 +385,19 @@ def login(
             "and your user the offline_access scope."
         )
 
-    try:
-        config = Config.load()
-    except NotLoggedInError:
-        config = Config(default=profile, profiles={})
+    with locked():
+        try:
+            config = Config.load()
+        except NotLoggedInError:
+            config = Config(default=profile, profiles={})
+        except ConfigError as e:
+            # A new login is the fix that the other commands give for a bad
+            # file, so start a new file here.
+            err.print(f"Warning: {escape(str(e))}. Writing a new config file.")
+            config = Config(default=profile, profiles={})
 
-    config.upsert_profile(profile, p)
-    config.save()
+        config.upsert_profile(profile, p)
+        config.save()
     typer.echo("Logged in.")
 
 
@@ -411,6 +418,10 @@ def logout(
     except NotLoggedInError:
         typer.echo("Not logged in.")
         return
+    except ConfigError as e:
+        err.print(f"Error: {escape(str(e))}")
+        err.print("Run `dedaub-monitoring login` to write a new config file.")
+        raise typer.Exit(1)
 
     key = profile or config.default
     try:
@@ -423,8 +434,16 @@ def logout(
             revoke_token(stored)
         except AuthError as e:
             err.print(f"Warning: could not revoke the token on the server: {e}")
-    config.remove_profile(key)
-    config.save()
+    # Read the file again under the lock: the revoke call can take a while,
+    # and another process can change the other profiles in that time.
+    with locked():
+        try:
+            config = Config.load()
+            config.remove_profile(key)
+        except (NotLoggedInError, ProfileNotFoundError):
+            pass
+        else:
+            config.save()
     typer.echo("Logged out.")
 
 

@@ -7,9 +7,12 @@ sandboxes).
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
+import sys
 import tempfile
+from collections.abc import Iterator
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
@@ -32,6 +35,42 @@ def config_path() -> Path:
     if override:
         return Path(override).expanduser()
     return CONFIG_PATH
+
+
+def _ensure_dir(parent: Path) -> None:
+    """Make the folder of the config file, owner-only when it is ours.
+
+    mode= is subject to umask and skipped when the folder already exists, so
+    set 0700 explicitly. Do it only for a folder made here or for the default
+    folder: a ``$DEDAUB_CONFIG`` file can sit in a shared folder such as /tmp
+    or the working directory, and its mode is not ours to change.
+    """
+    created = not parent.exists()
+    parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    if created or parent == CONFIG_PATH.parent:
+        parent.chmod(0o700)
+
+
+@contextlib.contextmanager
+def locked() -> Iterator[None]:
+    """Hold an exclusive lock on the config file while you read and write it.
+
+    Several CLIs share the file. Without the lock, two read-change-write
+    cycles at the same time lose one of the changes. The lock is an advisory
+    flock on a ``.lock`` file next to the config file. On Windows there is no
+    flock, so this does not lock.
+    """
+    path = config_path()
+    _ensure_dir(path.parent)
+    fd = os.open(path.with_name(path.name + ".lock"), os.O_RDWR | os.O_CREAT, 0o600)
+    try:
+        if sys.platform != "win32":
+            import fcntl
+
+            fcntl.flock(fd, fcntl.LOCK_EX)
+        yield
+    finally:
+        os.close(fd)  # closing the fd releases the flock
 
 
 @dataclass
@@ -57,7 +96,10 @@ class Config:
             data = json.loads(path.read_text())
             profiles = {k: Profile(**v) for k, v in data["profiles"].items()}
             return cls(default=data["default"], profiles=profiles)
-        except (json.JSONDecodeError, KeyError, TypeError) as e:
+        # ValueError covers bad JSON and bad UTF-8; AttributeError a
+        # "profiles" that is not an object; OSError a path that is a folder
+        # or cannot be read.
+        except (OSError, ValueError, KeyError, TypeError, AttributeError) as e:
             raise ConfigError(
                 f"Config file at {path} is corrupt or outdated: {e}"
             ) from e
@@ -65,22 +107,23 @@ class Config:
     def save(self) -> None:
         path = config_path()
         parent = path.parent
-        # mode= is subject to umask and skipped when the dir already exists,
-        # so enforce owner-only perms explicitly to protect the refresh token.
-        parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-        parent.chmod(0o700)
+        _ensure_dir(parent)
         data = {
             "default": self.default,
             "profiles": {k: asdict(v) for k, v in self.profiles.items()},
         }
         tmp_fd, tmp_path = tempfile.mkstemp(dir=parent)
         try:
-            os.fchmod(tmp_fd, 0o600)
             with os.fdopen(tmp_fd, "w") as f:
+                os.fchmod(f.fileno(), 0o600)
                 f.write(json.dumps(data, indent=2))
+                f.flush()
+                # A crash after the rename must not leave an empty file.
+                os.fsync(f.fileno())
             os.replace(tmp_path, path)
-        except Exception:
-            os.unlink(tmp_path)
+        except BaseException:
+            with contextlib.suppress(FileNotFoundError):
+                os.unlink(tmp_path)
             raise
 
     def get_profile(self, name: str | None = None) -> Profile:
@@ -101,22 +144,24 @@ class Config:
 def persist_refresh_token(profile_name: str, old: str | None, new: str) -> bool:
     """Write a rotated refresh token back to the config file, atomically.
 
-    Re-reads the file first so a concurrent change to other profiles (or by the
-    other CLI) is not clobbered. Only replaces the token when the stored one is
-    still the token we refreshed with, so a newer login is never overwritten by
-    a stale rotation. Returns True when the file was updated; raises
-    ConfigError or OSError when the file can't be read or written.
+    Re-reads the file under locked(), so a change by another process (another
+    profile, a login, a logout, the other CLI) is not lost. Only replaces the
+    token when the stored one is still the token we refreshed with, so a newer
+    login is never overwritten by a stale rotation. Returns True when the file
+    was updated; raises ConfigError or OSError when the file can't be read or
+    written.
     """
-    try:
-        config = Config.load()
-    except NotLoggedInError:
-        return False
-    profile = config.profiles.get(profile_name)
-    if profile is None or profile.refresh_token not in (old, None):
-        return False
-    profile.refresh_token = new
-    config.save()
-    return True
+    with locked():
+        try:
+            config = Config.load()
+        except NotLoggedInError:
+            return False
+        profile = config.profiles.get(profile_name)
+        if profile is None or profile.refresh_token != old:
+            return False
+        profile.refresh_token = new
+        config.save()
+        return True
 
 
 class NotLoggedInError(Exception):

@@ -2206,3 +2206,26 @@ def test_render_widget_warns_when_the_rows_go_to_another_host(
     text = "The rows of the query go to evil.example."
     assert (text in _all_output(result)) is warned
     assert ("The rows of the query go to" in _all_output(result)) is warned
+
+
+def test_login_replaces_a_corrupt_config(config_path, monkeypatch):
+    config_path.write_text("{not json")
+    token = _jwt({"typ": "Offline"})
+    _patch_login(monkeypatch, token)
+    result = runner.invoke(app, ["login"])
+    assert result.exit_code == 0
+    out = result.output
+    with contextlib.suppress(ValueError, AttributeError):
+        out += result.stderr
+    assert "Writing a new config file" in out
+    assert cli.Config.load().get_profile("prod").refresh_token == token
+
+
+def test_logout_with_a_corrupt_config_names_the_fix(config_path):
+    config_path.write_text("{not json")
+    result = runner.invoke(app, ["logout"])
+    assert result.exit_code == 1
+    out = result.output
+    with contextlib.suppress(ValueError, AttributeError):
+        out += result.stderr
+    assert "dedaub-monitoring login" in out
