@@ -3,7 +3,9 @@
 A **widget** is a saved chart, table or single value of one query. A **dashboard** is a grid of widgets.
 A widget can be on no dashboard, or on many. These commands need a shell with the `dedaub-monitoring`
 CLI, version 0.6.0 or later (`dedaub-monitoring --version`; an older CLI has no widget commands). The
-chart summary, the option flags, sharing, publishing and the pictures need 0.9.0 or later. The CLI runs
+chart summary, the option flags, sharing, publishing and the pictures need 0.9.0 or later. The
+`render-widget` report of a widget that shows a message in place of a chart (exit 1), and
+`share-widget --dry-run`, need 0.10.0 or later. The CLI runs
 the same checks and the same SQL as the web app's Visualize tab, so a widget that passes `check-widget`
 draws on the dashboard. An HTTP 500 on a widget command can mean that the server does
 not have the backend of that command yet: the error names the CLI version. Do not retry it in a loop.
