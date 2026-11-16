@@ -35,6 +35,21 @@ Y_AXIS_TYPES = ("line", "bar", "stackedbar", "linebar")
 _JS_DECIMAL = re.compile(r"[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?", re.ASCII)
 _JS_RADIX = re.compile(r"0(?:[xX][0-9a-fA-F]+|[oO][0-7]+|[bB][01]+)")
 
+# The ECMAScript WhiteSpace and LineTerminator characters. JavaScript `trim()`
+# and `Number()` remove them from the two ends of a text. Python `str.strip()`
+# removes a different set: it also removes U+001C to U+001F and U+0085, and it
+# does not remove U+FEFF.
+_JS_SPACE = (
+    "\t\n\v\f\r \u00a0\u1680"
+    "\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a"
+    "\u2028\u2029\u202f\u205f\u3000\ufeff"
+)
+
+
+def _js_trim(text: str) -> str:
+    """JavaScript `text.trim()`."""
+    return text.strip(_JS_SPACE)
+
 
 def to_number(value: Any) -> float | None:
     """data.ts:37-45 `toNumber`: a finite number, or None."""
@@ -46,8 +61,7 @@ def to_number(value: Any) -> float | None:
         except OverflowError:  # an int past the float range is Infinity in JS
             return None
         return number if math.isfinite(number) else None
-    if isinstance(value, str) and value.strip():
-        text = value.strip()
+    if isinstance(value, str) and (text := _js_trim(value)):
         if _JS_DECIMAL.fullmatch(text):
             number = float(text)
             return number if math.isfinite(number) else None
@@ -87,7 +101,7 @@ def to_time(value: Any) -> float | None:
     midnight, and the fraction is cut to milliseconds."""
     if not isinstance(value, str):
         return None
-    match = _ISO_PARTS.fullmatch(value.strip())
+    match = _ISO_PARTS.fullmatch(_js_trim(value))
     if not match:
         return None
     year, month, day, hour, minute, second, fraction, _, sign, zh, zm = match.groups()
@@ -193,7 +207,7 @@ def _js_round(value: float) -> int:
 
 def number_of(value: Any) -> float | None:
     """widgetConfig.ts:382-387 `numberOf`: a number setting of a saved config."""
-    if isinstance(value, str) and not value.strip():
+    if isinstance(value, str) and not _js_trim(value):
         return None
     return to_number(value)
 
@@ -395,6 +409,12 @@ def _with_band(p: Point, y: float, band: dict[str, float | None]) -> Point:
     return Point(p.x, y, p.n, band["lo"], band["hi"], band["lo2"], band["hi2"])
 
 
+# A float sum of values can go past the float range only when the sum of
+# their absolute values is near 2**1024. Below 2**1023, the rounding errors of
+# a window would have to double the sum, which is not possible.
+_OVERFLOW_RISK = 2**1023
+
+
 class _Sliding:
     """The exact sum and sum of squares of the last `window` values of one
     key, in O(1) for each step. The floats become integers (a common power of
@@ -402,7 +422,14 @@ class _Sliding:
     error behind: a running float sum would keep one when a huge value
     (a wei amount) is followed by small ones. A None counts as missing.
     A value that is Infinity or NaN has no integer form: the window then
-    uses plain float sums, as JavaScript does."""
+    uses plain float sums, as JavaScript does.
+
+    data.ts adds the values of each window as floats, from left to right. When
+    that sum goes past the float range, the JavaScript mean is Infinity (or
+    -Infinity), but the exact mean is a finite number. The window then gives
+    the JavaScript value. For other windows, the window gives the exact mean.
+    It can differ from the JavaScript mean when huge values of opposite signs
+    cancel: JavaScript gives 0 for the mean of [-1e308, 1, 1e308]."""
 
     def __init__(self, values: Sequence[float | None], window: int) -> None:
         self._exact = all(v is None or math.isfinite(v) for v in values)
@@ -416,6 +443,7 @@ class _Sliding:
         self._floats: deque[float | None] = deque()
         self._total = 0
         self._squares = 0
+        self._magnitude = 0  # the sum of the absolute values
         self._missing = 0
 
     def _scaled(self, value: float) -> int:
@@ -428,18 +456,30 @@ class _Sliding:
         else:
             self._total += sign * item
             self._squares += sign * item * item
+            self._magnitude += sign * abs(item)
 
     def push(self, value: float | None) -> None:
+        self._floats.append(value)
+        if len(self._floats) > self._window:
+            self._floats.popleft()
         if not self._exact:
-            self._floats.append(value)
-            if len(self._floats) > self._window:
-                self._floats.popleft()
             return
         item = None if value is None else self._scaled(value)
         self._items.append(item)
         self._add(item, 1)
         if len(self._items) > self._window:
             self._add(self._items.popleft(), -1)
+
+    def _js_overflow(self) -> float | None:
+        """The JavaScript sum of the window (`reduce((a, b) => a + b, 0)`)
+        when it is Infinity or -Infinity, else None."""
+        if self._missing or self._magnitude < _OVERFLOW_RISK * self._unit:
+            return None
+        total = 0.0
+        for value in self._floats:
+            if value is not None:  # never: the window has no missing value
+                total += value  # a float sum gives Infinity, it does not raise
+        return None if math.isfinite(total) else total
 
     def mean(self) -> float | None:
         """The mean of the window, or None when one value is missing."""
@@ -450,6 +490,9 @@ class _Sliding:
             return _mean(floats)
         if self._missing:
             return None
+        overflow = self._js_overflow()
+        if overflow is not None:
+            return overflow / len(self._items)
         return self._total / (len(self._items) * self._unit)
 
     def sd(self) -> float:
@@ -459,6 +502,10 @@ class _Sliding:
         n = len(self._items)
         if n < 2:
             return 0.0
+        if self._js_overflow() is not None:
+            # The JavaScript mean is Infinity or -Infinity: each (v - mean) ** 2
+            # is Infinity, and the standard deviation is Infinity too.
+            return math.inf
         spread = n * self._squares - self._total**2  # n(n-1) times the variance
         try:
             return math.sqrt(spread / (n * (n - 1) * self._unit**2))

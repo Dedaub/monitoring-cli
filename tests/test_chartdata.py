@@ -40,10 +40,32 @@ from monitoring_cli import chartdata
         ("abc", None),
         (True, None),
         (None, None),
+        # JavaScript trim() and Number() remove U+FEFF. Python strip() does not.
+        ("\ufeff12", 12),
+        ("12\ufeff", 12),
+        # Python strip() removes U+001C to U+001F and U+0085. JavaScript does not.
+        ("\x1c12", None),
+        ("12\x1f", None),
+        ("\x8512", None),
+        # The other ECMAScript WhiteSpace and LineTerminator characters.
+        ("\u00a0\u1680\u2000\u200a\u202f\u205f\u3000 12\u2028\u2029\v\f", 12),
     ],
 )
 def test_to_number_matches_javascript(value, number):
     assert chartdata.to_number(value) == number
+
+
+@pytest.mark.parametrize(
+    ("value", "number"),
+    [
+        ("\ufeff", None),  # empty after trim(): not set
+        ("\x1c", None),  # not empty after trim(), but Number() gives NaN
+        ("\ufeff2.5", 2.5),
+        (" 3 ", 3),
+    ],
+)
+def test_number_of_trims_as_javascript(value, number):
+    assert chartdata.number_of(value) == number
 
 
 @pytest.mark.parametrize(
@@ -70,6 +92,9 @@ def test_to_number_matches_javascript(value, number):
         ("٢٠٢٦-١٠-٠١", None),  # Arabic-Indic digits are not an ISO date
         (5, None),
         (None, None),
+        ("\ufeff2026-10-01", 1790812800000),  # trim() removes U+FEFF
+        ("\x1c2026-10-01", None),  # trim() keeps U+001C
+        ("2026-10-01\x1f", None),
     ],
 )
 def test_to_time_matches_date_parse(value, ms):
@@ -86,6 +111,8 @@ def test_to_time_matches_date_parse(value, ms):
         ([], "category"),
         ([None], "category"),
         (["2026-01-01", 3], "category"),
+        (["\ufeff2026-01-01"], "time"),
+        (["\x1c2026-01-01"], "category"),
     ],
 )
 def test_x_kind_of_matches_the_web(values, kind):
@@ -283,6 +310,42 @@ def test_huge_values_give_infinity_not_an_error():
     # The variance of finite values can pass the float range too.
     spread = _transform(_line([1e200, -1e200]), "bollinger", 2, 2)
     assert (spread[1].y, spread[1].hi) == (0.0, inf)
+
+
+def test_rolling_mean_past_the_float_range_is_infinity_as_in_javascript():
+    # data.ts adds each window as floats: 1e308 + 1e308 is Infinity.
+    inf = float("inf")
+    drawn = _transform(_line([1e308, 1e308, 1e308]), "mean", 3)
+    assert [p.y for p in drawn] == [1e308, inf, inf]
+    negative = _transform(_line([-1e308, -1e308, -1e308]), "mean", 3)
+    assert [p.y for p in negative] == [-1e308, -inf, -inf]
+    # The band keys use the same sum.
+    banded = _line([1.0, 2.0], lo=[1e308, 1e308], hi=[1.0, 2.0])
+    assert [(p.y, p.lo, p.hi) for p in _transform(banded, "mean", 2)] == [
+        (1.0, 1e308, 1.0),
+        (1.5, inf, 1.5),
+    ]
+    # When the window has no huge value again, the mean is finite again.
+    back = _transform(_line([1e308, 1e308, 1.0, 3.0]), "mean", 2)
+    assert [p.y for p in back] == [1e308, inf, 5e307, 2.0]
+
+
+def test_bollinger_past_the_float_range_matches_javascript():
+    # The output of data.ts: the mean is Infinity, sd is Infinity, and
+    # Infinity - k * Infinity is NaN.
+    inf = float("inf")
+    ys = [1e308, 1e308, 1e308]
+    bands = _transform(_line(ys), "bollinger", 3, 2)
+    assert (bands[0].y, bands[0].lo, bands[0].hi) == (1e308, 1e308, 1e308)
+    for p in bands[1:]:
+        assert (p.y, p.hi) == (inf, inf)
+        assert p.lo != p.lo  # NaN
+    zero_k = _transform(_line(ys), "bollinger", 3, 0)
+    assert zero_k[2].y == inf
+    assert zero_k[2].lo != zero_k[2].lo and zero_k[2].hi != zero_k[2].hi
+    negative_k = _transform(_line(ys), "bollinger", 3, -1)
+    assert (negative_k[2].y, negative_k[2].lo) == (inf, inf)
+    assert negative_k[2].hi != negative_k[2].hi
 
 
 def test_summary_of_a_sum_past_the_float_range_does_not_raise():
