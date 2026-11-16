@@ -29,8 +29,11 @@ class _FakeApi:
     Error = _Error
     TimeoutError = _Timeout
 
-    def __init__(self, *, state="1", status=200, fail_channels=(), wait_error=None):
+    def __init__(
+        self, *, state="1", status=200, fail_channels=(), wait_error=None, message=None
+    ):
         self.state = state
+        self.message = message
         self.status = status
         self.fail_channels = set(fail_channels)
         self.wait_error = wait_error
@@ -65,6 +68,10 @@ class _FakeApi:
                     raise api.wait_error
 
             def get_attribute(self, selector, name):
+                if name == render.STATE_ATTR:
+                    return "message" if api.message else None
+                if name == render.MESSAGE_ATTR:
+                    return api.message
                 return api.state
 
             def locator(self, selector):
@@ -130,7 +137,8 @@ def test_render_waits_for_the_page_and_shoots_the_card(monkeypatch):
         render.Shot(_input(width=640, height=360), "jpeg", quality=85),
     ]
     pictures = render.render("http://localhost:3000/render/widget", shots)
-    assert pictures == [b"picture-png", b"picture-jpeg"]
+    assert [p.data for p in pictures] == [b"picture-png", b"picture-jpeg"]
+    assert all(p.message is None for p in pictures)
     assert ("launch", "chrome") in api.calls
     contexts = [c[1] for c in api.calls if c[0] == "context"]
     assert contexts[0] == {
@@ -248,3 +256,13 @@ def test_each_context_blocks_the_other_hosts(monkeypatch):
     api.handler(chunk)
     assert tag.done == "abort:blockedbyclient"
     assert chunk.done == "continue"
+
+
+def test_a_widget_message_comes_back_with_the_picture(monkeypatch):
+    api = _FakeApi(message="This visualization type is not supported.")
+    monkeypatch.setattr(render, "_playwright", lambda: api)
+    [picture] = render.render(
+        "https://app.dedaub.com/render/widget", [render.Shot(input=_input())]
+    )
+    assert picture.message == "This visualization type is not supported."
+    assert picture.data == b"picture-png"

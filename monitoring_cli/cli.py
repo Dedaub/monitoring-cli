@@ -3224,11 +3224,16 @@ def render_widget(
         raise typer.Exit(EXIT_RENDER_FAILED)
     name = draft.stored.get("widget_id") if draft.stored else "draft"
     path = out_path or Path(f"widget-{name}-{theme}.png")
-    _write_file(path, pictures[0])
+    _write_file(path, pictures[0].data)
     pixels = f"{round(width * _PNG_SCALE)}x{round(height * _PNG_SCALE)} px"
-    typer.echo(f"Saved {path} ({len(pictures[0])} bytes, PNG, {pixels}).")
+    typer.echo(f"Saved {path} ({len(pictures[0].data)} bytes, PNG, {pixels}).")
+    if pictures[0].message is not None:
+        # WidgetRender.tsx: the widget shows a message, not a chart. The picture
+        # is saved so that the agent can see it; it is not uploaded.
+        err.print(f"✗ The widget shows a message, not a chart: {pictures[0].message}")
+        raise typer.Exit(1)
     if upload:
-        _upload_card(client, draft, theme, pictures[1])
+        _upload_card(client, draft, theme, pictures[1].data)
 
 
 def _upload_card(

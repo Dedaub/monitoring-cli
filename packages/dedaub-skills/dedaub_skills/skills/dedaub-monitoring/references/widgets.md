@@ -105,6 +105,7 @@ and then draws the widget on the web app's `/render/widget` page in a headless b
 - It needs the `render` extra and a browser:
   `uv tool install --force 'monitoring-cli[render] @ git+https://github.com/Dedaub/monitoring-cli'`, then
   `playwright install chromium`; or use an installed Chrome with `--browser-channel chrome`.
+- The browser loads only the app and its fonts: every other request (analytics, tags) is blocked.
 - `--app-url http://localhost:3000` draws on a dev server of the web app. The default is the app of the
   profile's API. The browser gets the rows only: no token and no cookie.
 - `--upload` (a saved widget that you own, with no flag changes) also stores the picture as the widget's
@@ -114,7 +115,7 @@ and then draws the widget on the web app's `/render/widget` page in a headless b
 | Exit | Meaning |
 |------|---------|
 | 0 | The PNG is saved |
-| 1 | A problem of the checks, or the rows cannot be read |
+| 1 | A problem of the checks, the rows cannot be read, or the widget shows a message in place of a chart (a column left the query, an unsupported type): the PNG is saved so you can see it, and the message is printed |
 | 2 | A bad flag (a table, a size out of range, `--upload` without `--id` or with changes) |
 | 6 | The page cannot draw the widget: it said "error", it timed out (`--timeout`, default 60 s each step), or the web app has no `/render/widget` page yet (give `--app-url`) |
 | 7 | Playwright or a browser is not installed: install them as above |

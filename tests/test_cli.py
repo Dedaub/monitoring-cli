@@ -1786,7 +1786,7 @@ def fake_render(monkeypatch):
 
     def fake(page_url, shots, *, channel=None, timeout=60.0):
         calls.append((page_url, shots, channel, timeout))
-        return [f"img-{shot.kind}".encode() for shot in shots]
+        return [cli.render.Picture(f"img-{shot.kind}".encode()) for shot in shots]
 
     monkeypatch.setattr(cli.render, "render", fake)
     return calls
@@ -2005,3 +2005,35 @@ def test_render_widget_upload_refused_for_another_owner(
     )
     assert result.exit_code == 1
     assert "Only the owner of the widget" in _all_output(result)
+
+
+def test_render_widget_exits_1_when_the_widget_shows_a_message(monkeypatch, tmp_path):
+    _widget_client(monkeypatch).widget_rows.return_value = _rows_answer(_fee_rows(3))
+    monkeypatch.setattr(
+        cli.render,
+        "render",
+        lambda page_url, shots, **_: [
+            cli.render.Picture(b"img", "Column fee is not in the query any more.")
+        ],
+    )
+    monkeypatch.chdir(tmp_path)
+    result = runner.invoke(
+        app,
+        [
+            "render-widget",
+            "--query-id",
+            "9",
+            "--type",
+            "line",
+            "--x",
+            "day",
+            "--y",
+            "fee",
+        ],
+    )
+    assert result.exit_code == 1
+    assert (
+        "shows a message, not a chart: Column fee is not in the query"
+        in _all_output(result)
+    )
+    assert (tmp_path / "widget-draft-dark.png").read_bytes() == b"img"

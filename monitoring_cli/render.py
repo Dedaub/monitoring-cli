@@ -24,6 +24,10 @@ from urllib.parse import urlsplit
 PAGE_PATH = "/render/widget"
 READY_ATTR = "data-widget-ready"
 READY_SELECTOR = f'html[{READY_ATTR}="1"], html[{READY_ATTR}="error"]'
+# Set with READY_ATTR "1" when the widget shows a message in place of a chart
+# (a column left the query, an unsupported type): the text of the message.
+STATE_ATTR = "data-widget-state"
+MESSAGE_ATTR = "data-widget-message"
 TARGET = "[data-widget-render]"
 # WidgetRender.tsx readInput: the default size and the limits of the card.
 DEFAULT_WIDTH = 640
@@ -64,6 +68,15 @@ class PlaywrightMissing(Exception):
 class RenderFailed(Exception):
     """The page did not draw the widget: it said "error", it timed out, or the
     web app has no render page."""
+
+
+@dataclass(frozen=True)
+class Picture:
+    """One picture, and the message that the widget shows in place of a
+    chart (None when it drew a chart)."""
+
+    data: bytes
+    message: str | None = None
 
 
 @dataclass(frozen=True)
@@ -118,7 +131,7 @@ def render(
     *,
     channel: str | None = None,
     timeout: float = 60.0,
-) -> list[bytes]:
+) -> list[Picture]:
     """The pictures of `shots`, one page load each, in one browser. The
     browser gets no token and no cookie: a new context for each picture."""
     api = _playwright()
@@ -130,7 +143,9 @@ def render(
             browser.close()
 
 
-def _shoot(api: Any, browser: Any, page_url: str, shot: Shot, timeout: float) -> bytes:
+def _shoot(
+    api: Any, browser: Any, page_url: str, shot: Shot, timeout: float
+) -> Picture:
     deadline = time.monotonic() + timeout
 
     def ms() -> float:
@@ -170,7 +185,10 @@ def _shoot(api: Any, browser: Any, page_url: str, shot: Shot, timeout: float) ->
         }
         if shot.kind == "jpeg" and shot.quality is not None:
             options["quality"] = shot.quality
-        return page.locator(TARGET).screenshot(**options)
+        message = None
+        if page.get_attribute("html", STATE_ATTR) == "message":
+            message = page.get_attribute("html", MESSAGE_ATTR) or "(no text)"
+        return Picture(page.locator(TARGET).screenshot(**options), message)
     except api.TimeoutError as e:
         raise RenderFailed(f"The chart was not drawn within {timeout:g}s.") from e
     except api.Error as e:
