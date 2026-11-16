@@ -329,7 +329,7 @@ A widget is a saved chart, table or single value of one query; a dashboard is a 
 | `delete-dashboard` | Delete a dashboard; its widgets stay saved unless `--delete-widgets` |
 | `set-layout` | Set the place and size of widgets on the 12-column grid (`--layout FILE\|-`, a JSON list of `{widget_id, x, y, width, height}`) |
 | `set-default-dashboard` | Set the dashboard that `/dashboard` opens (`--id`), or `--clear` it |
-| `share-widget` / `widget-private-queries` | Share a widget with everyone (`--public`, it makes its private queries public too) or `--private`; list those queries first |
+| `share-widget` / `widget-private-queries` | Share a widget with everyone (`--public`, it makes its private queries public too) or `--private`; list those queries first (`--dry-run` lists them and changes nothing) |
 | `publish-dashboard` | Make a dashboard and its private queries public in one step (`--dry-run` lists them) |
 | `widget-picture` / `dashboard-picture` | Download the stored picture (`--theme dark\|light`) and say whether it is stale |
 
@@ -344,9 +344,11 @@ dedaub-monitoring add-widget     --id 456 --dashboard-id 78
 `render-widget` needs Playwright and a browser:
 
 ```bash
-uv tool install --force 'monitoring-cli[render] @ git+https://github.com/Dedaub/monitoring-cli'
+uv tool install --force --with-executables-from playwright 'monitoring-cli[render] @ git+https://github.com/Dedaub/monitoring-cli'
 playwright install chromium        # or use an installed Chrome: --browser-channel chrome
 ```
+
+`--with-executables-from playwright` puts the `playwright` command on your PATH: `uv tool install` links only the executables of the main package. `make install` and `make setup` install without the render extra: use the line above, or `make install-render`, when you need `render-widget`.
 
 The widget types and every config key are in the skill's [`references/widgets.md`](packages/dedaub-skills/dedaub_skills/skills/dedaub-monitoring/references/widgets.md).
 

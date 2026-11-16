@@ -92,7 +92,7 @@ Note: A log scale needs values above 0: the linear scale is shown.
 | `0 rows: the widget is empty` | Widen `--timeframe`, or check that the query returns rows |
 | `N rows have no number or no X` | Y is not a number (or X is empty) in those rows: the chart drops them |
 | `A log scale needs values above 0` | A value is 0 or less: the chart falls back to linear |
-| `long labels: …` | A category label is longer than 14 characters: the axis hides the labels that overlap. Use fewer categories or shorter labels |
+| `long labels: …` | A category label is longer than the chart shows (14 characters; 26 on `--horizontal` bars): the chart cuts it and the axis hides the labels that overlap. Use fewer categories or shorter labels |
 
 ## See the chart (`render-widget`)
 
@@ -103,12 +103,15 @@ and then draws the widget on the web app's `/render/widget` page in a headless b
 --type …`) and after (`--id`). A table has no chart: use `preview-widget`.
 
 - It needs the `render` extra and a browser:
-  `uv tool install --force 'monitoring-cli[render] @ git+https://github.com/Dedaub/monitoring-cli'`, then
+  `uv tool install --force --with-executables-from playwright 'monitoring-cli[render] @ git+https://github.com/Dedaub/monitoring-cli'`, then
   `playwright install chromium`; or use an installed Chrome with `--browser-channel chrome`.
 - The browser loads only the app and its fonts: every other request (analytics, tags) is blocked.
 - `--app-url http://localhost:3000` draws on a dev server of the web app. The default is the app of the
-  profile's API. The browser gets the rows only: no token and no cookie.
-- `--upload` (a saved widget that you own, with no flag changes) also stores the picture as the widget's
+  profile's API. The browser gets the rows only: no token and no cookie. For a host that is not the
+  app of the profile and not localhost, the command prints "The rows of the query go to <host>." on
+  stderr and goes on.
+- `--upload` (a saved widget that you own, with no flag changes, no `--limit`, and the query that
+  the widget reads) also stores the picture as the widget's
   card picture of `--theme`, a 640 × 360 JPEG, as the owner's browser makes it. Do it only when the user
   asks.
 
@@ -116,7 +119,7 @@ and then draws the widget on the web app's `/render/widget` page in a headless b
 |------|---------|
 | 0 | The PNG is saved |
 | 1 | A problem of the checks, the rows cannot be read, or the widget shows a message in place of a chart (a column left the query, an unsupported type): the PNG is saved so you can see it, and the message is printed |
-| 2 | A bad flag (a table, a size out of range, `--upload` without `--id` or with changes) |
+| 2 | A bad flag (a table, a size out of range, `--upload` without `--id`, or with changes, `--limit` or another `--query-id`) |
 | 6 | The page cannot draw the widget: it said "error", it timed out (`--timeout`, default 60 s each step), or the web app has no `/render/widget` page yet (give `--app-url`) |
 | 7 | Playwright or a browser is not installed: install them as above |
 
@@ -301,7 +304,8 @@ also the ones that it reads through `ref()`. Making a query public shows its tex
 everyone. **Ask the user before you share or publish.**
 
 - `widget-private-queries --id <WID>` lists the private queries of a widget. `share-widget --id <WID>
-  --public` prints them and makes them public with the widget, all or nothing. `--private` makes the
+  --public` prints them and makes them public with the widget, all or nothing. `--dry-run` prints
+  them and changes nothing (exit 0). `--private` makes the
   widget private again; its queries stay public.
 - `publish-dashboard --id <DID> --dry-run` lists the private queries of a dashboard; without
   `--dry-run` it makes them and the dashboard public, all or nothing (`--unlisted` hides it from the
@@ -315,7 +319,8 @@ The web app stores a picture of each chart widget and each dashboard, one for ea
 owner's browser makes it, when the owner opens the dashboard; a table or value widget has none.
 `widget-picture --id <WID>` and `dashboard-picture --id <DID>` (`--theme dark|light`, `--out PATH`)
 save it as `widget-<id>-<theme>.jpg` (or `dashboard-…`) and print its age and `Stale: yes|no|unknown`
-(the widget changed after the picture). No picture yet: exit 5. A picture is not proof that the chart
+(the widget changed after the picture; a share also moves the time, so a stale picture can be a share,
+not an edit). No picture yet: exit 5. A picture is not proof that the chart
 is correct: use `preview-widget` for the data.
 
 ## Commands (one example each)

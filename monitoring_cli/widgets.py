@@ -388,7 +388,8 @@ def ignored_key_notes(widget_type: str, config: Mapping[str, Any]) -> list[str]:
         notes.append(f"{key} is ignored for a {widget_type} widget: {why}.")
 
     for key, types in _OPTION_TYPES.items():
-        if config.get(key) is not None and widget_type not in types:
+        value = config.get(key)
+        if value is not None and value is not False and widget_type not in types:
             ignored(
                 key,
                 f"only {_types_text(types)} {'uses' if len(types) == 1 else 'use'} it",
@@ -523,7 +524,7 @@ def column_type_notes(
     for key in _numeric_keys(widget_type, config):
         name = config.get(key)
         column_type = types.get(name) if isinstance(name, str) else None
-        if column_type and not _NUMBER_TYPE.match(column_type):
+        if _is_known_non_number(column_type):
             notes.append(
                 f"{key} {name!r} is {column_type}, not a number type: the chart draws only the values that read as numbers."
             )
@@ -708,6 +709,32 @@ _NETWORK_LINE = re.compile(r'--#[ ]*default_network[ ]*=[ ]*"([a-zA-Z0-9_]+)"')
 _NUMBER_TYPE = re.compile(
     r"(smallint|integer|bigint|numeric|decimal|real|double precision)"
 )
+# The type names for the "not a number" note: the API can return the short
+# Postgres names (int4, float8), which the web rule above does not match.
+_WIDE_NUMBER_TYPE = re.compile(
+    r"(u?int\d*|float\d*|smallint|integer|bigint|numeric|decimal|real"
+    r"|double precision|money|serial\d*|bigserial|smallserial)(\(.*\))?",
+    re.IGNORECASE,
+)
+# The type names that hold no number. Any other name (empty, or one that this
+# code does not know) gets no note: a wrong note is worse than none.
+_NON_NUMBER_TYPE = re.compile(
+    r"(text|varchar|char|character( varying)?|bpchar|name|string|bool|boolean"
+    r"|bytea|bytes\d*|json|jsonb|uuid|date|time|timetz|timestamp|timestamptz"
+    r"|timestamp (with|without) time zone|interval|inet|cidr)(\(.*\))?(\[\])?",
+    re.IGNORECASE,
+)
+
+
+def _is_known_non_number(column_type: str | None) -> bool:
+    """Whether the type name is one that holds no number (for the note that a
+    chart draws only the values that read as numbers)."""
+    name = (column_type or "").strip()
+    if not name or _WIDE_NUMBER_TYPE.fullmatch(name):
+        return False
+    return _NON_NUMBER_TYPE.fullmatch(name) is not None
+
+
 # widgetConfig.ts Y_ORDER_TYPES: the types that can put X in the order of Y.
 Y_ORDER_TYPES = ("line", "bar", "stackedbar", "linebar")
 

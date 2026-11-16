@@ -2601,6 +2601,7 @@ def preview_widget(
     flags = _flag_config(locals())
     if id is None:
         _require_new_widget_args(query_id, widget_type)
+    _check_limit(limit, widget_type)
     config_input = _config_input(config)
     client, _ = _load_client(profile)
     # Known for sure after the draft (a saved widget has its own type).
@@ -2626,16 +2627,28 @@ def preview_widget(
     _print_preview(draft, rows, rows_limit, show_rows, read)
 
 
+def _check_limit(limit: int | None, widget_type: str | None) -> None:
+    """Exit 2 on a --limit out of range. With no known type, the widest range
+    (a table's page, or a chart) is the bound; _checked_sqls checks again with
+    the type of the draft."""
+    if limit is None:
+        return
+    if widget_type is None:
+        max_rows = max(widgets.PAGE_ROWS, widgets.CHART_ROWS)
+    else:
+        max_rows = widgets.PAGE_ROWS if widget_type == "table" else widgets.CHART_ROWS
+    if not 1 <= limit <= max_rows:
+        what = f"for a {widget_type}" if widget_type else "for a widget"
+        err.print(f"--limit must be from 1 to {max_rows} {what}.")
+        raise typer.Exit(2)
+
+
 def _checked_sqls(
     client: MonitoringClient, draft: _Draft, limit: int | None
 ) -> tuple[list[dict], str, str | None]:
     """Check the draft as preview-widget does (exit 1 on a problem, 2 on a bad
     --limit), then its columns and its SQL in the two forms."""
-    is_table = draft.widget_type == "table"
-    max_rows = widgets.PAGE_ROWS if is_table else widgets.CHART_ROWS
-    if limit is not None and not 1 <= limit <= max_rows:
-        err.print(f"--limit must be from 1 to {max_rows} for a {draft.widget_type}.")
-        raise typer.Exit(2)
+    _check_limit(limit, draft.widget_type)
     problems, notes, _ = _widget_problems(client, draft, check_columns=False)
     if draft.query is None:
         problems.append("The widget reads no query, so it has no rows to preview.")
@@ -3037,6 +3050,13 @@ _PNG_SCALE = 2.0
 _LOCAL_HOSTS = ("localhost", "127.0.0.1", "::1")
 
 
+def _check_theme(theme: str) -> None:
+    """Exit 2 on a theme other than dark or light, before any network call."""
+    if theme not in ("dark", "light"):
+        err.print("--theme must be dark or light.")
+        raise typer.Exit(2)
+
+
 def _render_page_url(app_url: str | None, base_url: str) -> str:
     """The render page of the web app: the app of the profile's API, or
     --app-url (https, or http on this machine for a dev server)."""
@@ -3050,15 +3070,33 @@ def _render_page_url(app_url: str | None, base_url: str) -> str:
             "--app-url must be https://…, or http://localhost:<port> for a dev server."
         )
         raise typer.Exit(2)
+    app_host = urlsplit(widgets.app_url(base_url)).hostname
+    if not local and parts.hostname != app_host:
+        # The page gets the rows of the query: say where they go.
+        err.print(f"Warning: The rows of the query go to {escape(parts.hostname)}.")
     return url + render.PAGE_PATH
 
 
-def _check_upload(draft: _Draft) -> None:
+def _check_upload(draft: _Draft, limit: int | None = None) -> None:
     """--upload stores the picture of the saved widget only, as the owner's
-    browser makes it: a chart, with no change from the flags."""
+    browser makes it: a chart, with no change from the flags, all its rows
+    (no --limit) and the query that it reads."""
     stored = draft.stored
     if stored is None:
         err.print("--upload needs --id: it stores the picture of a saved widget.")
+        raise typer.Exit(2)
+    if limit is not None:
+        err.print(
+            "--upload draws all the rows that the widget reads: do not use --limit"
+            " with it."
+        )
+        raise typer.Exit(2)
+    query_id = (draft.query or {}).get("query_id")
+    if query_id is not None and query_id not in (stored.get("query_ids") or []):
+        err.print(
+            f"--upload draws the query of the saved widget, not query {query_id}."
+            " Save the change first (update-widget), or render without --upload."
+        )
         raise typer.Exit(2)
     saved = widgets.clean_config(widgets.normalize_config(stored.get("config") or {}))
     if draft.config != saved or draft.widget_type != stored.get("type"):
@@ -3164,9 +3202,8 @@ def render_widget(
     flags = _flag_config(locals())
     if id is None:
         _require_new_widget_args(query_id, widget_type)
-    if theme not in ("dark", "light"):
-        err.print("--theme must be dark or light.")
-        raise typer.Exit(2)
+    _check_theme(theme)
+    _check_limit(limit, "chart")
     for name, size in (("--width", width), ("--height", height)):
         if not render.MIN_SIZE <= size <= render.MAX_SIZE:
             err.print(f"{name} must be from {render.MIN_SIZE} to {render.MAX_SIZE}.")
@@ -3183,7 +3220,7 @@ def render_widget(
             err.print("A table widget has no chart to draw: use preview-widget.")
             raise typer.Exit(2)
         if upload:
-            _check_upload(draft)
+            _check_upload(draft, limit)
         columns, ref_sql, text_sql = _checked_sqls(client, draft, limit)
         rows_limit = limit or widgets.CHART_ROWS
         rows, read = _read_rows(
@@ -3327,11 +3364,23 @@ def share_widget(
             help="--public: everyone who is signed in can open the widget, and its private queries become public. --private: only the owner",
         ),
     ] = None,
+    dry_run: Annotated[
+        bool,
+        typer.Option(
+            "--dry-run",
+            help="With --public: list the private queries that would become public; change nothing",
+        ),
+    ] = False,
     profile: ProfileOption = None,
 ) -> None:
     """Share a widget with everyone who is signed in (--public), or make it private again (--private). --public also makes public each private query that the widget reads, also through ref(): their text, rows and alerts. It prints them first. All or nothing."""
     if public is None:
         err.print("Provide --public or --private.")
+        raise typer.Exit(2)
+    if dry_run and not public:
+        err.print(
+            "--dry-run needs --public: it lists the queries that would be published."
+        )
         raise typer.Exit(2)
     client, p = _load_client(profile)
     queries: list[dict] = []
@@ -3341,6 +3390,11 @@ def share_widget(
             if queries:
                 output.format_private_queries(queries)
             _refuse_blocked(queries, "widget")
+            if dry_run:
+                if not queries:
+                    typer.echo("No private query would become public.")
+                typer.echo("Dry run: nothing changed.")
+                return
         result = client.share_widget(id, public, [q["query_id"] for q in queries])
     except typer.Exit:
         raise
@@ -3493,7 +3547,10 @@ def _stale(
         return "no"
     if other is not None and abs(changed - other) <= _SAME_WRITE:
         return "unknown (the last change is the upload of the other theme's picture)"
-    return f"yes: changed {_age(taken, changed)} after the picture"
+    return (
+        f"yes: changed {_age(taken, changed)} after the picture"
+        " (a share also counts as a change)"
+    )
 
 
 def _write_file(path: Path, data: bytes) -> None:
@@ -3515,9 +3572,7 @@ def _save_picture(
     changed: datetime.datetime | None,
     unknown: str | None = None,
 ) -> None:
-    if theme not in _PICTURE_KEYS:
-        err.print("--theme must be dark or light.")
-        raise typer.Exit(2)
+    _check_theme(theme)
     url_key, time_key, other_key = _PICTURE_KEYS[theme]
     url = record.get(url_key)
     if not url:
@@ -3562,7 +3617,7 @@ def _widget_change(widget: dict) -> tuple[datetime.datetime | None, bool]:
 
 
 def _dashboard_change(
-    dashboard: dict, widgets: list[dict], taken: datetime.datetime | None
+    dashboard: dict, dashboard_widgets: list[dict], taken: datetime.datetime | None
 ) -> tuple[datetime.datetime | None, str | None]:
     """The last change of a dashboard and its widgets, and why it is unknown.
     A card upload in the minutes after the dashboard picture is part of the
@@ -3570,7 +3625,7 @@ def _dashboard_change(
     the Widgets tab, `render-widget --upload`) can hide an edit."""
     times = [_parse_time(dashboard.get("_ts"))]
     hidden: list[tuple[datetime.datetime, int]] = []
-    for widget in widgets:
+    for widget in dashboard_widgets:
         changed, card = _widget_change(widget)
         if changed is None:
             continue
@@ -3603,6 +3658,7 @@ def widget_picture(
     profile: ProfileOption = None,
 ) -> None:
     """Download the stored picture of a widget (the card of the Widgets tab) and print its path, its age, and whether the widget changed after it. Only the owner's browser makes the picture; a table or value widget has none. Exits 5 when there is no picture."""
+    _check_theme(theme)
     client, _ = _load_client(profile)
     try:
         widget = client.get_widget(id)
@@ -3632,12 +3688,13 @@ def dashboard_picture(
     profile: ProfileOption = None,
 ) -> None:
     """Download the stored picture of a dashboard (the preview of its link) and print its path, its age, and whether the dashboard or one of its widgets changed after it. Only the owner's browser makes the picture. Exits 5 when there is no picture."""
+    _check_theme(theme)
     client, _ = _load_client(profile)
     try:
         dashboard = client.get_dashboard(id)
         # The last change of a dashboard is the later of its own change and its
         # newest widget change (dashboard.py list_dashboards updated_at).
-        taken = _parse_time(dashboard.get(_PICTURE_KEYS.get(theme, ("", "", ""))[1]))
+        taken = _parse_time(dashboard.get(_PICTURE_KEYS[theme][1]))
         changed, unknown = _dashboard_change(
             dashboard, client.list_widgets(dashboard_id=id), taken
         )

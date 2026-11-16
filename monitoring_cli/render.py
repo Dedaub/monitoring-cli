@@ -54,8 +54,9 @@ def allowed(url: str, page_url: str) -> bool:
 _MARGIN = 64
 
 INSTALL_HINT = (
-    "Install the render extra and a browser:\n"
-    "  uv tool install --force 'monitoring-cli[render] @ git+https://github.com/Dedaub/monitoring-cli'\n"
+    "Install the render extra, with the playwright command, and a browser:\n"
+    "  uv tool install --force --with-executables-from playwright"
+    " 'monitoring-cli[render] @ git+https://github.com/Dedaub/monitoring-cli'\n"
     "  playwright install chromium\n"
     "Or use an installed Chrome: --browser-channel chrome."
 )
@@ -157,6 +158,7 @@ def _shoot(
         viewport={"width": width + _MARGIN, "height": height + _MARGIN},
         device_scale_factor=shot.scale,
         color_scheme="light" if shot.input.get("theme") == "light" else "dark",
+        service_workers="block",
     )
     try:
         context.route(
@@ -168,7 +170,13 @@ def _shoot(
             ),
         )
         page = context.new_page()
-        page.add_init_script(script=init_script(shot.input))
+        try:
+            script = init_script(shot.input)
+        except ValueError as e:
+            raise RenderFailed(
+                f"The widget input cannot be sent to the page as JSON: {e}"
+            ) from e
+        page.add_init_script(script=script)
         response = page.goto(page_url, wait_until="domcontentloaded", timeout=ms())
         if response is not None and response.status >= 400:
             raise RenderFailed(

@@ -1057,6 +1057,22 @@ def test_download_public_refuses_a_large_file_and_a_bad_url():
         client.download_public(PICTURE, max_bytes=10)
     with pytest.raises(ValueError, match="Not a picture URL"):
         client.download_public("file:///etc/passwd")
+    with pytest.raises(ValueError, match="https is required"):
+        client.download_public(PICTURE.replace("https:", "http:"))
+
+
+@respx.mock
+def test_download_public_treats_a_redirect_as_an_error():
+    respx.get(PICTURE).mock(
+        return_value=httpx.Response(302, headers={"location": "http://evil.example/x"})
+    )
+    with pytest.raises(httpx.HTTPStatusError, match="HTTP 302"):
+        MonitoringClient(PROFILE).download_public(PICTURE)
+
+
+def test_a_conflict_error_needs_no_arguments():
+    error = ConflictError()
+    assert error.detail == ""
 
 
 @respx.mock

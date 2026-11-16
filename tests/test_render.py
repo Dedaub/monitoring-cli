@@ -145,6 +145,7 @@ def test_render_waits_for_the_page_and_shoots_the_card(monkeypatch):
         "viewport": {"width": 704, "height": 424},
         "device_scale_factor": 2.0,
         "color_scheme": "light",
+        "service_workers": "block",
     }
     assert (
         "goto",
@@ -201,6 +202,16 @@ def test_missing_playwright_gives_the_install_hint(monkeypatch):
         render.render("https://app/render/widget", [render.Shot(_input())])
     assert "monitoring-cli[render]" in str(e.value)
     assert "--browser-channel chrome" in str(e.value)
+    assert "--with-executables-from playwright" in str(e.value)
+
+
+def test_nan_in_the_rows_is_a_render_failure(monkeypatch):
+    api = _FakeApi()
+    monkeypatch.setattr(render, "_playwright", lambda: api)
+    shot = render.Shot(_input(rows=[{"x": float("nan")}]))
+    with pytest.raises(render.RenderFailed, match="JSON"):
+        render.render("https://app/render/widget", [shot])
+    assert ("context-closed",) in api.calls
 
 
 @pytest.mark.skipif(

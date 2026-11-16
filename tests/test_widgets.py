@@ -589,7 +589,7 @@ def test_auto_layout_puts_an_alerts_widget_at_full_width():
         ),
         (
             "bar",
-            {"fit": False},
+            {"fit": True},
             "fit is ignored for a bar widget: only scatter uses it.",
         ),
         (
@@ -619,7 +619,7 @@ def test_auto_layout_puts_an_alerts_widget_at_full_width():
         ),
         (
             "bar",
-            {"anomalies": False},
+            {"anomalies": True},
             "anomalies is ignored for a bar widget: only line uses it.",
         ),
         (
@@ -725,6 +725,35 @@ def test_column_types_tell_the_x_axis_and_the_text_y():
         "line", {"x_axis_name": "day", "y_axis_name": "gas"}, columns
     )
     assert ok == []
+
+
+def test_a_false_option_is_not_an_ignored_key():
+    # False is "off": there is nothing to ignore.
+    assert widgets.ignored_key_notes("bar", {"anomalies": False}) == []
+    assert widgets.ignored_key_notes("line", {"horizontal": False}) == []
+
+
+@pytest.mark.parametrize(
+    ("column_type", "noted"),
+    [
+        ("int4", False),
+        ("int8", False),
+        ("float8", False),
+        ("bigserial", False),
+        ("uint256", False),
+        ("numeric(38,0)", False),
+        ("money", False),
+        ("", False),
+        ("some_future_type", False),
+        ("text", True),
+        ("character varying(10)", True),
+        ("boolean", True),
+    ],
+)
+def test_the_number_note_knows_the_short_postgres_names(column_type, noted):
+    columns = [{"name": "fee", "type": column_type}]
+    _, notes = widgets.column_type_notes("line", {"y_axis_name": "fee"}, columns)
+    assert bool(notes) is noted
 
 
 def test_series_notes_of_a_scatter_keep_three_groups():

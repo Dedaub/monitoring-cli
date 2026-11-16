@@ -1007,12 +1007,13 @@ class MonitoringClient:
         its bytes and content type. It sends no credentials: the API token
         goes to the API host only."""
         parts = urlsplit(url)
-        if parts.scheme not in ("https", "http") or not parts.hostname:
-            raise ValueError(f"Not a picture URL: {url!r}")
+        if parts.scheme != "https" or not parts.hostname:
+            raise ValueError(f"Not a picture URL (https is required): {url!r}")
         chunks: list[bytes] = []
         size = 0
         with httpx.stream("GET", url, timeout=30.0) as resp:
-            if resp.is_error:
+            # No redirect is followed: a 3xx has no picture in its body.
+            if resp.status_code >= 300:
                 raise httpx.HTTPStatusError(
                     f"HTTP {resp.status_code} for the picture {url}",
                     request=resp.request,
@@ -1102,8 +1103,8 @@ class QueryCapError(Exception):
 class ConflictError(Exception):
     """HTTP 409. `detail` is the server's reason."""
 
-    def __init__(self, path: str, detail: str = "") -> None:
-        super().__init__(path)
+    def __init__(self, path: str | None = None, detail: str = "") -> None:
+        super().__init__(path or "")
         self.detail = detail
 
 

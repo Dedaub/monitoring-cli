@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import math
 import re
+from collections import deque
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any
@@ -348,16 +349,86 @@ def _with_band(p: Point, y: float, band: dict[str, float | None]) -> Point:
     return Point(p.x, y, p.n, band["lo"], band["hi"], band["lo2"], band["hi2"])
 
 
+class _Sliding:
+    """The exact sum and sum of squares of the last `window` values of one
+    key, in O(1) for each step. The floats become integers (a common power of
+    two as the unit), so a value that leaves the window leaves no rounding
+    error behind: a running float sum would keep one when a huge value
+    (a wei amount) is followed by small ones. A None counts as missing."""
+
+    def __init__(self, values: Sequence[float | None], window: int) -> None:
+        self._unit = max(
+            (v.as_integer_ratio()[1] for v in values if v is not None), default=1
+        )
+        self._window = window
+        self._items: deque[int | None] = deque()
+        self._total = 0
+        self._squares = 0
+        self._missing = 0
+
+    def _scaled(self, value: float) -> int:
+        numerator, denominator = value.as_integer_ratio()
+        return numerator * (self._unit // denominator)
+
+    def _add(self, item: int | None, sign: int) -> None:
+        if item is None:
+            self._missing += sign
+        else:
+            self._total += sign * item
+            self._squares += sign * item * item
+
+    def push(self, value: float | None) -> None:
+        item = None if value is None else self._scaled(value)
+        self._items.append(item)
+        self._add(item, 1)
+        if len(self._items) > self._window:
+            self._add(self._items.popleft(), -1)
+
+    def mean(self) -> float | None:
+        """The mean of the window, or None when one value is missing."""
+        if self._missing:
+            return None
+        return self._total / (len(self._items) * self._unit)
+
+    def sd(self) -> float:
+        """data.ts:83-88 `sd` of the window (the sample standard deviation)."""
+        n = len(self._items)
+        if n < 2:
+            return 0.0
+        spread = n * self._squares - self._total**2  # n(n-1) times the variance
+        return math.sqrt(spread / (n * (n - 1) * self._unit**2))
+
+
 def _rolling_mean(points: list[Point], window: int) -> list[Point]:
-    """data.ts:244-255: the mean of each key over the last `window` points."""
+    """data.ts:244-255: the mean of each key over the last `window` points
+    (fewer at the start); None when one point of the window has no such key."""
+    y_window = _Sliding([p.y for p in points], window)
+    band_windows = {
+        key: _Sliding([getattr(p, key) for p in points], window) for key in _BAND_KEYS
+    }
     out = []
-    for i, p in enumerate(points):
-        window_points = points[max(0, i - window + 1) : i + 1]
+    for p in points:
+        y_window.push(p.y)
         band: dict[str, float | None] = {}
-        for key in _BAND_KEYS:
-            column = [getattr(q, key) for q in window_points]
-            band[key] = None if any(v is None for v in column) else _mean(column)
-        out.append(_with_band(p, _mean([q.y for q in window_points]), band))
+        for key, sliding in band_windows.items():
+            sliding.push(getattr(p, key))
+            band[key] = sliding.mean()
+        y = y_window.mean()
+        assert y is not None  # every point has a y
+        out.append(_with_band(p, y, band))
+    return out
+
+
+def _bollinger(points: list[Point], window: int, band_k: float) -> list[Point]:
+    """data.ts:300-312: the rolling mean of y, with a ±k·σ band."""
+    sliding = _Sliding([p.y for p in points], window)
+    out = []
+    for p in points:
+        sliding.push(p.y)
+        m = sliding.mean()
+        assert m is not None  # every point has a y
+        s = sliding.sd()
+        out.append(Point(p.x, m, p.n, lo=m - band_k * s, hi=m + band_k * s))
     return out
 
 
@@ -397,14 +468,7 @@ def apply_transform(
     if transform == "ewma":
         return _ewma(points, size), False
     if transform == "bollinger":
-        band_k = 2.0 if k is None else k
-        out = []
-        for i, p in enumerate(points):
-            ys = [q.y for q in points[max(0, i - size + 1) : i + 1]]
-            m = _mean(ys)
-            s = _sd(ys)
-            out.append(Point(p.x, m, p.n, lo=m - band_k * s, hi=m + band_k * s))
-        return out, had_band
+        return _bollinger(points, size, 2.0 if k is None else k), had_band
     if transform == "index":
         base = next((p.y for p in points if p.y != 0), None)
         if base is None:
@@ -461,14 +525,27 @@ LONG_LABEL_HORIZONTAL = 26
 _SHOWN_NAMES = 4  # name the series when there are this many or fewer
 
 
-def _label_note(labels: Sequence[str], what: str = "x label") -> list[str]:
+def _label_note(
+    labels: Sequence[str], what: str = "x label", *, horizontal: bool = False
+) -> list[str]:
+    """The note for a label that the chart cuts: 14 characters, or 26 on
+    horizontal bars (which then have no --horizontal to suggest)."""
+    limit = LONG_LABEL_HORIZONTAL if horizontal else LONG_LABEL
     longest = max(labels, key=len, default="")
-    if len(longest) <= LONG_LABEL:
+    if len(longest) <= limit:
         return []
     sample = longest if len(longest) <= 40 else longest[:40] + "…"
-    return [
+    head = (
         f"long labels: the longest {what} has {len(longest)} characters ({sample!r}). "
-        f"The chart cuts labels to {LONG_LABEL} characters ({LONG_LABEL_HORIZONTAL} on "
+    )
+    if horizontal:
+        return [
+            head + f"The chart cuts labels to {limit} characters and shows the full "
+            "text in the tooltip. Consider fewer categories or shorter labels."
+        ]
+    return [
+        head
+        + f"The chart cuts labels to {limit} characters ({LONG_LABEL_HORIZONTAL} on "
         "--horizontal bars) and shows the full text in the tooltip. Consider --horizontal "
         "(bars), fewer categories or shorter labels."
     ]
@@ -582,7 +659,11 @@ def _axis(
     ):  # option.ts:530-537
         out.notes.append(_log_note())
     if built.kind == "category":
-        out.notes += _label_note([str(v) for v in xs])
+        # option.ts onItsSide: only bar and stackedbar turn on their side.
+        horizontal = widget_type in ("bar", "stackedbar") and bool(
+            config.get("horizontal")
+        )
+        out.notes += _label_note([str(v) for v in xs], horizontal=horizontal)
 
 
 _KIND_TEXT = {"time": "time", "value": "number", "category": "category"}
