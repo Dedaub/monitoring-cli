@@ -11,13 +11,14 @@ import base64
 import contextlib
 import io
 import json
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, create_autospec
 
 import pytest
 from typer.testing import CliRunner
 
 from monitoring_cli import cli
 from monitoring_cli.cli import app
+from monitoring_cli.client import MonitoringClient
 
 runner = CliRunner()
 
@@ -528,7 +529,8 @@ def test_login_silent_with_offline_token(config_path, monkeypatch):
 
 
 def _widget_client(monkeypatch, *, scheduled=False, notify=False, columns=None):
-    client = MagicMock()
+    # An autospec checks each call against the real MonitoringClient signature.
+    client = create_autospec(MonitoringClient, instance=True)
     client.get_query.return_value = {
         "query_id": 9,
         "query_name": "Fees",
@@ -800,13 +802,26 @@ def test_preview_widget_sql_does_not_run(monkeypatch):
     client.execute_query.assert_not_called()
 
 
+def _http_400(detail: str):
+    import httpx
+
+    req = httpx.Request("POST", "https://x/api/tsql/query/widget_rows")
+    return httpx.HTTPStatusError(
+        detail, request=req, response=httpx.Response(400, request=req)
+    )
+
+
+def _rows_answer(rows, cached=False):
+    return {"rows": rows, "read_at": "2026-11-16T10:00:00Z", "cached": cached}
+
+
 def test_preview_widget_falls_back_to_the_query_text(monkeypatch):
     client = _widget_client(monkeypatch)
-    client.execute_query.side_effect = [
-        RuntimeError(
+    client.widget_rows.side_effect = [
+        _http_400(
             "The query you requested does not exist, or has not been shared with you"
         ),
-        [{"day": "2026-10-01", "fee": 1}],
+        _rows_answer([{"day": "2026-10-01", "fee": 1}]),
     ]
     result = runner.invoke(
         app,
@@ -823,12 +838,14 @@ def test_preview_widget_falls_back_to_the_query_text(monkeypatch):
         ],
     )
     assert result.exit_code == 0, _all_output(result)
-    first, second = client.execute_query.call_args_list
+    first, second = client.widget_rows.call_args_list
     assert "ref(table=" in first.args[0]
     assert "select day, fee from t" in second.args[0]
     assert first.args[1:] == (9, 7)
-    assert first.kwargs["limit"] == 500
+    assert first.kwargs["limit"] == 10_000
+    assert first.kwargs["refresh"] is False
     assert "2026-10-01" in result.output
+    client.execute_query.assert_not_called()
 
 
 def test_preview_widget_other_errors_do_not_fall_back(monkeypatch):
@@ -844,7 +861,7 @@ def test_preview_widget_other_errors_do_not_fall_back(monkeypatch):
 
 def test_preview_widget_ctrl_c_exits_130(monkeypatch):
     client = _widget_client(monkeypatch)
-    client.execute_query.side_effect = KeyboardInterrupt
+    client.widget_rows.side_effect = KeyboardInterrupt
     result = runner.invoke(
         app, ["preview-widget", "--query-id", "9", "--type", "pie", "--x", "day"]
     )
@@ -1285,3 +1302,907 @@ def test_sigterm_is_treated_like_ctrl_c(monkeypatch):
     assert signal.SIGTERM in installed
     with pytest.raises(KeyboardInterrupt):
         installed[signal.SIGTERM](signal.SIGTERM, None)
+
+
+# --- the chart summary, the new flags, sharing and pictures ---------------------
+
+
+def test_every_config_flag_is_on_every_widget_command():
+    import inspect
+
+    for command in (
+        cli.check_widget,
+        cli.preview_widget,
+        cli.render_widget,
+        cli.create_widget,
+        cli.update_widget,
+    ):
+        params = inspect.signature(command).parameters
+        assert set(cli._FLAG_KEYS) <= set(params), command.__name__
+
+
+def test_create_widget_sends_the_new_flags(monkeypatch):
+    client = _widget_client(monkeypatch)
+    result = runner.invoke(
+        app,
+        [
+            "create-widget",
+            "--query-id",
+            "9",
+            "--type",
+            "bar",
+            "--x",
+            "day",
+            "--y",
+            "fee",
+        ]
+        + ["--combine", "mean", "--order-by", "y", "--sorting-order", "DESC"]
+        + ["--scale", "log", "--number-format", "currency", "--transform", "cum"],
+    )
+    assert result.exit_code == 0, _all_output(result)
+    config = client.create_widget.call_args.args[0]["config"]
+    assert config["combine"] == "mean"
+    assert config["order_by"] == "y"
+    assert config["sorting_order"] == "DESC"
+    assert config["scale"] == "log"
+    assert config["number_format"] == "currency"
+    assert config["transform"] == "cum"
+
+
+def test_value_flags_and_a_bad_enum(monkeypatch):
+    client = _widget_client(monkeypatch)
+    result = runner.invoke(
+        app,
+        ["create-widget", "--query-id", "9", "--type", "value", "--y", "fee"]
+        + ["--prefix", "$", "--suffix", "M", "--decimals", "1"],
+    )
+    assert result.exit_code == 0, _all_output(result)
+    config = client.create_widget.call_args.args[0]["config"]
+    assert (config["prefix"], config["suffix"], config["decimals"]) == ("$", "M", "1")
+    bad = runner.invoke(
+        app,
+        [
+            "check-widget",
+            "--query-id",
+            "9",
+            "--type",
+            "line",
+            "--x",
+            "day",
+            "--y",
+            "fee",
+        ]
+        + ["--line-style", "dots"],
+    )
+    assert bad.exit_code == 1
+    assert "line_style (--line-style) must be one of" in _all_output(bad)
+
+
+def test_check_widget_prints_the_x_axis_and_the_ignored_keys(monkeypatch):
+    _widget_client(monkeypatch)
+    result = runner.invoke(
+        app,
+        ["check-widget", "--query-id", "9", "--type", "bar", "--x", "day", "--y", "fee"]
+        + ["--line-style", "step"],
+    )
+    assert result.exit_code == 0, _all_output(result)
+    assert "x: day (timestamp): time axis, drawn as categories" in result.output
+    assert "line_style is ignored for a bar widget" in _all_output(result)
+
+
+def test_check_widget_refuses_a_band_with_no_columns(monkeypatch, tmp_path):
+    _widget_client(monkeypatch)
+    cfg = tmp_path / "c.json"
+    cfg.write_text('{"uncertainty": "columns"}')
+    result = runner.invoke(
+        app,
+        [
+            "check-widget",
+            "--query-id",
+            "9",
+            "--type",
+            "line",
+            "--x",
+            "day",
+            "--y",
+            "fee",
+        ]
+        + ["--config", str(cfg)],
+    )
+    assert result.exit_code == 1
+    assert "uncertainty columns needs lower_name and upper_name" in _all_output(result)
+
+
+def _fee_rows(n: int) -> list[dict]:
+    return [{"day": f"2026-10-{1 + i % 28:02d}", "fee": i} for i in range(n)]
+
+
+def _preview_args(*extra: str) -> list[str]:
+    return ["preview-widget", "--query-id", "9", "--type", "line", "--x", "day"] + [
+        "--y",
+        "fee",
+        *extra,
+    ]
+
+
+def test_preview_widget_with_huge_values_does_not_raise(monkeypatch):
+    client = _widget_client(monkeypatch)
+    client.widget_rows.return_value = _rows_answer(
+        [{"day": "2026-10-01", "fee": 1e308}, {"day": "2026-10-01", "fee": 1e308}]
+        + [{"day": "2026-10-02", "fee": 1.0}]
+    )
+    result = runner.invoke(app, _preview_args("--transform", "bollinger"))
+    assert result.exit_code == 0, _all_output(result)
+    assert "rows: 3" in result.output
+
+
+def test_preview_widget_says_when_the_summary_is_not_available(monkeypatch):
+    client = _widget_client(monkeypatch)
+    client.widget_rows.return_value = _rows_answer(_fee_rows(2))
+
+    def overflow(*args, **kwargs):
+        raise OverflowError("int too large to convert to float")
+
+    monkeypatch.setattr(cli.chartdata, "summarize", overflow)
+    result = runner.invoke(app, _preview_args())
+    assert result.exit_code == 0, _all_output(result)
+    assert "The summary is not available for these values." in _all_output(result)
+
+
+def test_preview_widget_prints_a_sample_and_the_summary(monkeypatch):
+    client = _widget_client(monkeypatch)
+    client.widget_rows.return_value = _rows_answer(_fee_rows(50), cached=True)
+    result = runner.invoke(
+        app,
+        ["preview-widget", "--query-id", "9", "--type", "line", "--x", "day"]
+        + ["--y", "fee", "--show-rows", "3", "--refresh"],
+    )
+    assert result.exit_code == 0, _all_output(result)
+    out = result.output
+    assert "Printed 3 of 50 rows" in out
+    assert "2026-10-04" not in out  # the 4th row is not printed
+    assert "shared 15-minute cache" in out
+    assert "rows: 50" in out
+    assert "x: day: time axis, 28 values" in out
+    assert "series: 1 (fee)" in out
+    assert client.widget_rows.call_args.kwargs["refresh"] is True
+
+
+def test_preview_widget_says_when_there_are_no_rows(monkeypatch):
+    client = _widget_client(monkeypatch)
+    client.widget_rows.return_value = _rows_answer([])
+    result = runner.invoke(
+        app,
+        ["preview-widget", "--query-id", "9", "--type", "line", "--x", "day"]
+        + ["--y", "fee", "--timeframe", "7d"],
+    )
+    assert result.exit_code == 0, _all_output(result)
+    assert "rows: 0" in result.output
+    assert "Use a wider --timeframe (now 7d)" in _all_output(result)
+
+
+@pytest.mark.parametrize(
+    ("widget_type", "limit"),
+    [("line", "10001"), ("table", "1001"), ("bar", "0")],
+)
+def test_preview_widget_limit_range(monkeypatch, widget_type, limit):
+    client = _widget_client(monkeypatch)
+    result = runner.invoke(
+        app,
+        ["preview-widget", "--query-id", "9", "--type", widget_type, "--x", "day"]
+        + ["--y", "fee", "--limit", limit],
+    )
+    assert result.exit_code == 2
+    client.widget_rows.assert_not_called()
+    client.execute_query.assert_not_called()
+
+
+def test_preview_widget_table_prints_every_row_of_its_page(monkeypatch):
+    client = _widget_client(monkeypatch)
+    client.execute_query.return_value = _fee_rows(25)
+    result = runner.invoke(
+        app, ["preview-widget", "--query-id", "9", "--type", "table"]
+    )
+    assert result.exit_code == 0, _all_output(result)
+    assert "Printed" not in result.output
+    assert "rows: 25" in result.output
+    client.widget_rows.assert_not_called()
+
+
+def _private(qid: int, name: str, can_edit: bool = True, reason=None) -> dict:
+    return {"query_id": qid, "query_name": name, "can_edit": can_edit, "reason": reason}
+
+
+def test_share_widget_public_publishes_the_listed_queries(monkeypatch):
+    client = _widget_client(monkeypatch)
+    client.widget_private_queries.return_value = [
+        _private(5, "Fees"),
+        _private(6, "Gas"),
+    ]
+    client.share_widget.return_value = {
+        "widget_id": 12,
+        "is_public": True,
+        "public_query_ids": [5, 6],
+    }
+    result = runner.invoke(app, ["share-widget", "--id", "12", "--public"])
+    assert result.exit_code == 0, _all_output(result)
+    client.share_widget.assert_called_once_with(12, True, [5, 6])
+    assert "These queries are public now: 5 (Fees), 6 (Gas)" in result.output
+    assert "https://app.dedaub.com/widget/12" in result.output
+
+
+def test_share_widget_dry_run_lists_and_changes_nothing(monkeypatch):
+    client = _widget_client(monkeypatch)
+    client.widget_private_queries.return_value = [_private(5, "Fees")]
+    result = runner.invoke(app, ["share-widget", "--id", "12", "--public", "--dry-run"])
+    assert result.exit_code == 0, _all_output(result)
+    assert "Fees" in result.output
+    assert "Dry run: nothing changed." in result.output
+    client.share_widget.assert_not_called()
+    private = runner.invoke(
+        app, ["share-widget", "--id", "12", "--private", "--dry-run"]
+    )
+    assert private.exit_code == 2
+    client.share_widget.assert_not_called()
+
+
+def test_share_widget_private_and_no_choice(monkeypatch):
+    client = _widget_client(monkeypatch)
+    client.share_widget.return_value = {"widget_id": 12, "is_public": False}
+    result = runner.invoke(app, ["share-widget", "--id", "12", "--private"])
+    assert result.exit_code == 0, _all_output(result)
+    client.share_widget.assert_called_once_with(12, False, [])
+    client.widget_private_queries.assert_not_called()
+    assert runner.invoke(app, ["share-widget", "--id", "12"]).exit_code == 2
+
+
+def test_share_widget_stops_before_a_query_it_cannot_publish(monkeypatch):
+    client = _widget_client(monkeypatch)
+    client.widget_private_queries.return_value = [
+        _private(5, "Fees"),
+        _private(6, "Example", False, "example"),
+    ]
+    result = runner.invoke(app, ["share-widget", "--id", "12", "--public"])
+    assert result.exit_code == 1
+    out = _all_output(result)
+    assert "an example query" in out
+    assert "1 of the private queries cannot be made public" in out
+    client.share_widget.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    ("error", "text"),
+    [
+        (
+            cli.ConflictError("/x", "The private queries of this widget changed."),
+            "The private queries of this widget changed. Nothing changed: run",
+        ),
+        (
+            cli.ForbiddenError("/x", "User cannot perform operation"),
+            "Refused: User cannot perform operation. Only the owner",
+        ),
+    ],
+)
+def test_share_widget_explains_409_and_403(monkeypatch, error, text):
+    client = _widget_client(monkeypatch)
+    client.widget_private_queries.return_value = []
+    client.share_widget.side_effect = error
+    result = runner.invoke(app, ["share-widget", "--id", "12", "--public"])
+    assert result.exit_code == 1
+    assert text in " ".join(_all_output(result).split())
+
+
+def test_server_text_with_markup_is_printed_as_text(monkeypatch):
+    client = _widget_client(monkeypatch)
+    client.widget_private_queries.return_value = []
+    client.share_widget.side_effect = cli.ForbiddenError("/x", "No [/x] here")
+    result = runner.invoke(app, ["share-widget", "--id", "12", "--public"])
+    assert result.exit_code == 1
+    assert "Refused: No [/x] here." in " ".join(_all_output(result).split())
+    client.widget_private_queries.side_effect = RuntimeError("Server [/bold] failed")
+    result = runner.invoke(app, ["widget-private-queries", "--id", "12"])
+    assert result.exit_code == 1
+    assert "Error: Server [/bold] failed" in _all_output(result)
+
+
+def test_widget_private_queries_lists_them(monkeypatch):
+    client = _widget_client(monkeypatch)
+    client.widget_private_queries.return_value = [
+        _private(6, "Theirs", False, "no_write")
+    ]
+    result = runner.invoke(app, ["widget-private-queries", "--id", "12"])
+    assert result.exit_code == 0, _all_output(result)
+    assert "Theirs" in result.output
+    assert "ask its owner" in result.output
+
+
+def _stored_dashboard() -> dict:
+    return {
+        "dashboard_id": 8,
+        "name": "Fees",
+        "description": "d",
+        "is_public": False,
+        "is_unlisted": False,
+        "entity_id": 45,
+    }
+
+
+def test_publish_dashboard_dry_run_changes_nothing(monkeypatch):
+    client = _widget_client(monkeypatch)
+    client.get_dashboard.return_value = _stored_dashboard()
+    client.dashboard_private_queries.return_value = [_private(5, "Fees")]
+    result = runner.invoke(app, ["publish-dashboard", "--id", "8", "--dry-run"])
+    assert result.exit_code == 0, _all_output(result)
+    assert "Dry run: nothing changed." in result.output
+    client.publish_dashboard.assert_not_called()
+
+
+def test_publish_dashboard_sends_the_whole_body(monkeypatch):
+    client = _widget_client(monkeypatch)
+    client.get_dashboard.return_value = _stored_dashboard()
+    client.dashboard_private_queries.return_value = [_private(5, "Fees")]
+    client.publish_dashboard.return_value = {"dashboard_id": 8, "public_query_ids": [5]}
+    result = runner.invoke(app, ["publish-dashboard", "--id", "8", "--unlisted"])
+    assert result.exit_code == 0, _all_output(result)
+    client.publish_dashboard.assert_called_once_with(
+        8,
+        {
+            "name": "Fees",
+            "description": "d",
+            "is_public": True,
+            "is_unlisted": True,
+            "entity_id": 45,
+            "query_ids": [5],
+        },
+    )
+    assert "Dashboard 8 is public, unlisted." in result.output
+    assert "These queries are public now: 5 (Fees)" in result.output
+
+
+def test_update_dashboard_public_points_to_publish_dashboard(monkeypatch):
+    client = _widget_client(monkeypatch)
+    client.get_dashboard.return_value = _stored_dashboard()
+    client.update_dashboard.side_effect = _http_400(
+        "Cannot set dashboard to public when it contains private queries"
+    )
+    result = runner.invoke(app, ["update-dashboard", "--id", "8", "--public"])
+    assert result.exit_code == 1
+    assert "publish-dashboard --id 8" in _all_output(result)
+
+
+def _picture_widget(**extra) -> dict:
+    return {
+        "widget_id": 12,
+        "type": "line",
+        "_ts": "2026-11-15T10:00:00Z",
+        "preview_url": "https://bucket.s3.amazonaws.com/widget-12-preview-a",
+        "preview_updated_at": "2026-11-15T10:00:00.500Z",
+        **extra,
+    }
+
+
+def test_widget_picture_without_a_picture_exits_5(monkeypatch):
+    client = _widget_client(monkeypatch)
+    client.get_widget.return_value = {"widget_id": 12, "type": "line"}
+    result = runner.invoke(app, ["widget-picture", "--id", "12", "--theme", "light"])
+    assert result.exit_code == cli.EXIT_NO_PICTURE == 5
+    assert "No picture yet: only the owner's browser makes it" in _all_output(result)
+    client.download_public.assert_not_called()
+
+
+def test_widget_picture_saves_the_file_and_says_it_is_fresh(monkeypatch, tmp_path):
+    client = _widget_client(monkeypatch)
+    client.get_widget.return_value = _picture_widget()
+    client.download_public.return_value = (b"\xff\xd8", "image/jpeg")
+    monkeypatch.chdir(tmp_path)
+    result = runner.invoke(app, ["widget-picture", "--id", "12"])
+    assert result.exit_code == 0, _all_output(result)
+    assert (tmp_path / "widget-12-dark.jpg").read_bytes() == b"\xff\xd8"
+    assert "Saved widget-12-dark.jpg (2 bytes, image/jpeg)." in result.output
+    assert "Taken: 2026-11-15 10:00 UTC" in result.output
+    assert "Stale: no" in result.output
+    assert "a share also counts" not in result.output
+    client.download_public.assert_called_once_with(
+        "https://bucket.s3.amazonaws.com/widget-12-preview-a"
+    )
+
+
+def test_widget_picture_prints_the_time_in_utc(monkeypatch, tmp_path):
+    client = _widget_client(monkeypatch)
+    client.get_widget.return_value = _picture_widget(
+        _ts="2026-11-15T12:00:00+02:00",
+        preview_updated_at="2026-11-15T12:00:00+02:00",
+    )
+    client.download_public.return_value = (b"png", "image/png")
+    monkeypatch.chdir(tmp_path)
+    result = runner.invoke(app, ["widget-picture", "--id", "12"])
+    assert result.exit_code == 0, _all_output(result)
+    assert "Taken: 2026-11-15 10:00 UTC" in result.output
+    assert "Last change: 2026-11-15 10:00 UTC" in result.output
+
+
+@pytest.mark.parametrize(
+    ("extra", "stale"),
+    [
+        (
+            {"_ts": "2026-11-16T09:00:00Z"},
+            "Stale: yes: changed 22h 59m after the picture"
+            " (a share also counts as a change)",
+        ),
+        (
+            {
+                "_ts": "2026-11-16T09:00:00Z",
+                "preview_light_updated_at": "2026-11-16T09:00:00Z",
+            },
+            "Stale: unknown (the last change is the upload of the other theme's picture)",
+        ),
+        ({"preview_updated_at": None}, "Stale: unknown"),
+    ],
+)
+def test_widget_picture_staleness(monkeypatch, tmp_path, extra, stale):
+    client = _widget_client(monkeypatch)
+    client.get_widget.return_value = _picture_widget(**extra)
+    client.download_public.return_value = (b"png", "image/png")
+    out = tmp_path / "p.png"
+    result = runner.invoke(app, ["widget-picture", "--id", "12", "--out", str(out)])
+    assert result.exit_code == 0, _all_output(result)
+    assert out.read_bytes() == b"png"
+    assert stale in result.output
+
+
+def test_dashboard_picture_reads_the_newest_widget_change(monkeypatch, tmp_path):
+    client = _widget_client(monkeypatch)
+    client.get_dashboard.return_value = {
+        "dashboard_id": 8,
+        "_ts": "2026-11-15T10:00:00Z",
+        "preview_url_light": "https://bucket.s3.amazonaws.com/8-preview-a",
+        "preview_light_updated_at": "2026-11-15T10:00:00Z",
+    }
+    client.list_widgets.return_value = [{"widget_id": 1, "_ts": "2026-11-15T12:00:00Z"}]
+    client.download_public.return_value = (b"jpg", "image/jpeg")
+    monkeypatch.chdir(tmp_path)
+    result = runner.invoke(app, ["dashboard-picture", "--id", "8", "--theme", "light"])
+    assert result.exit_code == 0, _all_output(result)
+    assert (tmp_path / "dashboard-8-light.jpg").exists()
+    assert "Stale: yes: changed 2h 0m after the picture" in result.output
+    client.list_widgets.assert_called_once_with(dashboard_id=8)
+
+
+def test_picture_theme_must_be_dark_or_light(monkeypatch):
+    client = _widget_client(monkeypatch)
+    client.get_widget.return_value = _picture_widget()
+    result = runner.invoke(app, ["widget-picture", "--id", "12", "--theme", "blue"])
+    assert result.exit_code == 2
+
+
+def test_dashboard_picture_ignores_a_widget_card_upload(monkeypatch, tmp_path):
+    client = _widget_client(monkeypatch)
+    client.get_dashboard.return_value = {
+        "dashboard_id": 8,
+        "_ts": "2026-11-15T10:00:00Z",
+        "preview_url": "https://bucket.s3.amazonaws.com/8-preview-a",
+        "preview_updated_at": "2026-11-15T10:00:00Z",
+    }
+    # The owner's browser uploads the widget's card after the dashboard
+    # picture: the widget's _ts is the time of that upload.
+    client.list_widgets.return_value = [
+        {
+            "widget_id": 1,
+            "_ts": "2026-11-15T10:00:07Z",
+            "preview_updated_at": "2026-11-15T10:00:07Z",
+        }
+    ]
+    client.download_public.return_value = (b"jpg", "image/jpeg")
+    monkeypatch.chdir(tmp_path)
+    result = runner.invoke(app, ["dashboard-picture", "--id", "8"])
+    assert result.exit_code == 0, _all_output(result)
+    assert "Stale: no" in result.output
+
+
+def test_dashboard_picture_is_not_fresh_when_a_later_card_upload_hides_an_edit(
+    monkeypatch, tmp_path
+):
+    client = _widget_client(monkeypatch)
+    client.get_dashboard.return_value = {
+        "dashboard_id": 8,
+        "_ts": "2026-11-15T10:00:00Z",
+        "preview_url": "https://bucket.s3.amazonaws.com/8-preview-a",
+        "preview_updated_at": "2026-11-15T10:00:00Z",
+    }
+    # The owner edits the widget at 12:00, then its card is uploaded at 12:05
+    # (the widget page, or render-widget --upload): the edit is not visible.
+    client.list_widgets.return_value = [
+        {
+            "widget_id": 1,
+            "_ts": "2026-11-15T12:05:00Z",
+            "preview_updated_at": "2026-11-15T12:05:00Z",
+        }
+    ]
+    client.download_public.return_value = (b"jpg", "image/jpeg")
+    monkeypatch.chdir(tmp_path)
+    result = runner.invoke(app, ["dashboard-picture", "--id", "8"])
+    assert result.exit_code == 0, _all_output(result)
+    assert "Stale: no" not in result.output
+    assert "Stale: unknown (the last change of widget 1 is the upload" in result.output
+
+
+def test_a_picture_that_cannot_be_written_stops_with_a_message(monkeypatch, tmp_path):
+    client = _widget_client(monkeypatch)
+    client.get_dashboard.return_value = {
+        "dashboard_id": 8,
+        "_ts": "2026-11-15T10:00:00Z",
+        "preview_url": "https://bucket.s3.amazonaws.com/8-preview-a",
+        "preview_updated_at": "2026-11-15T10:00:00Z",
+    }
+    client.list_widgets.return_value = []
+    client.download_public.return_value = (b"jpg", "image/jpeg")
+    missing = tmp_path / "no" / "such" / "x.jpg"
+    result = runner.invoke(
+        app, ["dashboard-picture", "--id", "8", "--out", str(missing)]
+    )
+    assert result.exit_code == 1
+    assert "Cannot write" in _all_output(result)
+    assert "Traceback" not in _all_output(result)
+
+
+def test_preview_widget_table_and_small_limit_have_no_dashboard_cap(monkeypatch):
+    client = _widget_client(monkeypatch)
+    client.execute_query.return_value = _fee_rows(25)
+    table = runner.invoke(app, ["preview-widget", "--query-id", "9", "--type", "table"])
+    assert table.exit_code == 0, _all_output(table)
+    assert "rows: 25\n" in table.output
+    assert "cap" not in table.output
+    client.widget_rows.return_value = _rows_answer(_fee_rows(5))
+    chart = runner.invoke(
+        app,
+        ["preview-widget", "--query-id", "9", "--type", "line", "--x", "day"]
+        + ["--y", "fee", "--limit", "5"],
+    )
+    assert chart.exit_code == 0, _all_output(chart)
+    assert "rows: 5 (the --limit of 5; the dashboard reads up to 10000)" in chart.output
+
+
+# --- render-widget -----------------------------------------------------------------
+
+
+@pytest.fixture
+def fake_render(monkeypatch):
+    calls: list[tuple] = []
+
+    def fake(page_url, shots, *, channel=None, timeout=60.0):
+        calls.append((page_url, shots, channel, timeout))
+        return [cli.render.Picture(f"img-{shot.kind}".encode()) for shot in shots]
+
+    monkeypatch.setattr(cli.render, "render", fake)
+    return calls
+
+
+def test_render_widget_draws_the_rows_of_the_draft(monkeypatch, tmp_path, fake_render):
+    client = _widget_client(monkeypatch)
+    client.widget_rows.return_value = _rows_answer(_fee_rows(4))
+    monkeypatch.chdir(tmp_path)
+    result = runner.invoke(
+        app,
+        ["render-widget", "--query-id", "9", "--type", "line", "--x", "day"]
+        + ["--y", "fee", "--theme", "light", "--browser-channel", "chromium"],
+    )
+    assert result.exit_code == 0, _all_output(result)
+    [(page_url, shots, channel, timeout)] = fake_render
+    assert page_url == "https://app.dedaub.com/render/widget"
+    assert (channel, timeout) == ("chromium", 60.0)
+    [shot] = shots
+    assert (shot.kind, shot.scale) == ("png", 2.0)
+    assert shot.input == {
+        "type": "line",
+        "config": {
+            "timeframe": "30d",
+            "sorting_order": "ASC",
+            "decimals": "2",
+            "x_axis_name": "day",
+            "y_axis_name": "fee",
+        },
+        "rows": _fee_rows(4),
+        "label": "Fees",
+        "theme": "light",
+        "width": 640,
+        "height": 360,
+        "columns": ["day", "fee"],
+    }
+    assert (tmp_path / "widget-draft-light.png").read_bytes() == b"img-png"
+    assert "rows: 4" in result.output
+    assert "Saved widget-draft-light.png" in result.output
+    assert client.widget_rows.call_args.kwargs["limit"] == 10_000
+
+
+@pytest.mark.parametrize(
+    ("app_url", "page"),
+    [
+        ("http://localhost:3000/", "http://localhost:3000/render/widget"),
+        (
+            "https://st-watchdog.dedaub.com",
+            "https://st-watchdog.dedaub.com/render/widget",
+        ),
+        ("http://example.com", None),
+    ],
+)
+def test_render_widget_app_url(monkeypatch, tmp_path, fake_render, app_url, page):
+    client = _widget_client(monkeypatch)
+    client.widget_rows.return_value = _rows_answer(_fee_rows(2))
+    result = runner.invoke(
+        app,
+        [
+            "render-widget",
+            "--query-id",
+            "9",
+            "--type",
+            "bar",
+            "--x",
+            "day",
+            "--y",
+            "fee",
+        ]
+        + ["--app-url", app_url, "--out", str(tmp_path / "w.png")],
+    )
+    if page is None:
+        assert result.exit_code == 2
+        assert not fake_render
+    else:
+        assert result.exit_code == 0, _all_output(result)
+        assert fake_render[0][0] == page
+
+
+@pytest.mark.parametrize(
+    ("error", "code", "text"),
+    [
+        (
+            cli.render.RenderFailed("The chart was not drawn within 60s."),
+            6,
+            "not drawn",
+        ),
+        (
+            cli.render.PlaywrightMissing("Playwright is not installed. Install …"),
+            7,
+            "not installed",
+        ),
+    ],
+)
+def test_render_widget_exit_codes(monkeypatch, tmp_path, error, code, text):
+    client = _widget_client(monkeypatch)
+    client.widget_rows.return_value = _rows_answer(_fee_rows(2))
+
+    def fail(*args, **kwargs):
+        raise error
+
+    monkeypatch.setattr(cli.render, "render", fail)
+    result = runner.invoke(
+        app,
+        [
+            "render-widget",
+            "--query-id",
+            "9",
+            "--type",
+            "line",
+            "--x",
+            "day",
+            "--y",
+            "fee",
+        ]
+        + ["--out", str(tmp_path / "w.png")],
+    )
+    assert result.exit_code == code
+    assert text in _all_output(result)
+    assert not (tmp_path / "w.png").exists()
+
+
+def test_render_widget_stops_on_a_problem_before_the_browser(monkeypatch, fake_render):
+    client = _widget_client(monkeypatch)
+    result = runner.invoke(app, ["render-widget", "--query-id", "9", "--type", "bar"])
+    assert result.exit_code == 1
+    assert "Choose the X-axis column" in _all_output(result)
+    assert not fake_render
+    client.widget_rows.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        ["--query-id", "9", "--type", "table"],
+        [
+            "--query-id",
+            "9",
+            "--type",
+            "line",
+            "--x",
+            "day",
+            "--y",
+            "fee",
+            "--width",
+            "100",
+        ],
+        [
+            "--query-id",
+            "9",
+            "--type",
+            "line",
+            "--x",
+            "day",
+            "--y",
+            "fee",
+            "--theme",
+            "sepia",
+        ],
+        ["--query-id", "9", "--type", "line", "--x", "day", "--y", "fee", "--upload"],
+    ],
+)
+def test_render_widget_refuses_bad_arguments(monkeypatch, fake_render, args):
+    _widget_client(monkeypatch)
+    result = runner.invoke(app, ["render-widget", *args])
+    assert result.exit_code == 2, _all_output(result)
+    assert not fake_render
+
+
+def test_render_widget_upload_stores_the_card_jpeg(monkeypatch, tmp_path, fake_render):
+    client = _widget_client(monkeypatch)
+    client.get_widget.return_value = _stored_widget()
+    client.widget_rows.return_value = _rows_answer(_fee_rows(3))
+    client.upload_widget_picture.return_value = "https://bucket/widget-12-preview-x"
+    monkeypatch.chdir(tmp_path)
+    result = runner.invoke(app, ["render-widget", "--id", "12", "--upload"])
+    assert result.exit_code == 0, _all_output(result)
+    [(_, shots, _, _)] = fake_render
+    png, card = shots
+    assert png.input["label"] == "Old"
+    assert (card.kind, card.scale, card.quality) == ("jpeg", 1.0, 85)
+    assert (card.input["width"], card.input["height"], card.input["label"]) == (
+        640,
+        360,
+        "",
+    )
+    client.upload_widget_picture.assert_called_once_with(12, "dark", b"img-jpeg")
+    assert (tmp_path / "widget-12-dark.png").exists()
+    assert "Uploaded the dark card picture of widget 12" in result.output
+
+
+def test_render_widget_upload_refuses_a_changed_widget(monkeypatch, fake_render):
+    client = _widget_client(monkeypatch)
+    client.get_widget.return_value = _stored_widget()
+    result = runner.invoke(
+        app, ["render-widget", "--id", "12", "--upload", "--y-label", "New"]
+    )
+    assert result.exit_code == 2
+    assert "Save the changes first" in _all_output(result)
+    assert not fake_render
+    client.upload_widget_picture.assert_not_called()
+
+
+def test_render_widget_upload_refuses_a_limit(monkeypatch, fake_render):
+    client = _widget_client(monkeypatch)
+    client.get_widget.return_value = _stored_widget()
+    result = runner.invoke(
+        app, ["render-widget", "--id", "12", "--upload", "--limit", "5"]
+    )
+    assert result.exit_code == 2
+    assert "do not use --limit" in _all_output(result)
+    assert not fake_render
+    client.upload_widget_picture.assert_not_called()
+
+
+def test_render_widget_upload_refuses_another_query(monkeypatch, fake_render):
+    client = _widget_client(monkeypatch)
+    client.get_widget.return_value = _stored_widget()  # reads query 9
+    client.get_query.return_value = {
+        **client.get_query.return_value,
+        "query_id": 77,
+    }
+    result = runner.invoke(
+        app, ["render-widget", "--id", "12", "--upload", "--query-id", "77"]
+    )
+    assert result.exit_code == 2
+    assert "not query 77" in _all_output(result)
+    assert not fake_render
+    client.upload_widget_picture.assert_not_called()
+
+
+def test_render_widget_checks_theme_and_limit_before_the_network(
+    monkeypatch, fake_render
+):
+    client = _widget_client(monkeypatch)
+    base = ["render-widget", "--query-id", "9", "--type", "line", "--x", "day"]
+    for extra in (["--theme", "sepia"], ["--limit", "10001"]):
+        result = runner.invoke(app, [*base, "--y", "fee", *extra])
+        assert result.exit_code == 2, _all_output(result)
+    client.get_query.assert_not_called()
+    client.get_widget.assert_not_called()
+
+
+def test_picture_commands_check_the_theme_before_the_network(monkeypatch):
+    client = _widget_client(monkeypatch)
+    for command in ("widget-picture", "dashboard-picture"):
+        result = runner.invoke(app, [command, "--id", "12", "--theme", "blue"])
+        assert result.exit_code == 2
+    client.get_widget.assert_not_called()
+    client.get_dashboard.assert_not_called()
+
+
+def test_preview_widget_checks_the_limit_before_the_draft_read(monkeypatch):
+    client = _widget_client(monkeypatch)
+    result = runner.invoke(
+        app,
+        ["preview-widget", "--query-id", "9", "--type", "table", "--limit", "1001"],
+    )
+    assert result.exit_code == 2
+    client.get_query.assert_not_called()
+
+
+def test_render_widget_upload_refused_for_another_owner(
+    monkeypatch, tmp_path, fake_render
+):
+    client = _widget_client(monkeypatch)
+    client.get_widget.return_value = _stored_widget()
+    client.widget_rows.return_value = _rows_answer(_fee_rows(3))
+    client.upload_widget_picture.side_effect = cli.ForbiddenError(
+        "/api/profile/widget/12/preview", "User cannot perform operation"
+    )
+    result = runner.invoke(
+        app,
+        ["render-widget", "--id", "12", "--upload", "--out", str(tmp_path / "w.png")],
+    )
+    assert result.exit_code == 1
+    assert "Only the owner of the widget" in _all_output(result)
+
+
+def test_render_widget_exits_1_when_the_widget_shows_a_message(monkeypatch, tmp_path):
+    _widget_client(monkeypatch).widget_rows.return_value = _rows_answer(_fee_rows(3))
+    monkeypatch.setattr(
+        cli.render,
+        "render",
+        lambda page_url, shots, **_: [
+            cli.render.Picture(b"img", "Column fee is not in the query any more.")
+        ],
+    )
+    monkeypatch.chdir(tmp_path)
+    result = runner.invoke(
+        app,
+        [
+            "render-widget",
+            "--query-id",
+            "9",
+            "--type",
+            "line",
+            "--x",
+            "day",
+            "--y",
+            "fee",
+        ],
+    )
+    assert result.exit_code == 1
+    assert (
+        "shows a message, not a chart: Column fee is not in the query"
+        in _all_output(result)
+    )
+    assert (tmp_path / "widget-draft-dark.png").read_bytes() == b"img"
+
+
+@pytest.mark.parametrize(
+    ("app_url", "warned"),
+    [
+        ("https://evil.example", True),
+        ("https://app.dedaub.com", False),
+        ("http://localhost:3000", False),
+    ],
+)
+def test_render_widget_warns_when_the_rows_go_to_another_host(
+    monkeypatch, tmp_path, fake_render, app_url, warned
+):
+    client = _widget_client(monkeypatch)
+    client.widget_rows.return_value = _rows_answer(_fee_rows(2))
+    result = runner.invoke(
+        app,
+        ["render-widget", "--query-id", "9", "--type", "line", "--x", "day"]
+        + ["--y", "fee", "--app-url", app_url, "--out", str(tmp_path / "w.png")],
+    )
+    assert result.exit_code == 0, _all_output(result)
+    assert fake_render
+    text = "The rows of the query go to evil.example."
+    assert (text in _all_output(result)) is warned
+    assert ("The rows of the query go to" in _all_output(result)) is warned

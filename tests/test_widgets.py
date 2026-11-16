@@ -372,7 +372,7 @@ def test_widget_sqls_of_reads_the_owner_query_in_the_timeframe(utc_local):
         'WITH q AS (SELECT * FROM {{ ref(table="alice::Fees") }} r\n'
         "WHERE r.\"day\" > '2026-10-01T12:34:56.789Z'\n"
         'ORDER BY r."day" DESC\n'
-        "LIMIT 500)\n"
+        "LIMIT 10000)\n"
         'SELECT * FROM q ORDER BY q."day" ASC'
     )
     assert text is not None
@@ -574,3 +574,226 @@ def test_auto_layout_puts_an_alerts_widget_at_full_width():
     )
     assert places[2] == (0, 0, 12, 4)
     assert places[1] == (0, 4, 12, 6)
+
+
+# --- the options of each type (ChartOptionsFields.tsx) ------------------------------
+
+
+@pytest.mark.parametrize(
+    ("widget_type", "config", "note"),
+    [
+        (
+            "line",
+            {"bins": "20"},
+            "bins is ignored for a line widget: only histogram uses it.",
+        ),
+        (
+            "bar",
+            {"fit": True},
+            "fit is ignored for a bar widget: only scatter uses it.",
+        ),
+        (
+            "bar",
+            {"transform": "bollinger"},
+            "transform bollinger is ignored for a bar widget: only line uses it.",
+        ),
+        (
+            "scatter",
+            {"transform": "cum"},
+            "transform is ignored for a scatter widget: only line, bar, stackedbar, linebar use it.",
+        ),
+        (
+            "stackedbar",
+            {"uncertainty": "sd"},
+            "uncertainty is ignored for a stackedbar widget: only line, bar, linebar use it.",
+        ),
+        (
+            "bar",
+            {"uncertainty": "quantiles"},
+            "uncertainty quantiles is ignored for a bar widget: only line offers it.",
+        ),
+        (
+            "pie",
+            {"scale": "log"},
+            "scale is ignored for a pie widget: only line, bar, linebar, scatter, range use it.",
+        ),
+        (
+            "bar",
+            {"anomalies": True},
+            "anomalies is ignored for a bar widget: only line uses it.",
+        ),
+        (
+            "histogram",
+            {"prefix": "$"},
+            "prefix is ignored for a histogram widget: only value, line, bar, stackedbar, linebar, scatter, pie, range use it.",
+        ),
+        (
+            "line",
+            {"band_k": "2"},
+            "band_k is ignored for a line widget: it needs transform bollinger.",
+        ),
+        (
+            "bar",
+            {"window": "5"},
+            "window is ignored for a bar widget: only a rolling transform, the anomalies or the correlation use it.",
+        ),
+        (
+            "line",
+            {"lower_name": "lo"},
+            "lower_name is ignored for a line widget: it needs uncertainty columns.",
+        ),
+        (
+            "line",
+            {"y1_axis_name": "w", "series_by": "n"},
+            "y1_axis_name is ignored for a line widget: series_by is set, so the chart draws y_axis_name only.",
+        ),
+        (
+            "histogram",
+            {"series_by": "n"},
+            "series_by is ignored for a histogram widget: only hist_view ecdf uses it.",
+        ),
+        (
+            "range",
+            {"range_shape": "box", "volume_name": "vol"},
+            "The volume panel shows under candles only.",
+        ),
+    ],
+)
+def test_a_key_that_the_type_ignores_is_a_note(widget_type, config, note):
+    assert note in widgets.config_notes(widget_type, config)
+    assert widgets.config_problems(widget_type, config) == []
+
+
+@pytest.mark.parametrize(
+    ("widget_type", "config"),
+    [
+        ("line", {**widgets.DEFAULT_CONFIG, "x_axis_name": "d", "y_axis_name": "v"}),
+        ("table", dict(widgets.DEFAULT_CONFIG)),
+        ("line", {"window": "5"}),  # the anomalies of a line read the window
+        ("bar", {"window": "5", "transform": "ewma"}),
+        ("line", {"band_k": "2", "transform": "bollinger"}),
+        ("histogram", {"series_by": "n", "hist_view": "ecdf"}),
+        ("linebar", {"series_by": "n"}),
+        ("value", {"prefix": "$", "suffix": "M", "number_format": "full"}),
+    ],
+)
+def test_options_that_the_type_uses_give_no_note(widget_type, config):
+    assert widgets.config_notes(widget_type, config) == []
+
+
+def test_a_band_with_no_columns_cannot_draw():
+    assert widgets.draw_problems(
+        "line", {"uncertainty": "columns", "lower_name": "lo"}
+    ) == ["uncertainty columns needs lower_name and upper_name (the band's columns)."]
+    assert widgets.draw_problems("bar", {"uncertainty": "stderr"}) == [
+        "uncertainty stderr needs stderr_name (the standard error column)."
+    ]
+    full = {"uncertainty": "columns", "lower_name": "lo", "upper_name": "hi"}
+    assert widgets.draw_problems("line", full) == []
+    # A type with no band ignores the key: a note, not a problem.
+    assert widgets.draw_problems("stackedbar", {"uncertainty": "stderr"}) == []
+
+
+def test_an_enum_problem_names_its_flag():
+    [problem] = widgets.config_problems("line", {"combine": "avg"})
+    assert problem.startswith("combine (--combine) must be one of")
+
+
+def test_column_types_tell_the_x_axis_and_the_text_y():
+    columns = [
+        {"name": "day", "type": "timestamp with time zone"},
+        {"name": "fee", "type": "text"},
+        {"name": "gas", "type": "numeric(38,0)"},
+    ]
+    facts, notes = widgets.column_type_notes(
+        "bar", {"x_axis_name": "day", "y_axis_name": "fee", "order_by": "y"}, columns
+    )
+    assert facts == [
+        "x: day (timestamp with time zone): time axis, drawn as categories"
+    ]
+    assert notes == [
+        "order_by y has no effect: day is a time or a number, so the points keep the order of day.",
+        "y_axis_name 'fee' is text, not a number type: the chart draws only the values that read as numbers.",
+    ]
+    _, counted = widgets.column_type_notes(
+        "line",
+        {"x_axis_name": "day", "y_axis_name": "fee", "combine": "count"},
+        columns,
+    )
+    assert counted == []  # a count reads any value
+    _, ok = widgets.column_type_notes(
+        "line", {"x_axis_name": "day", "y_axis_name": "gas"}, columns
+    )
+    assert ok == []
+
+
+def test_a_false_option_is_not_an_ignored_key():
+    # False is "off": there is nothing to ignore.
+    assert widgets.ignored_key_notes("bar", {"anomalies": False}) == []
+    assert widgets.ignored_key_notes("line", {"horizontal": False}) == []
+
+
+@pytest.mark.parametrize(
+    ("column_type", "noted"),
+    [
+        ("int4", False),
+        ("int8", False),
+        ("float8", False),
+        ("bigserial", False),
+        ("uint256", False),
+        ("numeric(38,0)", False),
+        ("money", False),
+        ("", False),
+        ("some_future_type", False),
+        ("text", True),
+        ("character varying(10)", True),
+        ("boolean", True),
+    ],
+)
+def test_the_number_note_knows_the_short_postgres_names(column_type, noted):
+    columns = [{"name": "fee", "type": column_type}]
+    _, notes = widgets.column_type_notes("line", {"y_axis_name": "fee"}, columns)
+    assert bool(notes) is noted
+
+
+def test_series_notes_of_a_scatter_keep_three_groups():
+    rows = _rows(4)
+    [note] = widgets.series_notes("scatter", {"series_by": "network"}, rows)
+    assert "colours the 2 largest groups" in note
+    assert widgets.series_notes("scatter", {"series_by": "network"}, _rows(3)) == []
+    scale = {"series_by": "network", "color_scale": "scale"}
+    assert widgets.series_notes("scatter", scale, rows) == []
+
+
+def test_series_notes_of_a_histogram_need_the_ecdf_view():
+    assert widgets.series_notes("histogram", {"series_by": "network"}, _rows(12)) == []
+    ecdf = {"series_by": "network", "hist_view": "ecdf"}
+    assert len(widgets.series_notes("histogram", ecdf, _rows(12))) == 1
+
+
+def test_units_apply_to_charts_and_new_chart_options_are_known():
+    # option.ts withUnit: a line shows its prefix and suffix on the axis and the tooltip.
+    assert widgets.config_notes("line", {"prefix": "$", "suffix": " ETH"}) == []
+    assert (
+        widgets.config_problems("line", {"line_style": "stacked", "percent": True})
+        == []
+    )
+    assert widgets.config_problems("bar", {"horizontal": True}) == []
+    assert widgets.config_problems("line", {"line_style": "spiral"})
+
+
+def test_percent_needs_a_stack_and_horizontal_needs_bars():
+    notes = widgets.config_notes("line", {"percent": True})
+    assert any("--line-style stacked" in n for n in notes)
+    assert any(
+        "horizontal is ignored" in n
+        for n in widgets.config_notes("linebar", {"horizontal": True})
+    )
+    notes = widgets.config_notes("line", {"line_style": "stacked"})
+    assert any("needs --series-by" in n for n in notes)
+    assert (
+        widgets.config_notes(
+            "line", {"line_style": "stacked", "series_by": "pool", "percent": True}
+        )
+        == []
+    )

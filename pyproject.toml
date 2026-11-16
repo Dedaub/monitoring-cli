@@ -1,6 +1,6 @@
 [project]
 name = "monitoring-cli"
-version = "0.8.2"
+version = "0.10.0"
 description = "CLI for Dedaub Monitoring API"
 requires-python = ">=3.13,<3.14"
 dependencies = [
@@ -11,6 +11,11 @@ dependencies = [
     "dedaub-skills",
     "dedaub-auth",
 ]
+
+[project.optional-dependencies]
+# render-widget draws a widget in a headless browser. Then run
+# `playwright install chromium`, or use an installed Chrome.
+render = ["playwright>=1.48,<2"]
 
 [project.scripts]
 dedaub-monitoring = "monitoring_cli.cli:app"

@@ -8,6 +8,7 @@ from dedaub_auth.config import Profile
 
 from monitoring_cli.client import (
     ConflictError,
+    ForbiddenError,
     MonitoringClient,
     NotFoundError,
     resolve_folder_id,
@@ -928,3 +929,206 @@ def test_timeout_message_names_the_real_window(monkeypatch, seconds, text):
     monkeypatch.setattr(c, "cancel_query", lambda task_id: None)
     with pytest.raises(TimeoutError, match=f"within {text}$"):
         c._poll("t", 2.0, seconds, None)
+
+
+# --- widget rows, sharing, publishing and pictures -------------------------------
+
+
+@respx.mock
+def test_widget_rows_sends_the_dashboard_body():
+    mock_token(respx)
+    route = respx.post(f"{BASE}/api/tsql/query/widget_rows").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "rows": [{"a": 1}],
+                "read_at": "2026-11-16T10:00:00Z",
+                "cached": True,
+            },
+        )
+    )
+    answer = MonitoringClient(PROFILE).widget_rows(
+        "SELECT 1", 9, 7, limit=10_000, refresh=True
+    )
+    assert answer["rows"] == [{"a": 1}]
+    assert _json_body(route) == {
+        "query": "SELECT 1",
+        "query_id": 9,
+        "query_entity_id": 7,
+        "params": {},
+        "limit": 10_000,
+        "offset": 0,
+        "refresh": True,
+    }
+
+
+@respx.mock
+def test_widget_rows_waits_while_the_same_read_runs(no_sleep):
+    mock_token(respx)
+    route = respx.post(f"{BASE}/api/tsql/query/widget_rows").mock(
+        side_effect=[
+            httpx.Response(503, headers={"Retry-After": "1"}, json={"detail": "busy"}),
+            httpx.Response(200, json={"rows": [], "read_at": "x", "cached": False}),
+        ]
+    )
+    answer = MonitoringClient(PROFILE).widget_rows("SELECT 1", 9, 7, limit=5)
+    assert answer["rows"] == []
+    assert route.call_count == 2
+    assert no_sleep == [1.0]
+
+
+@pytest.mark.parametrize(
+    ("header", "wait"),
+    [("0", 1.0), ("-3", 1.0), ("0.2", 1.0), ("nan", 5.0), ("inf", 5.0), ("7", 7.0)],
+)
+@respx.mock
+def test_widget_rows_never_waits_less_than_a_second(no_sleep, header, wait):
+    mock_token(respx)
+    route = respx.post(f"{BASE}/api/tsql/query/widget_rows").mock(
+        side_effect=[
+            httpx.Response(503, headers={"Retry-After": header}),
+            httpx.Response(200, json={"rows": [], "read_at": "x", "cached": False}),
+        ]
+    )
+    MonitoringClient(PROFILE).widget_rows("SELECT 1", 9, 7, limit=5)
+    assert route.call_count == 2
+    assert no_sleep == [wait]
+
+
+@respx.mock
+def test_widget_rows_stops_at_the_timeout(no_sleep):
+    mock_token(respx)
+    respx.post(f"{BASE}/api/tsql/query/widget_rows").mock(
+        return_value=httpx.Response(503, headers={"Retry-After": "5"})
+    )
+    with pytest.raises(TimeoutError, match="did not come within 3s"):
+        MonitoringClient(PROFILE).widget_rows("SELECT 1", 9, 7, limit=5, timeout=3)
+
+
+@respx.mock
+def test_share_widget_and_the_private_queries():
+    mock_token(respx)
+    listed = respx.get(f"{BASE}/api/profile/widget/12/private_queries").mock(
+        return_value=httpx.Response(200, json=[{"query_id": 5, "can_edit": True}])
+    )
+    share = respx.post(f"{BASE}/api/profile/widget/12/share").mock(
+        return_value=httpx.Response(
+            200, json={"widget_id": 12, "is_public": True, "public_query_ids": [5]}
+        )
+    )
+    client = MonitoringClient(PROFILE)
+    assert client.widget_private_queries(12) == [{"query_id": 5, "can_edit": True}]
+    assert client.share_widget(12, True, [5])["public_query_ids"] == [5]
+    assert listed.called
+    assert _json_body(share) == {"is_public": True, "query_ids": [5]}
+
+
+@respx.mock
+def test_publish_dashboard_keeps_the_details_of_409_and_403():
+    mock_token(respx)
+    respx.get(f"{BASE}/api/profile/dashboard/8/private_queries").mock(
+        return_value=httpx.Response(200, json=[])
+    )
+    route = respx.post(f"{BASE}/api/profile/dashboard/8/publish").mock(
+        side_effect=[
+            httpx.Response(409, json={"detail": "The private queries changed."}),
+            httpx.Response(
+                403, json={"detail": "1 example query cannot be made public."}
+            ),
+            httpx.Response(200, json={"dashboard_id": 8, "public_query_ids": []}),
+        ]
+    )
+    client = MonitoringClient(PROFILE)
+    assert client.dashboard_private_queries(8) == []
+    body = {"name": "D", "is_public": True, "entity_id": 1, "query_ids": []}
+    with pytest.raises(ConflictError) as conflict:
+        client.publish_dashboard(8, body)
+    assert conflict.value.detail == "The private queries changed."
+    with pytest.raises(ForbiddenError) as forbidden:
+        client.publish_dashboard(8, body)
+    assert isinstance(forbidden.value, PermissionError)
+    assert forbidden.value.detail == "1 example query cannot be made public."
+    assert client.publish_dashboard(8, body) == {
+        "dashboard_id": 8,
+        "public_query_ids": [],
+    }
+    assert _json_body(route) == body
+
+
+PICTURE = "https://dedaub-dashboard-previews.s3.eu-central-1.amazonaws.com/widget-12-preview-ab"
+
+
+@respx.mock
+def test_download_public_sends_no_token():
+    route = respx.get(PICTURE).mock(
+        return_value=httpx.Response(
+            200, content=b"\xff\xd8jpeg", headers={"content-type": "image/jpeg"}
+        )
+    )
+    data, content_type = MonitoringClient(PROFILE).download_public(PICTURE)
+    assert (data, content_type) == (b"\xff\xd8jpeg", "image/jpeg")
+    assert "authorization" not in route.calls.last.request.headers
+
+
+@respx.mock
+def test_download_public_refuses_a_large_file_and_a_bad_url():
+    respx.get(PICTURE).mock(return_value=httpx.Response(200, content=b"x" * 11))
+    client = MonitoringClient(PROFILE)
+    with pytest.raises(ValueError, match="larger than 10 bytes"):
+        client.download_public(PICTURE, max_bytes=10)
+    with pytest.raises(ValueError, match="Not a picture URL"):
+        client.download_public("file:///etc/passwd")
+    with pytest.raises(ValueError, match="https is required"):
+        client.download_public(PICTURE.replace("https:", "http:"))
+
+
+@respx.mock
+def test_download_public_treats_a_redirect_as_an_error():
+    respx.get(PICTURE).mock(
+        return_value=httpx.Response(302, headers={"location": "http://evil.example/x"})
+    )
+    with pytest.raises(httpx.HTTPStatusError, match="HTTP 302"):
+        MonitoringClient(PROFILE).download_public(PICTURE)
+
+
+def test_a_conflict_error_needs_no_arguments():
+    error = ConflictError()
+    assert error.detail == ""
+
+
+@respx.mock
+def test_upload_widget_picture_sends_a_multipart_jpeg():
+    mock_token(respx)
+    route = respx.post(f"{BASE}/api/profile/widget/12/preview").mock(
+        return_value=httpx.Response(200, json="https://bucket/widget-12-preview-x")
+    )
+    url = MonitoringClient(PROFILE).upload_widget_picture(12, "light", b"\xff\xd8jpeg")
+    assert url == "https://bucket/widget-12-preview-x"
+    request = route.calls.last.request
+    assert request.url.params["theme"] == "light"
+    assert request.headers["content-type"].startswith("multipart/form-data")
+    body = request.content
+    assert b'name="file"; filename="widget-12-light.jpg"' in body
+    assert b"Content-Type: image/jpeg" in body
+    assert b"\xff\xd8jpeg" in body
+
+
+@respx.mock
+def test_upload_widget_picture_names_each_type_by_its_extension():
+    mock_token(respx)
+    route = respx.post(f"{BASE}/api/profile/widget/12/preview").mock(
+        return_value=httpx.Response(200, json="https://bucket/x")
+    )
+    client = MonitoringClient(PROFILE)
+    client.upload_widget_picture(12, "dark", b"<svg/>", "image/svg+xml")
+    assert b'filename="widget-12-dark.svg"' in route.calls.last.request.content
+
+
+@respx.mock
+def test_upload_widget_picture_needs_a_url_in_the_answer():
+    mock_token(respx)
+    respx.post(f"{BASE}/api/profile/widget/12/preview").mock(
+        return_value=httpx.Response(200, json={"url": "https://bucket/x"})
+    )
+    with pytest.raises(ValueError, match="no picture URL"):
+        MonitoringClient(PROFILE).upload_widget_picture(12, "dark", b"x")
