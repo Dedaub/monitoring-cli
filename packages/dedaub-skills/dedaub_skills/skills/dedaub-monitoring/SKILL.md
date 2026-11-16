@@ -566,10 +566,14 @@ Only when you can run `dedaub-monitoring` commands in a shell (you work through 
 Dedaub app); with no shell, skip this step. After the query is saved and runs, judge whether a chart
 helps (read `references/widgets.md`, "Judge first"): when no chart fits, say why and stop; when the rows
 are row-level events, aggregate them first in a derived query. Then suggest one widget, with both axis
-labels in TeX (`widgets.md`, "Labels"), run `check-widget` and `preview-widget`, create it with
-`create-widget`, and give the `/widget/<id>` link. Then ask the user whether to add it to a dashboard
-(`list-dashboards`, then `add-widget` or `create-dashboard`). After the last widget is on the
-dashboard, run `arrange-dashboard --id <DID>`: it puts the widgets in a clean grid.
+labels in TeX (`widgets.md`, "Labels"), run `check-widget` and `preview-widget`, and fix each `Note:`
+that they print (`widgets.md`, "What preview-widget tells you"). When you can read images, run
+`render-widget` and open the PNG to see the chart (`widgets.md`, "See the chart"); exit 7 means that
+Playwright is not installed: skip it. Create it with `create-widget`, and
+give the `/widget/<id>` link. Then ask the user whether to add it to a dashboard (`list-dashboards`,
+then `add-widget` or `create-dashboard`). After the last widget is on the dashboard, run
+`arrange-dashboard --id <DID>`: it puts the widgets in a clean grid. Share or publish (`share-widget`,
+`publish-dashboard`) only when the user asks: it makes the private queries public too.
 
 ---
 
@@ -593,4 +597,4 @@ dashboard, run `arrange-dashboard --id <DID>`: it puts the widgets in a clean gr
 | `…/handoff-schemas.md` | Step 5 — reviewer draft/verdict shapes |
 | `…/review-criteria.md` | Step 5 — reviewer checklist |
 | `…/deploy-playbook.md` | Step 5 — deploy, smoke-test, execution slot, timeout diagnosis |
-| `…/widgets.md` | Step 6 optional widget (shell CLI only) — widget types, config keys, checks, widget and dashboard commands |
+| `…/widgets.md` | Step 6 optional widget (shell CLI only) — widget types, options of each type, config keys and flags, checks, the preview summary and its limits, render-widget, sharing, publishing, pictures, widget and dashboard commands |

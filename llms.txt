@@ -30,7 +30,10 @@
 - `get-schema` — show available tables, columns, and macros
 - `enable-alerts` / `disable-alerts` / `list-alerts` — manage alert notifications
 - `get-logs` / `get-alerts` — inspect execution logs and fired alerts
-- `check-widget` / `preview-widget` — check a chart widget of a query and print the rows it draws, with the same rules and SQL as the web Visualize tab
+- `check-widget` / `preview-widget` — check a chart widget of a query and print a summary of what it draws, with the same rules and SQL as the web Visualize tab
+- `render-widget` — draw a widget with the web app's chart code in a headless browser and save a PNG (the `render` extra)
+- `share-widget` / `widget-private-queries` / `publish-dashboard` — share a widget or publish a dashboard with its private queries
+- `widget-picture` / `dashboard-picture` — download the stored picture of a widget or a dashboard
 - `create-widget` / `update-widget` / `delete-widget` / `list-widgets` / `get-widget` — manage widgets (charts, tables, values of a query)
 - `list-dashboards` / `get-dashboard` / `create-dashboard` / `update-dashboard` / `delete-dashboard` — manage dashboards
 - `add-widget` / `remove-widget` / `set-layout` / `set-default-dashboard` — place widgets on dashboards

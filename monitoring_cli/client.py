@@ -6,6 +6,7 @@ import time
 from collections.abc import Callable
 from pathlib import Path, PurePosixPath
 from typing import Any
+from urllib.parse import urlsplit
 
 import httpx
 
@@ -29,6 +30,12 @@ _RETRY_STATUSES = frozenset({408, 502, 503, 504})
 _CAP_BACKOFF_SECONDS = 2.0
 _CAP_BACKOFF_MAX_SECONDS = 15.0
 _sleep = time.sleep
+# The wait after a 503 with no Retry-After header (widget rows: the same read
+# runs for another viewer; the server sends 5).
+_RETRY_AFTER_SECONDS = 5.0
+# The largest picture that download_public reads. The API takes uploads of at
+# most MAX_UPLOAD_FILE_SIZE (backend routers/utils.py); this is a guard.
+_MAX_PICTURE_BYTES = 20 * 1024 * 1024
 
 
 class MonitoringClient:
@@ -884,21 +891,172 @@ class MonitoringClient:
             json={"dashboard_ids": dashboard_ids},
         )
 
+    # --- sharing and publishing ---
+
+    def widget_private_queries(self, widget_id: int) -> list[dict]:
+        """The queries that stop the widget from being public: its queries that
+        are not public, and the private queries that they read through `ref()`.
+        Each is {query_id, query_name, can_edit, reason}. Owner only."""
+        return self._get(f"/api/profile/widget/{widget_id}/private_queries")
+
+    def share_widget(
+        self, widget_id: int, is_public: bool, query_ids: list[int]
+    ) -> dict:
+        """Set who can open the widget: everyone signed in, or its owner only.
+        With `is_public`, `query_ids` must be all the private queries of
+        `widget_private_queries`: they become public in the same step. 409
+        (ConflictError) when the list changed; 403 (ForbiddenError) when one
+        of them cannot be made public. Returns {widget_id, is_public,
+        public_query_ids}."""
+        return self._post(
+            f"/api/profile/widget/{widget_id}/share",
+            json={"is_public": is_public, "query_ids": query_ids},
+        )
+
+    def dashboard_private_queries(self, dashboard_id: int) -> list[dict]:
+        """The queries that stop the dashboard from being public (see
+        `widget_private_queries`). Owner only."""
+        return self._get(f"/api/profile/dashboard/{dashboard_id}/private_queries")
+
+    def publish_dashboard(self, dashboard_id: int, body: dict) -> dict:
+        """Save the dashboard as public and make its private queries public, in
+        one step. The body is the whole BaseDashboard plus `query_ids`: all the
+        private queries of `dashboard_private_queries`. 409 when the list
+        changed; 403 when one cannot be made public. Returns {dashboard_id,
+        public_query_ids}."""
+        return self._post(f"/api/profile/dashboard/{dashboard_id}/publish", json=body)
+
+    # --- widget rows and pictures ---
+
+    def widget_rows(
+        self,
+        query: str,
+        query_id: int,
+        entity_id: int,
+        *,
+        limit: int,
+        refresh: bool = False,
+        timeout: float = 120.0,
+    ) -> dict:
+        """The rows of a dashboard widget, as the dashboard reads them: through
+        the API's cache that all viewers share for 15 minutes; `refresh` reads
+        the database again. Returns {rows, read_at, cached}. The server answers
+        503 while the same read runs for another viewer: wait and ask again
+        until `timeout`, then TimeoutError. There is no task to revoke: the
+        server stops the read at its own statement timeout."""
+        path = "/api/tsql/query/widget_rows"
+        body = {
+            "query": query,
+            "query_id": query_id,
+            "query_entity_id": entity_id,
+            "params": {},
+            "limit": limit,
+            "offset": 0,
+            "refresh": refresh,
+        }
+        deadline = time.monotonic() + timeout
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            try:
+                resp = httpx.post(
+                    f"{self._base}{path}",
+                    headers=self._headers(),
+                    json=body,
+                    timeout=remaining,
+                )
+            except httpx.TimeoutException:
+                break
+            if resp.status_code != 503:
+                _raise_for_status(resp, path)
+                return resp.json()
+            wait = _retry_after(resp)
+            if time.monotonic() + wait >= deadline:
+                break
+            _sleep(wait)
+        raise TimeoutError(f"The widget rows did not come within {timeout:g}s")
+
+    def upload_widget_picture(
+        self, widget_id: int, theme: str, data: bytes, content_type: str = "image/jpeg"
+    ) -> str:
+        """Store the card picture of one theme of a widget (the Widgets tab), as
+        the owner's browser does: a multipart `file`, png, jpeg, webp or svg,
+        at most 2 MB (backend routers/utils.py check_image_file). Owner only,
+        else 403. Returns the picture's URL."""
+        path = f"/api/profile/widget/{widget_id}/preview"
+        extension = (
+            "jpg" if content_type == "image/jpeg" else content_type.split("/")[-1]
+        )
+        resp = httpx.post(
+            f"{self._base}{path}",
+            headers=self._headers(),
+            params={"theme": theme},
+            files={
+                "file": (f"widget-{widget_id}-{theme}.{extension}", data, content_type)
+            },
+            timeout=60.0,
+        )
+        _raise_for_status(resp, path)
+        return resp.json()
+
+    def download_public(
+        self, url: str, max_bytes: int = _MAX_PICTURE_BYTES
+    ) -> tuple[bytes, str]:
+        """GET a public file (a widget or dashboard picture in S3) and return
+        its bytes and content type. It sends no credentials: the API token
+        goes to the API host only."""
+        parts = urlsplit(url)
+        if parts.scheme not in ("https", "http") or not parts.hostname:
+            raise ValueError(f"Not a picture URL: {url!r}")
+        chunks: list[bytes] = []
+        size = 0
+        with httpx.stream("GET", url, timeout=30.0) as resp:
+            if resp.is_error:
+                raise httpx.HTTPStatusError(
+                    f"HTTP {resp.status_code} for the picture {url}",
+                    request=resp.request,
+                    response=resp,
+                )
+            for chunk in resp.iter_bytes():
+                size += len(chunk)
+                if size > max_bytes:
+                    raise ValueError(
+                        f"The picture is larger than {max_bytes} bytes: {url}"
+                    )
+                chunks.append(chunk)
+            content_type = resp.headers.get("content-type", "")
+        return b"".join(chunks), content_type.split(";")[0].strip()
+
+
+def _detail(resp: httpx.Response) -> str:
+    """The `detail` of an error body, or the body text."""
+    try:
+        detail = resp.json().get("detail", resp.text)
+    except Exception:
+        detail = resp.text
+    return str(detail)
+
+
+def _retry_after(resp: httpx.Response) -> float:
+    """The Retry-After seconds of a 503, or the default wait."""
+    try:
+        return max(0.0, float(resp.headers.get("retry-after", "")))
+    except ValueError:
+        return _RETRY_AFTER_SECONDS
+
 
 def _raise_for_status(resp: httpx.Response, path: str) -> None:
     if resp.status_code == 401:
         raise SessionExpiredError()
     if resp.status_code == 403:
-        raise PermissionError(f"Permission denied on {path}")
+        raise ForbiddenError(path, _detail(resp))
     if resp.status_code == 404:
         raise NotFoundError(path)
     if resp.status_code == 409:
-        raise ConflictError(path)
+        raise ConflictError(path, _detail(resp))
     if resp.is_error:
-        try:
-            detail = resp.json().get("detail", resp.text)
-        except Exception:
-            detail = resp.text
+        detail = _detail(resp)
         if resp.status_code >= 500:
             detail = (
                 f"{detail} (HTTP {resp.status_code} on {path}). The server failed. "
@@ -942,4 +1100,17 @@ class QueryCapError(Exception):
 
 
 class ConflictError(Exception):
-    pass
+    """HTTP 409. `detail` is the server's reason."""
+
+    def __init__(self, path: str, detail: str = "") -> None:
+        super().__init__(path)
+        self.detail = detail
+
+
+class ForbiddenError(PermissionError):
+    """HTTP 403. `detail` is the server's reason, for example why a query
+    cannot be made public."""
+
+    def __init__(self, path: str, detail: str = "") -> None:
+        super().__init__(f"Permission denied on {path}")
+        self.detail = detail

@@ -41,8 +41,13 @@ WIDGET_TYPES = (*CHART_TYPES, "table", "value")
 AXIS_TYPES = ("line", "bar", "stackedbar", "linebar", "scatter", "histogram", "range")
 LABEL_MAX = 120
 
-# widgetConfig.ts CHART_ROWS: a chart reads at most this many rows.
-CHART_ROWS = 500
+# widgetConfig.ts:33 CHART_ROWS: a chart reads at most this many rows. The API
+# allows the same number on /tsql/query/widget_rows (MAX_WIDGET_ROWS in
+# backend/library_api/routers/tsql.py).
+CHART_ROWS = 10_000
+# backend tsql.py MAX_PAGE_ROWS: the most rows of one /tsql/query/execute_async
+# run (a Results page). A table widget reads pages through it.
+PAGE_ROWS = 1_000
 # BusinessIntelligenceWidget.tsx PAGE: a table widget reads one page of rows.
 TABLE_ROWS = 25
 
@@ -120,12 +125,12 @@ TEXT_KEYS = ("x_label", "y_label", "prefix", "suffix", "reference_label")
 LABEL_KEYS = ("x_label", "y_label")
 # The editors save these as text, but some saved widgets hold a number.
 NUMBER_KEYS = ("decimals", "reference_line", "bins", "window", "band_k", "anomaly_k")
-BOOL_KEYS = ("fit", "anomalies", "trend", "correlation")
+BOOL_KEYS = ("fit", "anomalies", "trend", "correlation", "percent", "horizontal")
 ENUM_KEYS: dict[str, tuple[str, ...]] = {
     "timeframe": TIMEFRAMES + _TIMEFRAME_ALIASES,
     "sorting_order": ("ASC", "DESC"),
     "order_by": ("x", "y"),
-    "line_style": ("line", "area", "step"),
+    "line_style": ("line", "area", "step", "stacked"),
     "transform": ("none", "ma7", "mean", "ewma", "bollinger", "cum", "index", "pct"),
     "uncertainty": (
         "none",
@@ -197,8 +202,9 @@ def config_problems(widget_type: str, config: Mapping[str, Any]) -> list[str]:
         elif key in ENUM_KEYS:
             if value not in ENUM_KEYS[key]:
                 allowed = ENUM_KEYS[key] if key != "timeframe" else TIMEFRAMES
+                where = f"{key} ({_FLAG_OF[key]})" if key in _FLAG_OF else key
                 problems.append(
-                    f"{key} must be one of {', '.join(allowed)}, not {value!r}."
+                    f"{where} must be one of {', '.join(allowed)}, not {value!r}."
                 )
         elif key in COLUMN_KEYS:
             if not isinstance(value, str) or not value:
@@ -220,19 +226,352 @@ def config_problems(widget_type: str, config: Mapping[str, Any]) -> list[str]:
 
 def config_notes(widget_type: str, config: Mapping[str, Any]) -> list[str]:
     """Keys that are valid but that this type does not show. Not an error."""
-    if widget_type in AXIS_TYPES or widget_type not in WIDGET_TYPES:
+    if widget_type not in WIDGET_TYPES:
         return []
-    return [
-        f"{key} has no effect: a {widget_type} widget has no axes."
-        for key in LABEL_KEYS
-        if config.get(key)
-    ]
+    notes = []
+    if widget_type not in AXIS_TYPES:
+        # ChartOptionsFields.tsx:446-451: only the types with axes show the labels.
+        notes += [
+            f"{key} has no effect: a {widget_type} widget has no axes."
+            for key in LABEL_KEYS
+            if config.get(key)
+        ]
+    if (
+        widget_type == "line"
+        and config.get("percent")
+        and config.get("line_style") != "stacked"
+    ):
+        # option.ts: `percent` applies to stacked bars and stacked areas only.
+        notes.append(
+            "percent (--percent) has no effect: a line shows shares only with --line-style stacked."
+        )
+    if (
+        widget_type == "line"
+        and config.get("line_style") == "stacked"
+        and not config.get("series_by")
+    ):
+        # ChartOptionsFields.tsx: stacked areas need a series column.
+        notes.append(
+            "line_style stacked needs --series-by: with one series the area is drawn alone."
+        )
+    return notes + ignored_key_notes(widget_type, config)
+
+
+# --- the options of each type (ChartOptionsFields.tsx) -----------------------------
+
+# The types that use each option, as ChartOptionsFields.tsx shows its control.
+# A key on another type is ignored: a note, not an error, so a saved widget
+# that changed its type stays valid. Keep each rule next to its web line.
+_OPTION_TYPES: dict[str, tuple[str, ...]] = {
+    # ChartOptionsFields.tsx:149-171 (and option.ts:1471-1476 reads them)
+    "range_shape": ("range",),
+    "low_name": ("range",),
+    "high_name": ("range",),
+    "open_name": ("range",),
+    "close_name": ("range",),
+    "q1_name": ("range",),
+    "median_name": ("range",),
+    "q3_name": ("range",),
+    "volume_name": ("range",),  # ChartOptionsFields.tsx:172-178
+    "hist_view": ("histogram",),  # ChartOptionsFields.tsx:181-193
+    # ChartOptionsFields.tsx:194-210. A linebar is not in the web editor list,
+    # but option.ts:400-423 draws its series: it stays valid here.
+    "series_by": ("line", "bar", "stackedbar", "linebar", "scatter", "histogram"),
+    "color_scale": ("scatter",),  # ChartOptionsFields.tsx:211-224
+    "size_by": ("scatter",),  # ChartOptionsFields.tsx:225-231
+    "combine": (
+        "line",
+        "bar",
+        "stackedbar",
+        "linebar",
+    ),  # ChartOptionsFields.tsx:232-253
+    "line_style": ("line",),  # ChartOptionsFields.tsx:254-267
+    "transform": (
+        "line",
+        "bar",
+        "stackedbar",
+        "linebar",
+    ),  # ChartOptionsFields.tsx:268-288
+    # ChartOptionsFields.tsx:289-314; option.ts:402-404 drops a band on stacked bars.
+    "uncertainty": ("line", "bar", "linebar"),
+    "band_k": ("line",),  # ChartOptionsFields.tsx:315-322
+    "anomalies": ("line",),  # ChartOptionsFields.tsx:323-345
+    "anomaly_k": ("line",),
+    "trend": ("line",),
+    "correlation": ("line",),
+    "window": (
+        "line",
+        "bar",
+        "stackedbar",
+        "linebar",
+    ),  # ChartOptionsFields.tsx:144-145, 346-352
+    "lower_name": ("line", "bar", "linebar"),  # ChartOptionsFields.tsx:353-358
+    "upper_name": ("line", "bar", "linebar"),
+    "stderr_name": ("line", "bar", "linebar"),  # ChartOptionsFields.tsx:359-366
+    "scale": (
+        "line",
+        "bar",
+        "linebar",
+        "scatter",
+        "range",
+    ),  # ChartOptionsFields.tsx:367-379
+    # ChartOptionsFields.tsx:380-394
+    "number_format": (
+        "line",
+        "bar",
+        "stackedbar",
+        "linebar",
+        "scatter",
+        "pie",
+        "value",
+        "range",
+    ),
+    "reference_line": (
+        "line",
+        "bar",
+        "stackedbar",
+        "linebar",
+    ),  # ChartOptionsFields.tsx:395-408
+    "reference_label": (
+        "line",
+        "bar",
+        "stackedbar",
+        "linebar",
+    ),  # ChartOptionsFields.tsx:409-420
+    "fit": ("scatter",),  # ChartOptionsFields.tsx:423-432
+    "bins": ("histogram",),  # ChartOptionsFields.tsx:433-445
+    # VisualizeTab.tsx:688-715 shows them for a value only; WidgetChart.tsx:95-96
+    # gives them to the stat tile, and chartSpecOf (widgetConfig.ts:405-454) not.
+    # The value tile (VisualizeTab.tsx), and the units of the charts
+    # (ChartOptionsFields.tsx "Before each value" / "After each value"; option.ts withUnit).
+    "prefix": (
+        "value",
+        "line",
+        "bar",
+        "stackedbar",
+        "linebar",
+        "scatter",
+        "pie",
+        "range",
+    ),
+    "suffix": (
+        "value",
+        "line",
+        "bar",
+        "stackedbar",
+        "linebar",
+        "scatter",
+        "pie",
+        "range",
+    ),
+    # ChartOptionsFields.tsx "100% stack": stacked bars, and a line with line_style "stacked".
+    "percent": ("line", "stackedbar"),
+    # ChartOptionsFields.tsx "Horizontal bars"; option.ts onItsSide.
+    "horizontal": ("bar", "stackedbar"),
+    # VisualizeTab.tsx:664-676: the second Y column of lines and bars.
+    "y1_axis_name": ("line", "bar", "stackedbar", "linebar"),
+    # widgetConfig.ts:48 Y_ORDER_TYPES and :75 orderChoiceOf.
+    "order_by": ("line", "bar", "stackedbar", "linebar"),
+}
+
+
+def _types_text(types: Sequence[str]) -> str:
+    return ", ".join(types)
+
+
+def ignored_key_notes(widget_type: str, config: Mapping[str, Any]) -> list[str]:
+    """One note for each key that the web app ignores on this widget type,
+    and for each value that only another type uses (ChartOptionsFields.tsx)."""
+    notes: list[str] = []
+
+    def ignored(key: str, why: str) -> None:
+        notes.append(f"{key} is ignored for a {widget_type} widget: {why}.")
+
+    for key, types in _OPTION_TYPES.items():
+        if config.get(key) is not None and widget_type not in types:
+            ignored(
+                key,
+                f"only {_types_text(types)} {'uses' if len(types) == 1 else 'use'} it",
+            )
+    if widget_type not in CHART_TYPES:
+        return notes
+
+    transform = config.get("transform") or "none"
+    uncertainty = config.get("uncertainty") or "none"
+    series_by = config.get("series_by")
+    # ChartOptionsFields.tsx:279-281 offers it for a line; option.ts:455-456
+    # draws no transform on another type.
+    if transform == "bollinger" and widget_type in ("bar", "stackedbar", "linebar"):
+        ignored("transform bollinger", "only line uses it")
+    if uncertainty == "quantiles" and widget_type in ("bar", "linebar"):
+        # ChartOptionsFields.tsx:300-302 offers it for a line only.
+        ignored("uncertainty quantiles", "only line offers it")
+    if (
+        widget_type == "line"
+        and config.get("band_k") is not None
+        and transform != "bollinger"
+    ):
+        # ChartOptionsFields.tsx:315-322
+        ignored("band_k", "it needs transform bollinger")
+    anomalies_on = widget_type == "line" and config.get("anomalies") is not False
+    if (
+        widget_type == "line"
+        and config.get("anomaly_k") is not None
+        and not anomalies_on
+    ):
+        # ChartOptionsFields.tsx:328-334
+        ignored("anomaly_k", "anomalies is false")
+    # ChartOptionsFields.tsx:143-145: the rolling transforms, the unusual points
+    # and the rolling correlation read the window.
+    rolling = transform in ("mean", "ewma", "bollinger")
+    uses_window = (
+        rolling
+        or anomalies_on
+        or (widget_type == "line" and bool(config.get("correlation")))
+    )
+    in_window_types = widget_type in _OPTION_TYPES["window"]
+    if config.get("window") is not None and in_window_types and not uses_window:
+        ignored(
+            "window",
+            "only a rolling transform, the anomalies or the correlation use it",
+        )
+    if widget_type in _OPTION_TYPES["lower_name"]:
+        # ChartOptionsFields.tsx:353-366: the band columns of uncertainty.
+        for key in ("lower_name", "upper_name"):
+            if config.get(key) and uncertainty != "columns":
+                ignored(key, "it needs uncertainty columns")
+        if config.get("stderr_name") and uncertainty != "stderr":
+            ignored("stderr_name", "it needs uncertainty stderr")
+    if config.get("reference_label") and not config.get("reference_line"):
+        # ChartOptionsFields.tsx:409-420
+        ignored("reference_label", "it needs reference_line")
+    if widget_type == "scatter" and config.get("color_scale") and not series_by:
+        # ChartOptionsFields.tsx:211-213
+        ignored("color_scale", "it needs series_by")
+    if widget_type == "histogram" and series_by and config.get("hist_view") != "ecdf":
+        # ChartOptionsFields.tsx:194-195: a histogram has series in its ECDF view only.
+        ignored("series_by", "only hist_view ecdf uses it")
+    if widget_type == "range":
+        shape = config.get("range_shape") or "candle"
+        if config.get("volume_name") and shape != "candle":
+            # ChartOptionsFields.tsx:172-178; option.ts:1651
+            notes.append("The volume panel shows under candles only.")
+    if config.get("y1_axis_name") and series_by and widget_type in Y_ORDER_TYPES:
+        # option.ts:400: with series_by, the chart draws y_axis_name only.
+        ignored("y1_axis_name", "series_by is set, so the chart draws y_axis_name only")
+    return notes
+
+
+def draw_problems(widget_type: str, config: Mapping[str, Any]) -> list[str]:
+    """The configs that the web app saves but cannot draw as asked. Each one
+    blocks a save, as a missing axis does."""
+    problems: list[str] = []
+    if widget_type not in _OPTION_TYPES["uncertainty"]:
+        return problems
+    uncertainty = config.get("uncertainty")
+    # data.ts:150: a band from columns needs both columns; without them, no band.
+    if uncertainty == "columns" and not (
+        config.get("lower_name") and config.get("upper_name")
+    ):
+        problems.append(
+            "uncertainty columns needs lower_name and upper_name (the band's columns)."
+        )
+    # data.ts:161: a band from a standard error needs its column.
+    if uncertainty == "stderr" and not config.get("stderr_name"):
+        problems.append(
+            "uncertainty stderr needs stderr_name (the standard error column)."
+        )
+    return problems
+
+
+def column_type_notes(
+    widget_type: str, config: Mapping[str, Any], columns: Sequence[Mapping[str, str]]
+) -> tuple[list[str], list[str]]:
+    """What the column types say before the query runs: the kind of the X
+    axis (facts), and each column that must hold numbers but has another type
+    (notes). The chart reads a number from a text value too (data.ts:37-45
+    toNumber), so a text column is a note, not a problem."""
+    types = {c["name"]: c["type"] for c in columns}
+    facts: list[str] = []
+    notes: list[str] = []
+    x = config.get("x_axis_name")
+    x_type = types.get(x) if isinstance(x, str) else None
+    if (
+        x_type
+        and widget_type in CHART_TYPES
+        and widget_type not in ("pie", "histogram")
+    ):
+        if is_time_column(x_type):
+            kind = "time"
+        elif _NUMBER_TYPE.match(x_type):
+            kind = "number"
+        else:
+            kind = "category"
+        # option.ts:517: bars put every X on a category axis.
+        drawn = (
+            ", drawn as categories"
+            if widget_type in BAR_TYPES and kind != "category"
+            else ""
+        )
+        facts.append(f"x: {x} ({x_type}): {kind} axis{drawn}")
+    by_y = config.get("order_by") == "y" and widget_type in Y_ORDER_TYPES
+    # widgetConfig.ts:56-61 yOrderApplies; option.ts:450
+    if by_y and x_type and not y_order_applies(widget_type, x_type):
+        notes.append(
+            f"order_by y has no effect: {x} is a time or a number, so the points keep the order of {x}."
+        )
+    for key in _numeric_keys(widget_type, config):
+        name = config.get(key)
+        column_type = types.get(name) if isinstance(name, str) else None
+        if column_type and not _NUMBER_TYPE.match(column_type):
+            notes.append(
+                f"{key} {name!r} is {column_type}, not a number type: the chart draws only the values that read as numbers."
+            )
+    return facts, notes
+
+
+# option.ts:398: the bar types.
+BAR_TYPES = ("bar", "stackedbar", "linebar")
+
+
+def _numeric_keys(widget_type: str, config: Mapping[str, Any]) -> list[str]:
+    """The config keys whose column the chart reads as numbers."""
+    if widget_type in Y_ORDER_TYPES:
+        # data.ts:191: "count" counts the rows with any value.
+        keys = [] if config.get("combine") == "count" else ["y_axis_name"]
+        if not config.get("series_by") and config.get("combine") != "count":
+            keys.append("y1_axis_name")  # option.ts:400
+        uncertainty = config.get("uncertainty")
+        if uncertainty == "columns":
+            keys += ["lower_name", "upper_name"]  # data.ts:150-156
+        if uncertainty == "stderr":
+            keys.append("stderr_name")  # data.ts:161-164
+        return keys
+    if widget_type == "scatter":
+        keys = ["y_axis_name", "size_by"]  # option.ts:1113, 1119
+        if config.get("color_scale") == "scale":
+            keys.append("series_by")  # option.ts:1118
+        return keys
+    if widget_type == "histogram":
+        return ["x_axis_name"]  # option.ts:1379-1381, 1688-1693
+    if widget_type in ("pie", "value"):
+        return ["y_axis_name"]  # option.ts:986; StatTile.tsx:33
+    if widget_type == "range":
+        shape = config.get("range_shape") or "candle"
+        keys = [RANGE_KEYS[p] for p in RANGE_COLUMNS.get(shape, ())]
+        return [*keys, "volume_name"]  # option.ts:1489, 1495
+    return []
 
 
 # The chart palette has this many colours (palette.ts SERIES_LIGHT). With more
 # series_by values, data.ts keeps the largest MAX_SERIES - 1 series and adds the
 # rest together into one "Other" series.
 MAX_SERIES = 8
+# option.ts:1143-1145: a scatter colours at most 3 groups (the 2 largest and
+# "Other"): any two dots can touch, and only 3 palette slots pass for all pairs.
+MAX_SCATTER_GROUPS = 3
+# option.ts:991-997: a pie draws at most 6 slices (the 5 largest and "Other").
+MAX_PIE_SLICES = 6
 
 
 def series_notes(
@@ -240,12 +579,24 @@ def series_notes(
 ) -> list[str]:
     """A note when the rows have more series_by values than the chart draws."""
     column = config.get("series_by")
-    if not column or widget_type not in AXIS_TYPES:
+    if not column or widget_type not in AXIS_TYPES or widget_type == "range":
+        return []
+    if widget_type == "histogram" and config.get("hist_view") != "ecdf":
         return []
     values = {
         str(row.get(column) if row.get(column) is not None else "(empty)")
         for row in rows
     }
+    if widget_type == "scatter":
+        if config.get("color_scale") == "scale" or len(values) <= MAX_SCATTER_GROUPS:
+            return []
+        # option.ts:1143-1145: a scatter keeps 2 groups and puts the rest in "Other".
+        kept = MAX_SCATTER_GROUPS - 1
+        return [
+            f"series_by {column!r} has {len(values)} values in these rows. A scatter colours "
+            f"the {kept} largest groups and puts the other {len(values) - kept} together "
+            f"as one grey 'Other' group. Filter the rows, or use color_scale scale for a number."
+        ]
     if len(values) <= MAX_SERIES:
         return []
     kept = MAX_SERIES - 1
@@ -263,6 +614,19 @@ _FLAG_OF = {
     "y_axis_name": "--y",
     "y1_axis_name": "--y1",
     "series_by": "--series-by",
+    "combine": "--combine",
+    "order_by": "--order-by",
+    "sorting_order": "--sorting-order",
+    "scale": "--scale",
+    "number_format": "--number-format",
+    "prefix": "--prefix",
+    "suffix": "--suffix",
+    "decimals": "--decimals",
+    "line_style": "--line-style",
+    "percent": "--percent",
+    "horizontal": "--horizontal",
+    "transform": "--transform",
+    "timeframe": "--timeframe",
 }
 
 
